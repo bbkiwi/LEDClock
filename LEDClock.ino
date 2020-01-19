@@ -1,3 +1,8 @@
+/*********
+  Rui Santos
+  Complete project details at http://randomnerdtutorials.com
+  Arduino IDE example: Examples > Arduino OTA > BasicOTA.ino
+*********/
 //************* Wol Clock by Jon Fuge *mod by bbkiwi *****************************
 //https://github.com/PaulStoffregen/Time
 //OTA not working
@@ -8,13 +13,15 @@
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
 //#include <NeoPixelBus.h>
-#include <ESP8266WiFi.h>
-#include <WiFiUdp.h>
-#include <ESP8266mDNS.h>
-#include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
 #include <string.h>
 #include "pitches.h"
+
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
 //************* Declare structures ******************************
 //Create structure for LED RGB information
 struct RGB {
@@ -58,20 +65,9 @@ byte night_brightness = 16;
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
 
-//Set your wifi details so the board can connect and get the time from the internet
-const char* ssid     = "Test Station";
+// Replace with your network credentials
+const char* ssid = "Test Station";
 const char* password = "testpassword";
-//IPAddress staticIP(192,168,1,229);
-//IPAddress gateway(192,168,1,1);
-//IPAddress subnet(255,255,255,0);
-
-const char* clockssid     = "LEDclock";
-const char* clockpassword = "clockword";
-IPAddress APIP(192,168,4,4);
-IPAddress APgateway(192,168,4,1);
-IPAddress APsubnet(255,255,255,0);
-
-
 
 ESP8266WebServer server;
 String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -127,45 +123,28 @@ bool IsDst();
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, PIN, NEO_GRB + NEO_KHZ800);
 bool ClockInitialized = false;
-//************* Setup function for Wol_Clock ******************************
+
+
+//const int ESP_BUILTIN_LED = 2;
+
 void setup() {
-  // NOTE no delay after Serial.begin and next three WiFi cmds
-  // see  https://github.com/esp8266/Arduino/issues/3489
   Serial.begin(115200);
-  //WiFi.mode(WIFI_STA);
-  WiFi.mode(WIFI_AP_STA);
-  //WiFi.config(staticIP, gateway, subnet);
-  WiFi.begin(ssid, password); // Try to connect to WiFi
-
-  Serial.print("IP number assigned by DHCP is ");
-  Serial.println(WiFi.localIP());
-  strip.begin(); // This initializes the NeoPixel library.
-  Draw_Clock(0, 1); // Just draw a blank clock
-  Draw_Clock(0, 2); // Draw the clock background
-
-
-  Serial.println("ClockLED1");
-  Serial.print("Connecting");
-  while ( WiFi.status() != WL_CONNECTED )
-  {
-    Serial.print(".");
-    delay ( 500 ); // keep waiting until we successfully connect to the WiFi
+  Serial.println("Booting");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
   }
 
-//  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-//    Serial.println("Connection Failed! Rebooting...");
-//    delay(5000);
-//    ESP.restart();
-//  }
-  Serial.println(WiFi.waitForConnectResult());
-  Serial.println();
-  Serial.print("WiFi Connected, IP:");
-  Serial.println(WiFi.localIP());
+  strip.begin(); // This initializes the NeoPixel library.
+
   Draw_Clock(0, 3); // Add the quater hour indicators
 
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
 
-    // Port defaults to 8266
+  // Port defaults to 8266
   // ArduinoOTA.setPort(8266);
 
   // Hostname defaults to esp8266-[ChipID]
@@ -190,10 +169,12 @@ void setup() {
     else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
     else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
- });
+  });
   ArduinoOTA.begin();
   Serial.println("Ready");
-
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  //pinMode(ESP_BUILTIN_LED, OUTPUT);
   server.on("/restart",[](){
     server.send(200,"text/plain", "Restarting ...");
     delay(1000);
@@ -235,8 +216,6 @@ void setup() {
   server.on("/setalarm", setalarm);
 
   server.begin();
-  WiFi.softAPConfig(APIP, APgateway, APsubnet);
-  WiFi.softAP(clockssid, clockpassword);
 }
 
 void setalarm()
@@ -335,9 +314,17 @@ bool IsDst()
 
 time_t prevDisplay = 0; // when the digital clock was displayed
 
-//************* Main program loop for Wol_Clock ******************************
+
 void loop() {
-  if(ota_flag)
+
+
+  //ArduinoOTA.handle();
+//  digitalWrite(ESP_BUILTIN_LED, LOW);
+//  delay(100);
+//  digitalWrite(ESP_BUILTIN_LED, HIGH);
+//  delay(100);
+
+if(ota_flag)
   {
     uint16_t time_start = millis();
     Draw_Clock(0, 1); // Just draw a blank clock
@@ -418,9 +405,10 @@ void loop() {
     }
   }
   delay(10); // needed to keep wifi going
+
 }
 
-
+////////////////////////////////////////////////////////////
 void digitalClockDisplay()
 {
   // digital clock display of the time
