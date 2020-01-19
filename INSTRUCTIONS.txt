@@ -1,0 +1,13 @@
+ClockLEDmodV2withAlarm
+Control via url
+
+ledclock.local/restart
+ledclock.local/startota
+ledclock.local/lightalarm
+ledclock.local/soundalarm
+ledclock.local/whattime
+
+ledclock.local/setbright?day=127&night=6
+ledclock.local/settime?hour=15&min=0&sec=0&day=3&month=5&year=2000
+ledclock.local/setalarm
+  
