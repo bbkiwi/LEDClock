@@ -125,7 +125,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, PIN, NEO_GRB + NEO_KHZ800);
 bool ClockInitialized = false;
 
 
-//const int ESP_BUILTIN_LED = 2;
+const int ESP_BUILTIN_LED = 2;
 
 void createAccessPoint() {
   Serial.println("Configuring access point ...");
@@ -184,7 +184,7 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-  //pinMode(ESP_BUILTIN_LED, OUTPUT);
+  pinMode(ESP_BUILTIN_LED, OUTPUT);
 
   server.on("/makeAP",[](){
     server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
@@ -227,7 +227,7 @@ void setup() {
 
   server.on("/whattime",[](){
     char buf[50];
-    sprintf(buf, "%d:%d:%d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
+    sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
     server.send(200,"text/plain", buf);
     delay(1000);
   });
@@ -268,7 +268,7 @@ void setalarm()
   if (strlen(mth.c_str()) > 0) alarmTime.Hour = mth.toInt();
 
   char buf[50];
-  sprintf(buf, "Alarm Set to %d:%d:%d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)), monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+  sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)), monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
   server.send(200,"text/plain", buf);
   Serial.println(buf);
 }
@@ -283,9 +283,9 @@ void settime()
   String mth = server.arg("month");
   String y = server.arg("year");
   setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
-
+  ClockInitialized = false;
   char buf[50];
-  sprintf(buf, "Clock Set to %d:%d:%d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)), monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(), daysOfWeek[d.toInt()].c_str(), day(makeTime(alarmTime)), monthNames[mth.toInt()].c_str(),  y.toInt());
   server.send(200,"text/plain", buf);
   Serial.println(buf);
 }
@@ -342,11 +342,7 @@ time_t prevDisplay = 0; // when the digital clock was displayed
 void loop() {
 
 
-  //ArduinoOTA.handle();
-//  digitalWrite(ESP_BUILTIN_LED, LOW);
-//  delay(100);
-//  digitalWrite(ESP_BUILTIN_LED, HIGH);
-//  delay(100);
+
 
 if(ota_flag)
   {
@@ -361,7 +357,11 @@ if(ota_flag)
     {
       ArduinoOTA.handle();
       time_elapsed = millis() - time_start;
-      delay(10);
+      // blink led when in OTA mode
+      digitalWrite(ESP_BUILTIN_LED, LOW); //on
+      delay(100);
+      digitalWrite(ESP_BUILTIN_LED, HIGH); //off
+      delay(100);
 //      Serial.println(time_elapsed);
 //      Serial.println("OTA OK");
     }
@@ -421,7 +421,7 @@ if(ota_flag)
       breakTime(nextalarmtime, alarmTime);
 
       char buf[50];
-      sprintf(buf, "Next Alarm %d:%d:%d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
+      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
         second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
         monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
       Serial.println();
