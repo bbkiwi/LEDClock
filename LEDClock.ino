@@ -127,10 +127,20 @@ bool ClockInitialized = false;
 
 //const int ESP_BUILTIN_LED = 2;
 
+void createAccessPoint() {
+  Serial.println("Configuring access point ...");
+  WiFi.softAP("Clock AP");
+  IPAddress accessIP = WiFi.softAPIP();
+  Serial.print("ESP AccessPoint IP address: ");
+  Serial.println(accessIP);
+}
 void setup() {
   Serial.begin(115200);
   Serial.println("Booting");
+  WiFi.softAPdisconnect();
+  WiFi.disconnect();
   WiFi.mode(WIFI_STA);
+  delay(100);
   WiFi.begin(ssid, password);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
@@ -175,6 +185,19 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
   //pinMode(ESP_BUILTIN_LED, OUTPUT);
+
+  server.on("/makeAP",[](){
+    server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
+    delay(1000);
+    createAccessPoint();
+  });
+
+  server.on("/APOff",[](){
+    server.send(200,"text/plain", "Turn off AP ");
+    delay(1000);
+    WiFi.softAPdisconnect(true);
+  });
+
   server.on("/restart",[](){
     server.send(200,"text/plain", "Restarting ...");
     delay(1000);
@@ -216,6 +239,7 @@ void setup() {
   server.on("/setalarm", setalarm);
 
   server.begin();
+  createAccessPoint();
 }
 
 void setalarm()
