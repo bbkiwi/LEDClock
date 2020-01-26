@@ -66,8 +66,10 @@ byte night_brightness = 16;
 int hours_Offset_From_GMT = 12;
 
 // Replace with your network credentials
-const char* ssid = "Test Station";
-const char* password = "testpassword";
+//const char* ssid = "Test Station";
+//const char* password = "testpassword";
+const char* ssid = "El Nidox";
+const char* password = "unicornhorn";
 
 ESP8266WebServer server;
 String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -142,11 +144,26 @@ void setup() {
   WiFi.mode(WIFI_STA);
   delay(100);
   WiFi.begin(ssid, password);
-  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
-    ESP.restart();
+  switch (WiFi.waitForConnectResult()) {
+    case WL_CONNECTED:
+      Serial.print("Connected to IP ");
+      Serial.println(WiFi.localIP() );
+      break;
+    case WL_NO_SSID_AVAIL:
+    case -1:
+      Serial.println("Failed to find SSID");
+      break;
+    default:
+      Serial.println("Connection Failed! Rebooting...");
+      delay(5000);
+      ESP.restart();
   }
+
+//  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+//    Serial.println("Connection Failed! Rebooting...");
+//    delay(5000);
+//    ESP.restart();
+//  }
 
   strip.begin(); // This initializes the NeoPixel library.
 
