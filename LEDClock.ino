@@ -3,7 +3,17 @@
 //https://github.com/PaulStoffregen/Time
 *********/
 
-//************* Declare included libraries ******************************
+/*********** IMPORTANT #include <ESP8266mDNS.h> below
+ * With 1.8.10 and board 2.6.3
+ * Was having problem with mDns
+ * Changed ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/src/ESP8266mDNS.h
+ * uncomment line 51 and comment line 52 to use legacy version which from googling works well for simple use
+ *
+ * This is the reverse of comment at line 40 in example
+ * ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
+ */
+
+/************* Declare included libraries ******************************/
 #include <NTPClient.h>
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
@@ -14,6 +24,7 @@
 #include <ESP8266WiFiMulti.h>
 #include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
+
 #include <ESP8266mDNS.h>
 #include <FS.h>
 #include <WebSocketsServer.h>
@@ -28,8 +39,8 @@ const char *ssid = "LED Clock Access Point"; // The name of the Wi-Fi network th
 const char *password = "ledclock";   // The password required to connect to it, leave blank for an open network
 
 // OTA and mDns must have same name
-const char *OTAandMdnsName = "ESP8266";           // A name and a password for the OTA and mDns service
-const char *OTAPassword = "esp8266";
+const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
+const char *OTAPassword = "ledclock";
 
 #define LED_RED     15            // specify the pins with an RGB LED connected
 #define LED_GREEN   12
