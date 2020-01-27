@@ -1,26 +1,39 @@
 /*********
-  Rui Santos
-  Complete project details at http://randomnerdtutorials.com
-  Arduino IDE example: Examples > Arduino OTA > BasicOTA.ino
-*********/
-//************* Wol Clock by Jon Fuge *mod by bbkiwi *****************************
+ Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
 //https://github.com/PaulStoffregen/Time
-//OTA not working
+*********/
 
 //************* Declare included libraries ******************************
 #include <NTPClient.h>
-//#include <Time.h>
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
-//#include <NeoPixelBus.h>
-#include <ESP8266WebServer.h>
 #include <string.h>
 #include "pitches.h"
 
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
+#include <ESP8266WiFiMulti.h>
 #include <ArduinoOTA.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+#include <FS.h>
+#include <WebSocketsServer.h>
+
+ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
+ESP8266WebServer server(80);       // create a web server on port 80
+WebSocketsServer webSocket(81);    // create a websocket server on port 81
+
+File fsUploadFile;                                    // a File variable to temporarily store the received file
+
+const char *ssid = "LED Clock Access Point"; // The name of the Wi-Fi network that will be created
+const char *password = "ledclock";   // The password required to connect to it, leave blank for an open network
+
+// OTA and mDns must have same name
+const char *OTAandMdnsName = "ESP8266";           // A name and a password for the OTA and mDns service
+const char *OTAPassword = "esp8266";
+
+#define LED_RED     15            // specify the pins with an RGB LED connected
+#define LED_GREEN   12
+#define LED_BLUE    13
 
 //************* Declare structures ******************************
 //Create structure for LED RGB information
@@ -65,13 +78,7 @@ byte night_brightness = 16;
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
 
-// Replace with your network credentials
-//const char* ssid = "Test Station";
-//const char* password = "testpassword";
-const char* ssid = "El Nidox";
-const char* password = "unicornhorn";
 
-ESP8266WebServer server;
 String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 String monthNames[13] = {"dummy", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 bool ota_flag = true;
@@ -129,41 +136,26 @@ bool ClockInitialized = false;
 
 const int ESP_BUILTIN_LED = 2;
 
-void createAccessPoint() {
-  Serial.println("Configuring access point ...");
-  WiFi.softAP("Clock AP");
-  IPAddress accessIP = WiFi.softAPIP();
-  Serial.print("ESP AccessPoint IP address: ");
-  Serial.println(accessIP);
-}
 void setup() {
-  Serial.begin(115200);
-  Serial.println("Booting");
-  WiFi.softAPdisconnect();
-  WiFi.disconnect();
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  WiFi.begin(ssid, password);
-  switch (WiFi.waitForConnectResult()) {
-    case WL_CONNECTED:
-      Serial.print("Connected to IP ");
-      Serial.println(WiFi.localIP() );
-      break;
-    case WL_NO_SSID_AVAIL:
-    case -1:
-      Serial.println("Failed to find SSID");
-      break;
-    default:
-      Serial.println("Connection Failed! Rebooting...");
-      delay(5000);
-      ESP.restart();
-  }
+  pinMode(LED_RED, OUTPUT);    // the pins with LEDs connected are outputs
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
 
-//  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-//    Serial.println("Connection Failed! Rebooting...");
-//    delay(5000);
-//    ESP.restart();
-//  }
+  Serial.begin(115200);        // Start the Serial communication to send messages to the computer
+  delay(10);
+  Serial.println("\r\n");
+
+  startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
+
+  startOTA();                  // Start the OTA service
+
+  startSPIFFS();               // Start the SPIFFS and list all contents
+
+  startWebSocket();            // Start a WebSocket server
+
+  startMDNS();                 // Start the mDNS responder
+
+  startServer();               // Start a HTTP server with a file read handler and an upload handler
 
   strip.begin(); // This initializes the NeoPixel library.
 
@@ -171,20 +163,141 @@ void setup() {
 
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
 
-  // Port defaults to 8266
-  // ArduinoOTA.setPort(8266);
 
-  // Hostname defaults to esp8266-[ChipID]
-  ArduinoOTA.setHostname("LEDClock");
+  // pinMode(ESP_BUILTIN_LED, OUTPUT);
 
-  // No authentication by default
-  ArduinoOTA.setPassword((const char *)"123");
+
+
+}
+
+/*__________________________________________________________LOOP__________________________________________________________*/
+
+bool rainbowEffect = false;             // The rainbow effect is turned off on startup
+
+unsigned long prevMillis = millis();
+int hue = 0;
+time_t prevDisplay = 0; // when the digital clock was displayed
+
+void loop() {
+  webSocket.loop();                           // constantly check for websocket events
+  server.handleClient();                      // run the server
+  ArduinoOTA.handle();                        // listen for OTA events
+
+  if(rainbowEffect) {                               // if the rainbow effect is turned on
+    if(millis() > prevMillis + 32) {
+      if(++hue == 360)                        // Cycle through the color wheel (increment by one degree every 32 ms)
+        hue = 0;
+      setHue(hue);                            // Set the RGB LED to the right color
+      prevMillis = millis();
+    }
+  }
+
+
+  if(light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
+
+  if(sound_alarm_flag)
+  {
+    uint16_t time_start = millis();
+    Serial.println("1 second sound alarm, then clock will start");
+    for (int thisNote = 0; thisNote < 8; thisNote++) {
+      // to calculate the note duration, take whole note durations divided by the note type.
+      //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
+      int noteDuration = whole_note_duration / noteDurations[thisNote];
+      if (melody[thisNote] > 30) {
+        tone(PIEZO_PIN, melody[thisNote], noteDuration);
+      }
+      // to distinguish the notes, set a minimum time between them.
+      // the note's duration + 30% seems to work well:
+      int pauseBetweenNotes = noteDuration * 1.30;
+      delay(pauseBetweenNotes);
+      // stop the tone playing:
+      noTone(PIEZO_PIN);
+    }
+    sound_alarm_flag = false;
+  }
+
+  // read the analog in value coming from microphone
+  int sensorValue = analogRead(analogInPin);
+  if (sensorValue > 900 ) {
+    Serial.println(sensorValue);
+    light_alarm_flag = true;
+    time_elapsed = 0;
+  }
+
+  time_t nextalarmtime;
+  time_t t = now(); // Get the current time
+  if (now() != prevDisplay) { //update the display only if time has changed
+    prevDisplay = now();
+    if (second() == 0)
+      digitalClockDisplay();
+    else
+      Serial.print('-');
+
+    Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
+    ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
+    if (prevDisplay == makeTime(alarmTime))
+    {
+      showlights(alarmInfo.duration, -1, -1, 10, -1, -1, -1, -1, -1, t);
+      // For daily repeat
+      nextalarmtime = makeTime(alarmTime);
+      nextalarmtime += alarmInfo.repeat;
+      breakTime(nextalarmtime, alarmTime);
+
+      char buf[50];
+      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
+        second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
+        monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+      Serial.println();
+      Serial.println(buf);
+    }
+  }
+  delay(10); // needed to keep wifi going
+}
+
+
+/*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
+
+void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
+  WiFi.softAP(ssid, password);             // Start the access point
+  Serial.print("Access Point \"");
+  Serial.print(ssid);
+  Serial.println("\" started\r\n");
+
+  wifiMulti.addAP("ssid_from_AP_1", "your_password_for_AP_1");  // add Wi-Fi networks you want to connect to
+  wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+  wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+
+  Serial.println("Connecting");
+  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect to station or a station connects to AP
+    delay(250);
+    Serial.print('.');
+  }
+  Serial.println("\r\n");
+  if(WiFi.softAPgetStationNum() == 0) {      // If the ESP is connected to an AP
+    Serial.print("Connected to ");
+    Serial.println(WiFi.SSID());             // Tell us what network we're connected to
+    Serial.print("IP address:\t");
+    Serial.println(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
+    WiFi.softAPdisconnect(false);             // Switch off soft AP mode
+    Serial.print("So switching soft AP off");
+  } else {                                   // If a station is connected to the ESP SoftAP
+    Serial.print("Station connected to ESP8266 AP");
+  }
+  Serial.println("\r\n");
+}
+
+void startOTA() { // Start the OTA service
+  ArduinoOTA.setHostname(OTAandMdnsName);
+  ArduinoOTA.setPassword(OTAPassword);
 
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
+    digitalWrite(LED_RED, 0);    // turn off the LEDs
+    digitalWrite(LED_GREEN, 0);
+    digitalWrite(LED_BLUE, 0);
   });
   ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
+    Serial.println("\r\nEnd");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
@@ -198,22 +311,52 @@ void setup() {
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  Serial.println("Ready");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  pinMode(ESP_BUILTIN_LED, OUTPUT);
+  Serial.println("OTA ready\r\n");
+}
 
-  server.on("/makeAP",[](){
-    server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
-    delay(1000);
-    createAccessPoint();
-  });
+void startSPIFFS() { // Start the SPIFFS and list all contents
+  SPIFFS.begin();                             // Start the SPI Flash File System (SPIFFS)
+  Serial.println("SPIFFS started. Contents:");
+  {
+    Dir dir = SPIFFS.openDir("/");
+    while (dir.next()) {                      // List the file system contents
+      String fileName = dir.fileName();
+      size_t fileSize = dir.fileSize();
+      Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
+    }
+    Serial.printf("\n");
+  }
+}
 
-  server.on("/APOff",[](){
-    server.send(200,"text/plain", "Turn off AP ");
-    delay(1000);
-    WiFi.softAPdisconnect(true);
-  });
+void startWebSocket() { // Start a WebSocket server
+  webSocket.begin();                          // start the websocket server
+  webSocket.onEvent(webSocketEvent);          // if there's an incomming websocket message, go to function 'webSocketEvent'
+  Serial.println("WebSocket server started.");
+}
+
+void startMDNS() { // Start the mDNS responder
+  MDNS.begin(OTAandMdnsName);                        // start the multicast domain name server
+  Serial.print("mDNS responder started: http://");
+  Serial.print(OTAandMdnsName);
+  Serial.println(".local");
+}
+
+void startServer() { // Start a HTTP server with a file read handler and an upload handler
+  server.on("/edit.html",  HTTP_POST, []() {  // If a POST request is sent to the /edit.html address,
+    server.send(200, "text/plain", "");
+  }, handleFileUpload);                       // go to 'handleFileUpload'
+
+// server.on("/makeAP",[](){
+//    server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
+//    delay(1000);
+//    createAccessPoint();
+//  });
+//
+//  server.on("/APOff",[](){
+//    server.send(200,"text/plain", "Turn off AP ");
+//    delay(1000);
+//    WiFi.softAPdisconnect(true);
+//  });
 
   server.on("/restart",[](){
     server.send(200,"text/plain", "Restarting ...");
@@ -221,12 +364,12 @@ void setup() {
     ESP.restart();
   });
 
-  server.on("/startota",[](){
-    server.send(200,"text/plain", "Make OTA ready ...");
-    delay(1000);
-    ota_flag = true;
-    time_elapsed = 0;
-  });
+//  server.on("/startota",[](){
+//    server.send(200,"text/plain", "Make OTA ready ...");
+//    delay(1000);
+//    ota_flag = true;
+//    time_elapsed = 0;
+//  });
 
   server.on("/lightalarm",[](){
     server.send(200,"text/plain", "Light alarm Starting ...");
@@ -255,8 +398,97 @@ void setup() {
 
   server.on("/setalarm", setalarm);
 
-  server.begin();
-  createAccessPoint();
+  server.onNotFound(handleNotFound);          // if someone requests any other file or page, go to function 'handleNotFound'
+                                              // and check if the file exists
+
+  server.begin();                             // start the HTTP server
+  Serial.println("HTTP server started.");
+}
+
+/*__________________________________________________________SERVER_HANDLERS__________________________________________________________*/
+
+void handleNotFound(){ // if the requested file or page doesn't exist, return a 404 not found error
+  if(!handleFileRead(server.uri())){          // check if the file exists in the flash memory (SPIFFS), if so, send it
+    server.send(404, "text/plain", "404: File Not Found");
+  }
+}
+
+bool handleFileRead(String path) { // send the right file to the client (if it exists)
+  Serial.println("handleFileRead: " + path);
+  if (path.endsWith("/")) path += "index.html";          // If a folder is requested, send the index file
+  String contentType = getContentType(path);             // Get the MIME type
+  String pathWithGz = path + ".gz";
+  if (SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) { // If the file exists, either as a compressed archive, or normal
+    if (SPIFFS.exists(pathWithGz))                         // If there's a compressed version available
+      path += ".gz";                                         // Use the compressed verion
+    File file = SPIFFS.open(path, "r");                    // Open the file
+    size_t sent = server.streamFile(file, contentType);    // Send it to the client
+    file.close();                                          // Close the file again
+    Serial.println(String("\tSent file: ") + path);
+    return true;
+  }
+  Serial.println(String("\tFile Not Found: ") + path);   // If the file doesn't exist, return false
+  return false;
+}
+
+void handleFileUpload(){ // upload a new file to the SPIFFS
+  HTTPUpload& upload = server.upload();
+  String path;
+  if(upload.status == UPLOAD_FILE_START){
+    path = upload.filename;
+    if(!path.startsWith("/")) path = "/"+path;
+    if(!path.endsWith(".gz")) {                          // The file server always prefers a compressed version of a file
+      String pathWithGz = path+".gz";                    // So if an uploaded file is not compressed, the existing compressed
+      if(SPIFFS.exists(pathWithGz))                      // version of that file must be deleted (if it exists)
+         SPIFFS.remove(pathWithGz);
+    }
+    Serial.print("handleFileUpload Name: "); Serial.println(path);
+    fsUploadFile = SPIFFS.open(path, "w");            // Open the file for writing in SPIFFS (create if it doesn't exist)
+    path = String();
+  } else if(upload.status == UPLOAD_FILE_WRITE){
+    if(fsUploadFile)
+      fsUploadFile.write(upload.buf, upload.currentSize); // Write the received bytes to the file
+  } else if(upload.status == UPLOAD_FILE_END){
+    if(fsUploadFile) {                                    // If the file was successfully created
+      fsUploadFile.close();                               // Close the file again
+      Serial.print("handleFileUpload Size: "); Serial.println(upload.totalSize);
+      server.sendHeader("Location","/success.html");      // Redirect the client to the success page
+      server.send(303);
+    } else {
+      server.send(500, "text/plain", "500: couldn't create file");
+    }
+  }
+}
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) { // When a WebSocket message is received
+  switch (type) {
+    case WStype_DISCONNECTED:             // if the websocket is disconnected
+      Serial.printf("[%u] Disconnected!\n", num);
+      break;
+    case WStype_CONNECTED: {              // if a new websocket connection is established
+        IPAddress ip = webSocket.remoteIP(num);
+        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+        rainbowEffect = false;                  // Turn rainbow off when a new connection is established
+      }
+      break;
+    case WStype_TEXT:                     // if new text data is received
+      Serial.printf("[%u] get Text: %s\n", num, payload);
+      if (payload[0] == '#') {            // we get RGB data
+        uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
+        int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
+        int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
+        int b =          rgb & 0x3FF;                      // B: bits  0-9
+
+        analogWrite(LED_RED,   r);                         // write it to the LED output pins
+        analogWrite(LED_GREEN, g);
+        analogWrite(LED_BLUE,  b);
+      } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
+        rainbowEffect = true;
+      } else if (payload[0] == 'N') {                      // the browser sends an N when the rainbow effect is disabled
+        rainbowEffect = false;
+      }
+      break;
+  }
 }
 
 void setalarm()
@@ -353,101 +585,10 @@ bool IsDst()
   return false; // this line never gonna happend
 }
 
-time_t prevDisplay = 0; // when the digital clock was displayed
-
-
-void loop() {
 
 
 
 
-if(ota_flag)
-  {
-    uint16_t time_start = millis();
-    Draw_Clock(0, 1); // Just draw a blank clock
-    delay(500);
-    Draw_Clock(0, 2); // Draw the clock background
-    delay(1000);
-    Draw_Clock(0, 1); // Just draw a blank clock
-    Serial.println("50 seconds to do OTA, then clock will start");
-    while(time_elapsed < 50000)
-    {
-      ArduinoOTA.handle();
-      time_elapsed = millis() - time_start;
-      // blink led when in OTA mode
-      digitalWrite(ESP_BUILTIN_LED, LOW); //on
-      delay(100);
-      digitalWrite(ESP_BUILTIN_LED, HIGH); //off
-      delay(100);
-//      Serial.println(time_elapsed);
-//      Serial.println("OTA OK");
-    }
-    ota_flag = false;
-  }
-
-  if(light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
-
-  if(sound_alarm_flag)
-  {
-    uint16_t time_start = millis();
-    Serial.println("1 second sound alarm, then clock will start");
-    for (int thisNote = 0; thisNote < 8; thisNote++) {
-      // to calculate the note duration, take whole note durations divided by the note type.
-      //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
-      int noteDuration = whole_note_duration / noteDurations[thisNote];
-      if (melody[thisNote] > 30) {
-        tone(PIEZO_PIN, melody[thisNote], noteDuration);
-      }
-      // to distinguish the notes, set a minimum time between them.
-      // the note's duration + 30% seems to work well:
-      int pauseBetweenNotes = noteDuration * 1.30;
-      delay(pauseBetweenNotes);
-      // stop the tone playing:
-      noTone(PIEZO_PIN);
-    }
-    sound_alarm_flag = false;
-  }
-
-  // read the analog in value coming from microphone
-  int sensorValue = analogRead(analogInPin);
-  if (sensorValue > 900 ) {
-    Serial.println(sensorValue);
-    light_alarm_flag = true;
-    time_elapsed = 0;
-  }
-
-
-  server.handleClient();
-  time_t nextalarmtime;
-  time_t t = now(); // Get the current time
-  if (now() != prevDisplay) { //update the display only if time has changed
-    prevDisplay = now();
-    if (second() == 0)
-      digitalClockDisplay();
-    else
-      Serial.print('-');
-
-    Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
-    ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
-    if (prevDisplay == makeTime(alarmTime))
-    {
-      showlights(alarmInfo.duration, -1, -1, 10, -1, -1, -1, -1, -1, t);
-      // For daily repeat
-      nextalarmtime = makeTime(alarmTime);
-      nextalarmtime += alarmInfo.repeat;
-      breakTime(nextalarmtime, alarmTime);
-
-      char buf[50];
-      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
-        second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-        monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
-      Serial.println();
-      Serial.println(buf);
-    }
-  }
-  delay(10); // needed to keep wifi going
-
-}
 
 ////////////////////////////////////////////////////////////
 void digitalClockDisplay()
@@ -647,4 +788,54 @@ void theaterChaseRainbow(int wait, time_t t) {
       firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
     }
   }
+}
+
+/*__________________________________________________________HELPER_FUNCTIONS__________________________________________________________*/
+
+String formatBytes(size_t bytes) { // convert sizes in bytes to KB and MB
+  if (bytes < 1024) {
+    return String(bytes) + "B";
+  } else if (bytes < (1024 * 1024)) {
+    return String(bytes / 1024.0) + "KB";
+  } else if (bytes < (1024 * 1024 * 1024)) {
+    return String(bytes / 1024.0 / 1024.0) + "MB";
+  }
+}
+
+String getContentType(String filename) { // determine the filetype of a given filename, based on the extension
+  if (filename.endsWith(".html")) return "text/html";
+  else if (filename.endsWith(".css")) return "text/css";
+  else if (filename.endsWith(".js")) return "application/javascript";
+  else if (filename.endsWith(".ico")) return "image/x-icon";
+  else if (filename.endsWith(".gz")) return "application/x-gzip";
+  return "text/plain";
+}
+
+void setHue(int hue) { // Set the RGB LED to a given hue (color) (0° = Red, 120° = Green, 240° = Blue)
+  hue %= 360;                   // hue is an angle between 0 and 359°
+  float radH = hue*3.142/180;   // Convert degrees to radians
+  float rf, gf, bf;
+
+  if(hue>=0 && hue<120){        // Convert from HSI color space to RGB
+    rf = cos(radH*3/4);
+    gf = sin(radH*3/4);
+    bf = 0;
+  } else if(hue>=120 && hue<240){
+    radH -= 2.09439;
+    gf = cos(radH*3/4);
+    bf = sin(radH*3/4);
+    rf = 0;
+  } else if(hue>=240 && hue<360){
+    radH -= 4.188787;
+    bf = cos(radH*3/4);
+    rf = sin(radH*3/4);
+    gf = 0;
+  }
+  int r = rf*rf*1023;
+  int g = gf*gf*1023;
+  int b = bf*bf*1023;
+
+  analogWrite(LED_RED,   r);    // Write the right color to the LED output pins
+  analogWrite(LED_GREEN, g);
+  analogWrite(LED_BLUE,  b);
 }
