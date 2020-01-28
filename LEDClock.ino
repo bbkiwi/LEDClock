@@ -11,6 +11,7 @@
  *
  * This is the reverse of comment at line 40 in example
  * ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
+ * //BUT kill OTA while fixeds mDns
  */
 
 /************* Declare included libraries ******************************/
