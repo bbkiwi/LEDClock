@@ -11,7 +11,6 @@
  *
  * This is the reverse of comment at line 40 in example
  * ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
- * //BUT kill OTA while fixeds mDns
  */
 
 /************* Declare included libraries ******************************/
@@ -182,7 +181,7 @@ void setup() {
 
 }
 
-/*__________________________________________________________LOOP__________________________________________________________*/
+/*___________________LOOP__________________________________________________________*/
 
 bool rainbowEffect = false;             // The rainbow effect is turned off on startup
 
@@ -194,6 +193,7 @@ void loop() {
   webSocket.loop();                           // constantly check for websocket events
   server.handleClient();                      // run the server
   ArduinoOTA.handle();                        // listen for OTA events
+  MDNS.update();                              // must have above as well
 
   if(rainbowEffect) {                               // if the rainbow effect is turned on
     if(millis() > prevMillis + 32) {
@@ -296,6 +296,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
     Serial.print("Station connected to ESP8266 AP");
   }
   Serial.println("\r\n");
+  delay(100);
 }
 
 void startOTA() { // Start the OTA service
