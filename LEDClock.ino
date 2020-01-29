@@ -497,8 +497,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         analogWrite(LED_BLUE,  b);
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
         rainbowEffect = true;
-      } else if (payload[0] == 'N') {                      // the browser sends an N when the rainbow effect is disabled
-        rainbowEffect = false;
+      } else if (payload[0] == 'W') {                      // the browser sends an N when the rainbow effect is disabled
+        char buf[50];
+        sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
+        webSocket.sendTXT(num, buf);
       }
       break;
   }
