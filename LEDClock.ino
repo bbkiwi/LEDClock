@@ -54,10 +54,6 @@ const char *password = "ledclock";   // The password required to connect to it, 
 const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
 const char *OTAPassword = "ledclock";
 
-#define LED_RED     15            // specify the pins with an RGB LED connected
-#define LED_GREEN   12
-#define LED_BLUE    13
-
 //************* Declare structures ******************************
 //Create structure for LED RGB information
 struct RGB {
@@ -160,10 +156,6 @@ bool ClockInitialized = false;
 const int ESP_BUILTIN_LED = 2;
 
 void setup() {
-  pinMode(LED_RED, OUTPUT);    // the pins with LEDs connected are outputs
-  pinMode(LED_GREEN, OUTPUT);
-  pinMode(LED_BLUE, OUTPUT);
-
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
   delay(10);
   Serial.println("\r\n");
@@ -186,19 +178,10 @@ void setup() {
 
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
 
-
-  // pinMode(ESP_BUILTIN_LED, OUTPUT);
-
-
-
+  pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
 
 /*___________________LOOP__________________________________________________________*/
-
-bool rainbowEffect = false;             // The rainbow effect is turned off on startup
-
-unsigned long prevMillis = millis();
-int hue = 0;
 time_t prevDisplay = 0; // when the digital clock was displayed
 
 void loop() {
@@ -206,16 +189,6 @@ void loop() {
   server.handleClient();                      // run the server
   ArduinoOTA.handle();                        // listen for OTA events
   MDNS.update();                              // must have above as well
-
-  if(rainbowEffect) {                               // if the rainbow effect is turned on
-    if(millis() > prevMillis + 32) {
-      if(++hue == 360)                        // Cycle through the color wheel (increment by one degree every 32 ms)
-        hue = 0;
-      setHue(hue);                            // Set the RGB LED to the right color
-      prevMillis = millis();
-    }
-  }
-
 
   if(light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
 
@@ -317,9 +290,6 @@ void startOTA() { // Start the OTA service
 
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
-    digitalWrite(LED_RED, 0);    // turn off the LEDs
-    digitalWrite(LED_GREEN, 0);
-    digitalWrite(LED_BLUE, 0);
   });
   ArduinoOTA.onEnd([]() {
     Serial.println("\r\nEnd");
@@ -493,7 +463,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
     case WStype_CONNECTED: {              // if a new websocket connection is established
         IPAddress ip = webSocket.remoteIP(num);
         Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-        rainbowEffect = false;                  // Turn rainbow off when a new connection is established
       }
       break;
     case WStype_TEXT:                     // if new text data is received
@@ -503,16 +472,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
         int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
         int b =          rgb & 0x3FF;                      // B: bits  0-9
-
-        analogWrite(LED_RED,   r);                         // write it to the LED output pins
-        analogWrite(LED_GREEN, g);
-        analogWrite(LED_BLUE,  b);
+        analogWrite(ESP_BUILTIN_LED, b);
+        //Serial.printf("%d\n", b);
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
-        rainbowEffect = true;
+        digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an N when the rainbow effect is disabled
         char buf[50];
         sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
+        digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
       }
       break;
   }
@@ -611,11 +579,6 @@ bool IsDst()
   if (month() == 9) return previousSunday > 23;
   return false; // this line never gonna happend
 }
-
-
-
-
-
 
 ////////////////////////////////////////////////////////////
 void digitalClockDisplay()
@@ -836,33 +799,4 @@ String getContentType(String filename) { // determine the filetype of a given fi
   else if (filename.endsWith(".ico")) return "image/x-icon";
   else if (filename.endsWith(".gz")) return "application/x-gzip";
   return "text/plain";
-}
-
-void setHue(int hue) { // Set the RGB LED to a given hue (color) (0° = Red, 120° = Green, 240° = Blue)
-  hue %= 360;                   // hue is an angle between 0 and 359°
-  float radH = hue*3.142/180;   // Convert degrees to radians
-  float rf, gf, bf;
-
-  if(hue>=0 && hue<120){        // Convert from HSI color space to RGB
-    rf = cos(radH*3/4);
-    gf = sin(radH*3/4);
-    bf = 0;
-  } else if(hue>=120 && hue<240){
-    radH -= 2.09439;
-    gf = cos(radH*3/4);
-    bf = sin(radH*3/4);
-    rf = 0;
-  } else if(hue>=240 && hue<360){
-    radH -= 4.188787;
-    bf = cos(radH*3/4);
-    rf = sin(radH*3/4);
-    gf = 0;
-  }
-  int r = rf*rf*1023;
-  int g = gf*gf*1023;
-  int b = bf*bf*1023;
-
-  analogWrite(LED_RED,   r);    // Write the right color to the LED output pins
-  analogWrite(LED_GREEN, g);
-  analogWrite(LED_BLUE,  b);
 }
