@@ -20,6 +20,18 @@
 #include <string.h>
 #include "pitches.h"
 
+/************ NOTE __has_include not work for esp8266
+#if __has_include ("localwificonfig.h")
+#  include "localwificonfig.h"
+#endif
+#ifndef homeSSID
+#  define homeSSID "homeSSID"
+#  define homePW "homePW"
+#endif
+*************/
+// So MUST have this file which defines homeSSID and homePW
+#include "localwificonfig.h"
+
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <ArduinoOTA.h>
@@ -275,7 +287,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
   Serial.print(ssid);
   Serial.println("\" started\r\n");
 
-  wifiMulti.addAP("ssid_from_AP_1", "your_password_for_AP_1");  // add Wi-Fi networks you want to connect to
+  wifiMulti.addAP(homeSSID, homePW);  // add Wi-Fi networks you want to connect to
   wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
   wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
