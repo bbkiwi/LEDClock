@@ -40,6 +40,7 @@
 #include <ESP8266mDNS.h>
 #include <FS.h>
 #include <WebSocketsServer.h>
+#include <ArduinoJson.h>
 
 ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
 ESP8266WebServer server(80);       // create a web server on port 80
@@ -166,6 +167,18 @@ void setup() {
 
   startSPIFFS();               // Start the SPIFFS and list all contents
 
+  if (!saveConfig()) {
+    Serial.println("Failed to save config");
+  } else {
+    Serial.println("Config saved");
+  }
+
+  if (!loadConfig()) {
+    Serial.println("Failed to load config");
+  } else {
+    Serial.println("Config loaded");
+  }
+
   startWebSocket();            // Start a WebSocket server
 
   startMDNS();                 // Start the mDNS responder
@@ -253,6 +266,65 @@ void loop() {
 
 
 /*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
+// Taken from ConfigFile example
+bool loadConfig() {
+  File configFile = SPIFFS.open("/config.json", "r");
+  if (!configFile) {
+    Serial.println("Failed to open config file");
+    return false;
+  }
+
+  size_t size = configFile.size();
+  if (size > 1024) {
+    Serial.println("Config file size is too large");
+    return false;
+  }
+
+  // Allocate a buffer to store contents of the file.
+  std::unique_ptr<char[]> buf(new char[size]);
+
+  // We don't use String here because ArduinoJson library requires the input
+  // buffer to be mutable. If you don't use ArduinoJson, you may as well
+  // use configFile.readString instead.
+  configFile.readBytes(buf.get(), size);
+
+  StaticJsonDocument<200> doc;
+  auto error = deserializeJson(doc, buf.get());
+  if (error) {
+    Serial.println("Failed to parse config file");
+    return false;
+  }
+
+  const char* serverName = doc["serverName"];
+  const char* accessToken = doc["accessToken"];
+  int WN = doc["weeknight"];
+
+  // Real world application would store these values in some variables for
+  // later use.
+
+  Serial.print("Loaded serverName: ");
+  Serial.println(serverName);
+  Serial.print("Loaded accessToken: ");
+  Serial.println(accessToken);
+  return true;
+}
+
+bool saveConfig() {
+  StaticJsonDocument<200> doc;
+  doc["serverName"] = "api.example.com";
+  doc["accessToken"] = "128du9as8du12eoue8da98h123ueh9h98";
+  doc["weeknight"] = 234;
+
+  File configFile = SPIFFS.open("/config.json", "w");
+  if (!configFile) {
+    Serial.println("Failed to open config file for writing");
+    return false;
+  }
+
+  serializeJson(doc, configFile);
+  return true;
+}
+
 
 void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
   WiFi.softAP(ssid, password);             // Start the access point
