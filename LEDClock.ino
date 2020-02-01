@@ -11,6 +11,9 @@
  *
  * This is the reverse of comment at line 40 in example
  * ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
+ * NOTE on win 10 PC was in 2 locations (changed it in both seems to be using those on C: drive)
+ * C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
+ * D:\Bill\My Documents\ArduinoData\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
  */
 
 /************* Declare included libraries ******************************/
