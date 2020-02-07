@@ -1,6 +1,6 @@
 var rainbowEnable = false;
-//var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
-var connection = new WebSocket('wss://echo.websocket.org/');
+var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
+//var connection = new WebSocket('wss://echo.websocket.org/');
 
 connection.onopen = function () {
     connection.send('Connect ' + new Date());
