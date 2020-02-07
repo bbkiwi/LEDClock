@@ -30,7 +30,8 @@
 </head>
 
 <body>
-<button onclick="showOrHide()">LED Control</button>
+<button onclick="toggleShowHide('Led-Control')">LED Control</button>
+<button class="simplepicker-btn">Show Picker</button>
 <div id="Led-Control" style="display: none;">
 
     <center>
@@ -57,13 +58,16 @@
        </div>
     </center>
 	</div>
-  <div>
-  <button class="simplepicker-btn">Show Picker</button>
+  <div class="picker-area">
   <div class="event-log">Event logs:<br></div>
   <script src="dist/simplepicker.js"></script>
   <script>
-    let simplepicker = new SimplePicker({
+    let simplepicker = new SimplePicker(
+	'.picker-area',
+	{
       zIndex: 10,
+	  compactMode: true,
+	  disableTimeSection: false,
     });
 
     //simplepicker.open();

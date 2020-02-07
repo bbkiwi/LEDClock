@@ -1,5 +1,6 @@
 var rainbowEnable = false;
-var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
+//var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
+var connection = new WebSocket('wss://echo.websocket.org/');
 
 connection.onopen = function () {
     connection.send('Connect ' + new Date());
@@ -59,23 +60,22 @@ function rainbowEffect(){
     }
 }
 
-//Why can define var ledControl here once??
 
-function showDiv() {
-	var ledControl = document.getElementById('Led-Control');
+function showDiv(elementId) {
+	var ledControl = document.getElementById(elementId);
     ledControl.style.display = "block";
 }
 
-function closeDiv() {
-	var ledControl = document.getElementById('Led-Control');
+function hideDiv(elementId) {
+	var ledControl = document.getElementById(elementId);
     ledControl.style.display = "none";
 }
 
-function showOrHide() {
-	var ledControl = document.getElementById('Led-Control');
+function toggleShowHide(elementId) {
+	var ledControl = document.getElementById(elementId);
     if (ledControl.style.display === "block") {
-      closeDiv()
+      hideDiv(elementId)
     } else {
-      showDiv()
+      showDiv(elementId)
     }
 }
