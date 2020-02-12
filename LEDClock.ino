@@ -195,7 +195,7 @@ void setup() {
 
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
 
-  pinMode(ESP_BUILTIN_LED, OUTPUT);
+  //pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
 
 /*___________________LOOP__________________________________________________________*/
@@ -251,8 +251,8 @@ void loop() {
     ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
     if (prevDisplay == makeTime(alarmTime))
     {
-      showlights(alarmInfo.duration, -1, -1, 10, -1, -1, -1, -1, -1, t);
-      // For daily repeat
+      showlights(alarmInfo.duration, 1, -1, -1, -1, -1, -1, -1, -1, t);
+      // For repeat
       nextalarmtime = makeTime(alarmTime);
       nextalarmtime += alarmInfo.repeat;
       breakTime(nextalarmtime, alarmTime);
@@ -621,7 +621,7 @@ void handleFileList() {
 }
 
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) { // When a WebSocket message is received
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) { // When a WebSocket message is received
   switch (type) {
     case WStype_DISCONNECTED:             // if the websocket is disconnected
       Serial.printf("[%u] Disconnected!\n", num);
@@ -632,24 +632,36 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
       }
       break;
     case WStype_TEXT:                     // if new text data is received
-      Serial.printf("[%u] get Text: %s\n", num, payload);
+      Serial.printf("[%u] payload: %s length: %d\n", num, payload, length);
       if (payload[0] == '#') {            // we get RGB data
         uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
         int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
         int b =          rgb & 0x3FF;                      // B: bits  0-9
-        analogWrite(ESP_BUILTIN_LED, b);
+        //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
-        digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
-      } else if (payload[0] == 'W') {                      // the browser sends an N when the rainbow effect is disabled
+	    light_alarm_flag = true;
+        //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
+      } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
         char buf[50];
         sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
-        digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
+        //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
+      } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
+	    Serial.printf("Set Alarm Code\n");
       }
       break;
   }
+}
+
+void setalarmtime(uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint8_t y) {
+	alarmTime.Second = s;
+	alarmTime.Minute = m;
+	alarmTime.Hour = h;
+	alarmTime.Day = d;
+	alarmTime.Month = mth;
+	alarmTime.Year = y;
 }
 
 void setalarm()
@@ -662,23 +674,28 @@ void setalarm()
   String d = server.arg("day");
   String mth = server.arg("month");
   String y = server.arg("year");
-  alarmInfo.duration = 10000;
+  //alarmInfo.duration = 10000;
   if (strlen(t.c_str()) > 0) alarmInfo.duration = t.toInt();
-  Serial.println(alarmInfo.duration);
+  //Serial.println(alarmInfo.duration);
 
-  alarmInfo.repeat = SECS_PER_DAY;
+  //alarmInfo.repeat = SECS_PER_DAY;
   if (strlen(r.c_str()) > 0) alarmInfo.repeat = r.toInt();
-  Serial.println(alarmInfo.repeat);
+  //Serial.println(alarmInfo.repeat);
 
   breakTime(now(), alarmTime);
   if (strlen(s.c_str()) > 0) alarmTime.Second = s.toInt();
   if (strlen(m.c_str()) > 0) alarmTime.Minute = m.toInt();
   if (strlen(h.c_str()) > 0) alarmTime.Hour = h.toInt();
   if (strlen(d.c_str()) > 0) alarmTime.Day = d.toInt();
-  if (strlen(mth.c_str()) > 0) alarmTime.Hour = mth.toInt();
+  if (strlen(mth.c_str()) > 0) alarmTime.Month = mth.toInt();
+  if (strlen(y.c_str()) > 0) alarmTime.Year = y.toInt();
 
-  char buf[50];
-  sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)), monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+  char buf[100]; //If not big enough for message below will raise exception
+  sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
+     hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
+	 daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
+	 monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)),
+	 alarmInfo.duration, alarmInfo.repeat);
   server.send(200,"text/plain", buf);
   Serial.println(buf);
 }
