@@ -17,6 +17,7 @@
  * D:\Bill\My Documents\ArduinoData\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
  */
 
+//NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
 /************* Declare included libraries ******************************/
 #include <NTPClient.h>
 #include <TimeLib.h>
@@ -91,10 +92,11 @@ RGB Second = { 0,0,100 };//blue
 bool ClockGoBackwards = true;
 
 //Set brightness by time for night and day mode
-TIME WeekNight = {20, 00}; // Night time to go dim
-TIME WeekMorning = {6, 15}; //Morning time to go bright
-TIME WeekendNight = {20, 30}; // Night time to go dim
-TIME WeekendMorning = {9, 30}; //Morning time to go bright
+//TODO auto dawn and dusk computation
+TIME WeekNight = {18, 00}; // Night time to go dim
+TIME WeekMorning = {7, 15}; //Morning time to go bright
+TIME WeekendNight = {18, 00}; // Night time to go dim
+TIME WeekendMorning = {7, 15}; //Morning time to go bright
 
 byte day_brightness = 127;
 byte night_brightness = 16;
@@ -108,6 +110,8 @@ String monthNames[13] = {"dummy", "January", "February", "March", "April", "May"
 bool ota_flag = true;
 bool sound_alarm_flag = false;
 bool light_alarm_flag = false;
+bool led_color_alarm_flag = false;
+uint32_t led_color_alarm_rgb;
 tmElements_t alarmTime;
 typedef enum {
   ONCE,
@@ -208,7 +212,10 @@ void loop() {
   MDNS.update();                              // must have above as well
 
   if(light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
-
+  if(led_color_alarm_flag)  {
+    colorAll(led_color_alarm_rgb, 1000, now());
+    led_color_alarm_flag = false;
+  }
   if(sound_alarm_flag)
   {
     uint16_t time_start = millis();
@@ -249,7 +256,7 @@ void loop() {
 
     Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
     ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
-    if (prevDisplay == makeTime(alarmTime))
+    if (prevDisplay >= makeTime(alarmTime))
     {
       showlights(alarmInfo.duration, 1, -1, -1, -1, -1, -1, -1, -1, t);
       // For repeat
@@ -362,7 +369,8 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
 
 void startOTA() { // Start the OTA service
   ArduinoOTA.setHostname(OTAandMdnsName);
-  ArduinoOTA.setPassword(OTAPassword);
+  //Comment out if want to upload sketch data (SPIFFS) via OTA
+  //ArduinoOTA.setPassword(OTAPassword);
 
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
@@ -638,6 +646,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
         int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
         int b =          rgb & 0x3FF;                      // B: bits  0-9
+        led_color_alarm_flag = true;
+        led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2); // colors 0 to 255
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
@@ -655,14 +665,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-void setalarmtime(uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint8_t y) {
-	alarmTime.Second = s;
-	alarmTime.Minute = m;
-	alarmTime.Hour = h;
-	alarmTime.Day = d;
-	alarmTime.Month = mth;
-	alarmTime.Year = y;
-}
+//void setalarmtime(uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint8_t y) {
+//	alarmTime.Second = s;
+//	alarmTime.Minute = m;
+//	alarmTime.Hour = h;
+//	alarmTime.Day = d;
+//	alarmTime.Month = mth;
+//	alarmTime.Year = y;
+//}
 
 void setalarm()
 {
@@ -879,6 +889,17 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
     }
     light_alarm_flag = false;
   }
+
+//********* Bills NeoPixel Routines
+// Set All Leds to given color for wait seconds
+void colorAll(uint32_t color, int duration, time_t t) {
+  for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
+    strip.setPixelColor(ClockCorrect(i), color);         //  Set pixel's color (in RAM)
+  }
+  SetBrightness(t); // Set the clock brightness dependant on the time
+  strip.show();                          //  Update strip to match
+  delay(duration);                           //  Pause for a moment
+}
 
 //********* Adafruit NeoPIxel Routines
 // Some functions of our own for creating animated effects -----------------

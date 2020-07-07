@@ -19,7 +19,7 @@ connection.onclose = function(){
 function sendRGB() {
     var r = document.getElementById('r').value**2/1023; // non linear
     var g = document.getElementById('g').value**2/1023;
-    var b = (1023 - document.getElementById('b').value)**2/1023;
+    var b = document.getElementById('b').value**2/1023;
 
     var rgb = r << 20 | g << 10 | b;
     var rgbstr = '#'+ rgb.toString(16);
