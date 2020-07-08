@@ -9,8 +9,10 @@ connection.onerror = function (error) {
     console.log('WebSocket Error ', error);
 };
 connection.onmessage = function (e) {
+	const $eventLog = document.querySelector('.event-log');
     console.log('Server: ', e.data);
     document.getElementById('whattime').innerHTML = e.data;
+	$eventLog.innerHTML =  e.data + '\n' + $eventLog.innerHTML;
 };
 connection.onclose = function(){
     console.log('WebSocket connection closed');

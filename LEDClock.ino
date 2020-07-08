@@ -1,21 +1,21 @@
 /*********
- Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
-//https://github.com/PaulStoffregen/Time
+  Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
+  //https://github.com/PaulStoffregen/Time
 *********/
 
 /*********** IMPORTANT #include <ESP8266mDNS.h> below
- * With 1.8.10 and board 2.6.3
- * Was having problem with mDns
- * Changed ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/src/ESP8266mDNS.h
- * uncomment line 51 and comment line 52 to use legacy version which from googling works well for simple use
- *
- * This is the reverse of comment at line 40 in example
- * ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
- * NOTE on win 10 PC was in 2 locations (changed it in both seems to be using those on C: drive)
- * C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
- * was also here but have removed as was part of installing arduino app from win 10 store
- * D:\Bill\My Documents\ArduinoData\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
- */
+   With 1.8.10 and board 2.6.3
+   Was having problem with mDns
+   Changed ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/src/ESP8266mDNS.h
+   uncomment line 51 and comment line 52 to use legacy version which from googling works well for simple use
+
+   This is the reverse of comment at line 40 in example
+   ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
+   NOTE on win 10 PC was in 2 locations (changed it in both seems to be using those on C: drive)
+   C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
+   was also here but have removed as was part of installing arduino app from win 10 store
+   D:\Bill\My Documents\ArduinoData\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
+*/
 
 //NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
 /************* Declare included libraries ******************************/
@@ -24,15 +24,16 @@
 #include <Adafruit_NeoPixel.h>
 #include <string.h>
 #include "pitches.h"
+#include "sunset.h"
 
 /************ NOTE __has_include not work for esp8266
-#if __has_include ("localwificonfig.h")
-#  include "localwificonfig.h"
-#endif
-#ifndef homeSSID
-#  define homeSSID "homeSSID"
-#  define homePW "homePW"
-#endif
+  #if __has_include ("localwificonfig.h")
+  #  include "localwificonfig.h"
+  #endif
+  #ifndef homeSSID
+  #  define homeSSID "homeSSID"
+  #  define homePW "homePW"
+  #endif
 *************/
 // So MUST have this file which defines homeSSID and homePW
 #include "localwificonfig.h"
@@ -47,9 +48,18 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
+/* Cass Bay */
+#define LATITUDE        -43.601131
+#define LONGITUDE       172.689831
+#define CST_OFFSET      12
+#define DST_OFFSET      13
+
+SunSet sun;
+
 ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
 ESP8266WebServer server(80);       // create a web server on port 80
 WebSocketsServer webSocket(81);    // create a websocket server on port 81
+uint8_t websocketId_num = 0;
 
 File fsUploadFile;                                    // a File variable to temporarily store the received file
 
@@ -59,6 +69,18 @@ const char *password = "ledclock";   // The password required to connect to it, 
 // OTA and mDns must have same name
 const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
 const char *OTAPassword = "ledclock";
+
+
+double sunrise;
+double sunset;
+double civilsunrise;
+double civilsunset;
+double astrosunrise;
+double astrosunset;
+double nauticalsunrise;
+double nauticalsunset;
+
+time_t currentTime;
 
 //************* Declare structures ******************************
 //Create structure for LED RGB information
@@ -73,20 +95,20 @@ struct TIME {
 
 //************* Editable Options ******************************
 //The colour of the "12" to give visual reference to the top
-RGB Twelve = {0,0,60}; // blue
+RGB Twelve = {0, 0, 60}; // blue
 //The colour of the "quarters" 3, 6 & 9 to give visual reference
-RGB Quarters = { 0,0,60 }; //blue
+RGB Quarters = { 0, 0, 60 }; //blue
 //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-RGB Divisions = { 0,0,30 }; //blue
+RGB Divisions = { 0, 0, 30 }; //blue
 //All the other pixels with no information
-RGB Background = { 0,0,6 };//blue
+RGB Background = { 0, 0, 6 }; //blue
 
 //The Hour hand
 RGB Hour = { 0, 100, 0 };//green
 //The Minute hand
 RGB Minute = { 64, 32, 0 };//orange medium
 //The Second hand
-RGB Second = { 0,0,100 };//blue
+RGB Second = { 0, 0, 100 }; //blue
 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = true;
@@ -113,6 +135,8 @@ bool light_alarm_flag = false;
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
 tmElements_t alarmTime;
+tmElements_t calcTime = {0};
+
 typedef enum {
   ONCE,
   DAILY,
@@ -125,6 +149,8 @@ struct {
   uint32_t repeat;
   //tmElements_t alarmTime;
 } alarmInfo;
+
+bool alarmSet = false;
 
 uint16_t time_elapsed = 0;
 int TopOfClock = 15; // to make given pixel the top
@@ -160,7 +186,8 @@ bool IsDst();
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, PIN, NEO_GRB + NEO_KHZ800);
 bool ClockInitialized = false;
-
+time_t nextCalcTime;
+time_t nextAlarmTime;
 
 const int ESP_BUILTIN_LED = 2;
 
@@ -168,6 +195,8 @@ void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
   delay(10);
   Serial.println("\r\n");
+
+  sun.setPosition(LATITUDE, LONGITUDE, DST_OFFSET);
 
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
 
@@ -199,6 +228,12 @@ void setup() {
 
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
 
+  // Initialize alarmTime(s)
+  breakTime(now(), alarmTime);
+
+  calcSun();
+
+
   //pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
 
@@ -206,17 +241,19 @@ void setup() {
 time_t prevDisplay = 0; // when the digital clock was displayed
 
 void loop() {
+  //TODO is buf big enough?
+  char buf[50];
   webSocket.loop();                           // constantly check for websocket events
   server.handleClient();                      // run the server
   ArduinoOTA.handle();                        // listen for OTA events
   MDNS.update();                              // must have above as well
 
-  if(light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
-  if(led_color_alarm_flag)  {
+  if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
+  if (led_color_alarm_flag)  {
     colorAll(led_color_alarm_rgb, 1000, now());
     led_color_alarm_flag = false;
   }
-  if(sound_alarm_flag)
+  if (sound_alarm_flag)
   {
     uint16_t time_start = millis();
     Serial.println("1 second sound alarm, then clock will start");
@@ -245,7 +282,7 @@ void loop() {
     time_elapsed = 0;
   }
 
-  time_t nextalarmtime;
+
   time_t t = now(); // Get the current time
   if (now() != prevDisplay) { //update the display only if time has changed
     prevDisplay = now();
@@ -256,21 +293,44 @@ void loop() {
 
     Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
     ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
-    if (prevDisplay >= makeTime(alarmTime))
-    {
-      showlights(alarmInfo.duration, 1, -1, -1, -1, -1, -1, -1, -1, t);
-      // For repeat
-      nextalarmtime = makeTime(alarmTime);
-      nextalarmtime += alarmInfo.repeat;
-      breakTime(nextalarmtime, alarmTime);
 
-      char buf[50];
-      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
-        second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-        monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+    // Check for alarm
+    if (alarmSet && prevDisplay >= makeTime(alarmTime))
+    {
+      currentTime = now();
+      showlights(alarmInfo.duration, 1, -1, -1, -1, -1, -1, -1, -1, t);
+      sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
+              second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
+              monthNames[month(currentTime)].c_str(), year(currentTime));
       Serial.println();
       Serial.println(buf);
+      webSocket.sendTXT(websocketId_num, buf);
+      
+      if (alarmInfo.repeat <= 0)
+      {
+        alarmSet = false;
+      } else {
+        // For repeat
+        nextAlarmTime = makeTime(alarmTime);
+        while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo.repeat;
+        breakTime(nextAlarmTime, alarmTime);
+        sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
+                second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
+                monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+        Serial.println();
+        Serial.println(buf);
+        webSocket.sendTXT(websocketId_num, buf);
+      }
     }
+
+    // Check if new day and recalculate sunSet etc.
+    if (prevDisplay >= makeTime(calcTime))
+    {
+      calcSun(); // computes sun rise and sun set, updates calcTime
+    }
+
+
+
   }
   delay(10); // needed to keep wifi going
 }
@@ -353,7 +413,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
     Serial.print('.');
   }
   Serial.println("\r\n");
-  if(WiFi.softAPgetStationNum() == 0) {      // If the ESP is connected to an AP
+  if (WiFi.softAPgetStationNum() == 0) {     // If the ESP is connected to an AP
     Serial.print("Connected to ");
     Serial.println(WiFi.SSID());             // Tell us what network we're connected to
     Serial.print("IP address:\t");
@@ -440,49 +500,49 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     server.send(200, "text/plain", "");
   }, handleFileUpload);
 
-// server.on("/makeAP",[](){
-//    server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
-//    delay(1000);
-//    createAccessPoint();
-//  });
-//
-//  server.on("/APOff",[](){
-//    server.send(200,"text/plain", "Turn off AP ");
-//    delay(1000);
-//    WiFi.softAPdisconnect(true);
-//  });
+  // server.on("/makeAP",[](){
+  //    server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
+  //    delay(1000);
+  //    createAccessPoint();
+  //  });
+  //
+  //  server.on("/APOff",[](){
+  //    server.send(200,"text/plain", "Turn off AP ");
+  //    delay(1000);
+  //    WiFi.softAPdisconnect(true);
+  //  });
 
-  server.on("/restart",[](){
-    server.send(200,"text/plain", "Restarting ...");
+  server.on("/restart", []() {
+    server.send(200, "text/plain", "Restarting ...");
     delay(1000);
     ESP.restart();
   });
 
-//  server.on("/startota",[](){
-//    server.send(200,"text/plain", "Make OTA ready ...");
-//    delay(1000);
-//    ota_flag = true;
-//    time_elapsed = 0;
-//  });
+  //  server.on("/startota",[](){
+  //    server.send(200,"text/plain", "Make OTA ready ...");
+  //    delay(1000);
+  //    ota_flag = true;
+  //    time_elapsed = 0;
+  //  });
 
-  server.on("/lightalarm",[](){
-    server.send(200,"text/plain", "Light alarm Starting ...");
+  server.on("/lightalarm", []() {
+    server.send(200, "text/plain", "Light alarm Starting ...");
     delay(1000);
     light_alarm_flag = true;
     time_elapsed = 0;
   });
 
-  server.on("/soundalarm",[](){
-    server.send(200,"text/plain", "Sound alarm Starting ...");
+  server.on("/soundalarm", []() {
+    server.send(200, "text/plain", "Sound alarm Starting ...");
     delay(1000);
     sound_alarm_flag = true;
     time_elapsed = 0;
   });
 
-  server.on("/whattime",[](){
+  server.on("/whattime", []() {
     char buf[50];
     sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
-    server.send(200,"text/plain", buf);
+    server.send(200, "text/plain", buf);
     delay(1000);
   });
 
@@ -493,7 +553,7 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
   server.on("/setalarm", setalarm);
 
   server.onNotFound(handleNotFound);          // if someone requests any other file or page, go to function 'handleNotFound'
-                                              // and check if the file exists
+  // and check if the file exists
 
   server.begin();                             // start the HTTP server
   Serial.println("HTTP server started.");
@@ -501,8 +561,8 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
 
 /*__________________________________________________________SERVER_HANDLERS__________________________________________________________*/
 
-void handleNotFound(){ // if the requested file or page doesn't exist, return a 404 not found error
-  if(!handleFileRead(server.uri())){          // check if the file exists in the flash memory (SPIFFS), if so, send it
+void handleNotFound() { // if the requested file or page doesn't exist, return a 404 not found error
+  if (!handleFileRead(server.uri())) {        // check if the file exists in the flash memory (SPIFFS), if so, send it
     server.send(404, "text/plain", "404: File Not Found");
   }
 }
@@ -525,28 +585,28 @@ bool handleFileRead(String path) { // send the right file to the client (if it e
   return false;
 }
 
-void handleFileUpload(){ // upload a new file to the SPIFFS
+void handleFileUpload() { // upload a new file to the SPIFFS
   if (server.uri() != "/edit") {
     return;
   }
   HTTPUpload& upload = server.upload();
   String path;
-  if(upload.status == UPLOAD_FILE_START){
+  if (upload.status == UPLOAD_FILE_START) {
     path = upload.filename;
-    if(!path.startsWith("/")) path = "/"+path;
-    if(!path.endsWith(".gz")) {                          // The file server always prefers a compressed version of a file
-      String pathWithGz = path+".gz";                    // So if an uploaded file is not compressed, the existing compressed
-      if(SPIFFS.exists(pathWithGz))                      // version of that file must be deleted (if it exists)
-         SPIFFS.remove(pathWithGz);
+    if (!path.startsWith("/")) path = "/" + path;
+    if (!path.endsWith(".gz")) {                         // The file server always prefers a compressed version of a file
+      String pathWithGz = path + ".gz";                  // So if an uploaded file is not compressed, the existing compressed
+      if (SPIFFS.exists(pathWithGz))                     // version of that file must be deleted (if it exists)
+        SPIFFS.remove(pathWithGz);
     }
     Serial.print("handleFileUpload Name: "); Serial.println(path);
     fsUploadFile = SPIFFS.open(path, "w");            // Open the file for writing in SPIFFS (create if it doesn't exist)
     path = String();
-  } else if(upload.status == UPLOAD_FILE_WRITE){
-    if(fsUploadFile)
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (fsUploadFile)
       fsUploadFile.write(upload.buf, upload.currentSize); // Write the received bytes to the file
-  } else if(upload.status == UPLOAD_FILE_END){
-    if(fsUploadFile) {                                    // If the file was successfully created
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (fsUploadFile) {                                   // If the file was successfully created
       fsUploadFile.close();                               // Close the file again
       Serial.print("handleFileUpload Size: "); Serial.println(upload.totalSize);
     } else {
@@ -630,6 +690,7 @@ void handleFileList() {
 
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) { // When a WebSocket message is received
+  websocketId_num = num; // save so can send to websock from other places
   switch (type) {
     case WStype_DISCONNECTED:             // if the websocket is disconnected
       Serial.printf("[%u] Disconnected!\n", num);
@@ -651,15 +712,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
-	    light_alarm_flag = true;
+        light_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
         char buf[50];
-        sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
+        sprintf(buf, "num %d, %d:%02d:%02d %s %d %s %d", num, hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
       } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
-	    Serial.printf("Set Alarm Code\n");
+        Serial.printf("Set Alarm Code\n");
       }
       break;
   }
@@ -676,6 +737,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
 void setalarm()
 {
+  alarmSet = true;
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
   String h = server.arg("hour");
@@ -702,11 +764,11 @@ void setalarm()
 
   char buf[100]; //If not big enough for message below will raise exception
   sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
-     hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
-	 daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-	 monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)),
-	 alarmInfo.duration, alarmInfo.repeat);
-  server.send(200,"text/plain", buf);
+          hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
+          daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
+          monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)),
+          alarmInfo.duration, alarmInfo.repeat);
+  server.send(200, "text/plain", buf);
   Serial.println(buf);
 }
 
@@ -723,7 +785,7 @@ void settime()
   ClockInitialized = false;
   char buf[50];
   sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(), daysOfWeek[d.toInt()].c_str(), day(makeTime(alarmTime)), monthNames[mth.toInt()].c_str(),  y.toInt());
-  server.send(200,"text/plain", buf);
+  server.send(200, "text/plain", buf);
   Serial.println(buf);
 }
 
@@ -734,10 +796,59 @@ void setBright()
   String nb = server.arg("night");
   if (strlen(db.c_str()) > 0) day_brightness = db.toInt();
   if (strlen(nb.c_str()) > 0) night_brightness = nb.toInt();
-  String rsp = "daybrightness set to: "+db+", nightbrightness to  "+nb;
-  server.send(200,"text/plain",rsp);
+  String rsp = "daybrightness set to: " + db + ", nightbrightness to  " + nb;
+  server.send(200, "text/plain", rsp);
 }
 
+void calcSun()
+{
+  char buf[50];
+  /* Get the current time, and set the Sunrise code to use the current date */
+  currentTime = now();
+
+  sprintf(buf, "calcSun at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
+          second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
+          monthNames[month(currentTime)].c_str(), year(currentTime));
+  webSocket.sendTXT(websocketId_num, buf);
+
+  sun.setCurrentDate(year(currentTime), month(currentTime), day(currentTime));
+  /* Check to see if we need to update our timezone value */
+  if (IsDst())
+    sun.setTZOffset(DST_OFFSET);
+  else
+    sun.setTZOffset(CST_OFFSET);
+
+  sunrise = sun.calcSunrise();
+  sunset = sun.calcSunset();
+  civilsunrise = sun.calcCivilSunrise();
+  civilsunset = sun.calcCivilSunset();
+  nauticalsunrise = sun.calcNauticalSunrise();
+  nauticalsunset = sun.calcNauticalSunset();
+  astrosunrise = sun.calcAstronomicalSunrise();
+  astrosunset = sun.calcAstronomicalSunset();
+
+  //nextCalcTime = makeTime(calcTime);
+  nextCalcTime = currentTime;
+  nextCalcTime += 24 * 3600;
+  breakTime(nextCalcTime, calcTime);
+
+  Serial.print("Sunrise is ");
+  Serial.print(sunrise);
+  Serial.println(" minutes past midnight.");
+  Serial.print("Sunset is ");
+  Serial.print(sunset);
+  Serial.print(" minutes past midnight.");
+
+
+  sprintf(buf, "Sunrise %f, Sunset %f, Civilsunset %f mins after midnight", sunrise, sunset, civilsunset);
+  webSocket.sendTXT(websocketId_num, buf);
+
+  sprintf(buf, "Next calcSun %d:%02d:%02d %s %d %s %d", hour(makeTime(calcTime)), minute(makeTime(calcTime)),
+          second(makeTime(calcTime)), daysOfWeek[weekday(makeTime(calcTime))].c_str(), day(makeTime(calcTime)),
+          monthNames[month(makeTime(calcTime))].c_str(), year(makeTime(calcTime)));
+  webSocket.sendTXT(websocketId_num, buf);
+
+}
 
 bool SetClockFromNTP()
 {
@@ -817,17 +928,17 @@ void Draw_Clock(time_t t, byte Phase)
   if (Phase >= 3) { // Draw 15 min markers
     for (int i = 0; i < 60; i = i + 15)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters.r, Quarters.g, Quarters.b));
-      strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve.r, Twelve.g, Twelve.b));
+    strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve.r, Twelve.g, Twelve.b));
   }
 
   if (Phase >= 4) { // Draw hands
     int iminute = minute(t);
     int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
-    strip.setPixelColor(ClockCorrect(ihour-1), strip.Color(Hour.r/4, Hour.g/4, Hour.b/4));
+    strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
     strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
-    strip.setPixelColor(ClockCorrect(ihour+1), strip.Color(Hour.r/4, Hour.g/4, Hour.b/4));
+    strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
     strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
-   if (second() % 2)
+    if (second() % 2)
       strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
     else
       strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
@@ -860,40 +971,40 @@ int ClockCorrect(int Pixel)
 {
   Pixel = (Pixel + TopOfClock) % 60;
   if (ClockGoBackwards)
-    return ((60 - Pixel +30) % 60); // my first attempt at clock driving had it going backwards :)
+    return ((60 - Pixel + 30) % 60); // my first attempt at clock driving had it going backwards :)
   else
     return (Pixel);
 }
 
 
 void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w6, int w7, int w8, time_t t)
+{
+  time_elapsed = 0;
+  uint16_t time_start = millis();
+  Serial.println("10 second minimum light alarm, then clock will start");
+  while (time_elapsed < duration)
   {
-    time_elapsed = 0;
-    uint16_t time_start = millis();
-    Serial.println("10 second minimum light alarm, then clock will start");
-    while(time_elapsed < duration)
-    {
-     // Fill along the length of the strip in various colors...
-      if (w1 > 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
-      if (w2 > 0) colorWipe(strip.Color(  0, 255,   0), w2, t); // Green
-      if (w3 > 0) colorWipe(strip.Color(  0,   0, 255), w3, t); // Blue
+    // Fill along the length of the strip in various colors...
+    if (w1 > 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
+    if (w2 > 0) colorWipe(strip.Color(  0, 255,   0), w2, t); // Green
+    if (w3 > 0) colorWipe(strip.Color(  0,   0, 255), w3, t); // Blue
 
-      // Do a theater marquee effect in various colors...
-      if (w4 > 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
-      if (w5 > 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
-      if (w6 > 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
+    // Do a theater marquee effect in various colors...
+    if (w4 > 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
+    if (w5 > 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
+    if (w6 > 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
 
-      if (w7 > 0) rainbow(w7, 1, t);             // Flowing rainbow cycle along the whole strip
-      if (w8 > 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
-      time_elapsed = millis() - time_start;
-    }
-    light_alarm_flag = false;
+    if (w7 > 0) rainbow(w7, 1, t);             // Flowing rainbow cycle along the whole strip
+    if (w8 > 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
+    time_elapsed = millis() - time_start;
   }
+  light_alarm_flag = false;
+}
 
 //********* Bills NeoPixel Routines
 // Set All Leds to given color for wait seconds
 void colorAll(uint32_t color, int duration, time_t t) {
-  for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
+  for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
     strip.setPixelColor(ClockCorrect(i), color);         //  Set pixel's color (in RAM)
   }
   SetBrightness(t); // Set the clock brightness dependant on the time
@@ -910,7 +1021,7 @@ void colorAll(uint32_t color, int duration, time_t t) {
 // strip.Color(red, green, blue) as shown in the loop() function above),
 // and a delay time (in milliseconds) between pixels.
 void colorWipe(uint32_t color, int wait, time_t t) {
-  for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
+  for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
     strip.setPixelColor(ClockCorrect(i), color);         //  Set pixel's color (in RAM)
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show();                          //  Update strip to match
@@ -922,15 +1033,15 @@ void colorWipe(uint32_t color, int wait, time_t t) {
 // a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
 // between frames.
 void theaterChase(uint32_t color, int wait, time_t t) {
-  for(int a=0; a<10; a++) {  // Repeat 10 times...
-    for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
+  for (int a = 0; a < 10; a++) { // Repeat 10 times...
+    for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
       strip.clear();         //   Set all pixels in RAM to 0 (off)
       // 'c' counts up from 'b' to end of strip in steps of 3...
-      for(int c=b; c<strip.numPixels(); c += 3) {
+      for (int c = b; c < strip.numPixels(); c += 3) {
         strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
       }
-     SetBrightness(t); // Set the clock brightness dependant on the time
-     strip.show(); // Update strip with new contents
+      SetBrightness(t); // Set the clock brightness dependant on the time
+      strip.show(); // Update strip with new contents
       delay(wait);  // Pause for a moment
     }
   }
@@ -942,8 +1053,8 @@ void rainbow(int wait, int ncolorloop, time_t t) {
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
   // means we'll make ncolorloop*65536/256   passes through this outer loop:
-  for(long firstPixelHue = 0; firstPixelHue < ncolorloop*65536; firstPixelHue += 256) {
-    for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
+  for (long firstPixelHue = 0; firstPixelHue < ncolorloop * 65536; firstPixelHue += 256) {
+    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
       // Offset pixel hue by an amount to make one full revolution of the
       // color wheel (range of 65536) along the length of the strip
       // (strip.numPixels() steps):
@@ -964,11 +1075,11 @@ void rainbow(int wait, int ncolorloop, time_t t) {
 // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
 void theaterChaseRainbow(int wait, time_t t) {
   int firstPixelHue = 0;     // First pixel starts at red (hue 0)
-  for(int a=0; a<10; a++) {  // Repeat 10 times...
-    for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
+  for (int a = 0; a < 10; a++) { // Repeat 10 times...
+    for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
       strip.clear();         //   Set all pixels in RAM to 0 (off)
       // 'c' counts up from 'b' to end of strip in increments of 3...
-      for(int c=b; c<strip.numPixels(); c += 3) {
+      for (int c = b; c < strip.numPixels(); c += 3) {
         // hue of pixel 'c' is offset by an amount to make one full
         // revolution of the color wheel (range 65536) along the length
         // of the strip (strip.numPixels() steps):
@@ -976,8 +1087,8 @@ void theaterChaseRainbow(int wait, time_t t) {
         uint32_t color = strip.gamma32(strip.ColorHSV(hue)); // hue -> RGB
         strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
       }
-     SetBrightness(t); // Set the clock brightness dependant on the time
-     strip.show();                // Update strip with new contents
+      SetBrightness(t); // Set the clock brightness dependant on the time
+      strip.show();                // Update strip with new contents
       delay(wait);                 // Pause for a moment
       firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
     }

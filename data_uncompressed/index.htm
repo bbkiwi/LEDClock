@@ -18,7 +18,7 @@
 		.event-log {
 		  font-family: consolas, Monaco, monospace;
 		  margin: 10px 5px;
-		  line-height: 2;
+		  line-height: 1;
 		  border: 1px solid #4c4c4c;
 		  height: auto;
 		  width: 90%;
@@ -59,7 +59,8 @@
     </center>
 	</div>
   <div class="picker-area">
-  <div class="event-log">Event logs:<br></div>
+  <h2>Event logs:</h2>
+  <div class="event-log"></div>
   <script src="dist/simplepicker.js"></script>
   <script>
     let simplepicker = new SimplePicker(
@@ -81,12 +82,12 @@
     // $eventLog.innerHTML += '\n\n';
     simplepicker.on('submit', (date, readableDate) => {
 	  //console.log(date.getDay(), date, readableDate);
-      $eventLog.innerHTML += readableDate + '\n';
+      $eventLog.innerHTML = readableDate + '\n'+ $eventLog.innerHTML;
 	  pickerTimeDate(date);
     });
 
     simplepicker.on('close', (date) => {
-      $eventLog.innerHTML += 'Picker Closed'  + '\n';
+      $eventLog.innerHTML = 'Picker Closed'  + '\n' + $eventLog.innerHTML;
     });
   </script>
   </div>
