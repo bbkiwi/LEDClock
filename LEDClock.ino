@@ -70,6 +70,8 @@ const char *password = "ledclock";   // The password required to connect to it, 
 const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
 const char *OTAPassword = "ledclock";
 
+// must be longer than longest message
+char buf[200];
 
 double sunrise;
 double sunset;
@@ -241,8 +243,6 @@ void setup() {
 time_t prevDisplay = 0; // when the digital clock was displayed
 
 void loop() {
-  //TODO is buf big enough?
-  char buf[50];
   webSocket.loop();                           // constantly check for websocket events
   server.handleClient();                      // run the server
   ArduinoOTA.handle();                        // listen for OTA events
@@ -305,7 +305,7 @@ void loop() {
       Serial.println();
       Serial.println(buf);
       webSocket.sendTXT(websocketId_num, buf);
-      
+
       if (alarmInfo.repeat <= 0)
       {
         alarmSet = false;
@@ -540,7 +540,6 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
   });
 
   server.on("/whattime", []() {
-    char buf[50];
     sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
     server.send(200, "text/plain", buf);
     delay(1000);
@@ -715,12 +714,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         light_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
-        char buf[50];
         sprintf(buf, "num %d, %d:%02d:%02d %s %d %s %d", num, hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
       } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
         Serial.printf("Set Alarm Code\n");
+      } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
+        Serial.printf("Compute Sunsets\n");
+        calcSun();
       }
       break;
   }
@@ -762,7 +763,6 @@ void setalarm()
   if (strlen(mth.c_str()) > 0) alarmTime.Month = mth.toInt();
   if (strlen(y.c_str()) > 0) alarmTime.Year = y.toInt();
 
-  char buf[100]; //If not big enough for message below will raise exception
   sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
           hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
           daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
@@ -783,7 +783,6 @@ void settime()
   String y = server.arg("year");
   setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
   ClockInitialized = false;
-  char buf[50];
   sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(), daysOfWeek[d.toInt()].c_str(), day(makeTime(alarmTime)), monthNames[mth.toInt()].c_str(),  y.toInt());
   server.send(200, "text/plain", buf);
   Serial.println(buf);
@@ -802,7 +801,6 @@ void setBright()
 
 void calcSun()
 {
-  char buf[50];
   /* Get the current time, and set the Sunrise code to use the current date */
   currentTime = now();
 
@@ -818,6 +816,7 @@ void calcSun()
   else
     sun.setTZOffset(CST_OFFSET);
 
+  // These are all minutes after midnight
   sunrise = sun.calcSunrise();
   sunset = sun.calcSunset();
   civilsunrise = sun.calcCivilSunrise();
@@ -827,10 +826,16 @@ void calcSun()
   astrosunrise = sun.calcAstronomicalSunrise();
   astrosunset = sun.calcAstronomicalSunset();
 
-  //nextCalcTime = makeTime(calcTime);
+  WeekNight.Hour = sunset / 60;
+  WeekNight.Minute = sunset - 60 * WeekNight.Hour + 0.5;
+
   nextCalcTime = currentTime;
   nextCalcTime += 24 * 3600;
   breakTime(nextCalcTime, calcTime);
+  calcTime.Hour = 0;
+  calcTime.Minute = 0;
+  calcTime.Second = 1;
+
 
   Serial.print("Sunrise is ");
   Serial.print(sunrise);
@@ -840,7 +845,7 @@ void calcSun()
   Serial.print(" minutes past midnight.");
 
 
-  sprintf(buf, "Sunrise %f, Sunset %f, Civilsunset %f mins after midnight", sunrise, sunset, civilsunset);
+  sprintf(buf, "Sunrise %f, Sunset %f, Civilsunset %f mins after midnight, dim at %d:%02d", sunrise, sunset, civilsunset, WeekNight.Hour, WeekNight.Minute);
   webSocket.sendTXT(websocketId_num, buf);
 
   sprintf(buf, "Next calcSun %d:%02d:%02d %s %d %s %d", hour(makeTime(calcTime)), minute(makeTime(calcTime)),

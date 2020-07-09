@@ -33,6 +33,10 @@ function whattimeAnswer() {
     connection.send("W");
 }
 
+function calcSunsets() {
+    connection.send("S");
+}
+
 function pickerTimeDate(date) {
 	console.log(date.getDay(), date.getHours(), date);
 	document.getElementById('whattime').innerHTML = date;
