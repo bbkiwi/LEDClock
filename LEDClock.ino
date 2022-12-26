@@ -5,6 +5,7 @@
 
 /*********** IMPORTANT #include <ESP8266mDNS.h> below
    With 1.8.10 and board 2.6.3
+   /Also with 1.8.13 but commenting out as below doesn't fix mDNS still not respond to ledclock.local
    Was having problem with mDns
    Changed ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/src/ESP8266mDNS.h
    uncomment line 51 and comment line 52 to use legacy version which from googling works well for simple use
@@ -248,7 +249,12 @@ void loop() {
   ArduinoOTA.handle();                        // listen for OTA events
   MDNS.update();                              // must have above as well
 
-  if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
+  //if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
+  if (light_alarm_flag)  {
+    showlights(10000, 0,0,0,0,0,0,50,0, now());
+    showlights(10000, 0,0,0,0,0,0,25,0, now());
+    showlights(10000, 0,0,0,0,0,0,10,0, now());
+  }
   if (led_color_alarm_flag)  {
     colorAll(led_color_alarm_rgb, 1000, now());
     led_color_alarm_flag = false;
@@ -518,12 +524,12 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     ESP.restart();
   });
 
-  //  server.on("/startota",[](){
-  //    server.send(200,"text/plain", "Make OTA ready ...");
-  //    delay(1000);
-  //    ota_flag = true;
-  //    time_elapsed = 0;
-  //  });
+//    server.on("/startota",[](){
+//      server.send(200,"text/plain", "Make OTA ready ...");
+//      delay(1000);
+//      ota_flag = true;
+//      time_elapsed = 0;
+//    });
 
   server.on("/lightalarm", []() {
     server.send(200, "text/plain", "Light alarm Starting ...");
