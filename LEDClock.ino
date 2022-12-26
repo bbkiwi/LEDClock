@@ -113,6 +113,24 @@ RGB Minute = { 64, 32, 0 };//orange medium
 //The Second hand
 RGB Second = { 0, 0, 100 }; //blue
 
+//Night Options
+//The colour of the "12" to give visual reference to the top
+RGB TwelveNight = {0, 0, 0}; // off
+//The colour of the "quarters" 3, 6 & 9 to give visual reference
+RGB QuartersNight = { 0, 0, 0 }; //off
+//The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
+RGB DivisionsNight = { 0, 0, 0 }; //off
+//All the other pixels with no information
+RGB BackgroundNight = { 0, 0, 0 }; //off
+
+//The Hour hand
+RGB HourNight = { 100, 0, 0 };//red
+//The Minute hand
+RGB MinuteNight = { 0, 0, 0 };//off
+//The Second hand
+RGB SecondNight = { 0, 0, 0 }; //off
+
+
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = true;
 
@@ -180,8 +198,9 @@ NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, up
 void Draw_Clock(time_t t, byte Phase);
 int ClockCorrect(int Pixel);
 void SetBrightness(time_t t);
-bool SetClockFromNTP ();
+bool SetClockFromNTP();
 bool IsDst();
+bool IsDay();
 
 
 //************* Declare NeoPixel ******************************
@@ -251,9 +270,9 @@ void loop() {
 
   //if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
   if (light_alarm_flag)  {
-    showlights(10000, 0,0,0,0,0,0,50,0, now());
-    showlights(10000, 0,0,0,0,0,0,25,0, now());
-    showlights(10000, 0,0,0,0,0,0,10,0, now());
+    showlights(10000, 0, 0, 0, 0, 0, 0, 50, 0, now());
+    showlights(10000, 0, 0, 0, 0, 0, 0, 25, 0, now());
+    showlights(10000, 0, 0, 0, 0, 0, 0, 10, 0, now());
   }
   if (led_color_alarm_flag)  {
     colorAll(led_color_alarm_rgb, 1000, now());
@@ -524,12 +543,12 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     ESP.restart();
   });
 
-//    server.on("/startota",[](){
-//      server.send(200,"text/plain", "Make OTA ready ...");
-//      delay(1000);
-//      ota_flag = true;
-//      time_elapsed = 0;
-//    });
+  //    server.on("/startota",[](){
+  //      server.send(200,"text/plain", "Make OTA ready ...");
+  //      delay(1000);
+  //      ota_flag = true;
+  //      time_elapsed = 0;
+  //    });
 
   server.on("/lightalarm", []() {
     server.send(200, "text/plain", "Light alarm Starting ...");
@@ -835,6 +854,13 @@ void calcSun()
   WeekNight.Hour = sunset / 60;
   WeekNight.Minute = sunset - 60 * WeekNight.Hour + 0.5;
 
+  WeekMorning.Hour = sunrise / 60;
+  WeekMorning.Minute = sunrise - 60 * WeekMorning.Hour + 0.5;
+
+
+  WeekendNight = WeekNight;
+  WeekendMorning = WeekMorning;
+
   nextCalcTime = currentTime;
   nextCalcTime += 24 * 3600;
   breakTime(nextCalcTime, calcTime);
@@ -851,7 +877,7 @@ void calcSun()
   Serial.print(" minutes past midnight.");
 
 
-  sprintf(buf, "Sunrise %f, Sunset %f, Civilsunset %f mins after midnight, dim at %d:%02d", sunrise, sunset, civilsunset, WeekNight.Hour, WeekNight.Minute);
+  sprintf(buf, "Sunrise %f, Sunset %f, Civilsunset %f mins after midnight, dim at %d:%02d, brighten at %d:%02d", sunrise, sunset, civilsunset, WeekNight.Hour, WeekNight.Minute, WeekMorning.Hour, WeekMorning.Minute);
   webSocket.sendTXT(websocketId_num, buf);
 
   sprintf(buf, "Next calcSun %d:%02d:%02d %s %d %s %d", hour(makeTime(calcTime)), minute(makeTime(calcTime)),
@@ -928,52 +954,90 @@ void Draw_Clock(time_t t, byte Phase)
     for (int i = 0; i < 60; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
-  if (Phase >= 1) // Draw all pixels background color
-    for (int i = 0; i < 60; i++)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Background.r, Background.g, Background.b));
 
-  if (Phase >= 2) // Draw 5 min divisions
-    for (int i = 0; i < 60; i = i + 5)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions.r, Divisions.g, Divisions.b)); // for Phase = 2 or more, draw 5 minute divisions
+  if (IsDay(t)) {
+    if (Phase >= 1) // Draw all pixels background color
+      for (int i = 0; i < 60; i++)
+        strip.setPixelColor(ClockCorrect(i), strip.Color(Background.r, Background.g, Background.b));
 
-  if (Phase >= 3) { // Draw 15 min markers
-    for (int i = 0; i < 60; i = i + 15)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters.r, Quarters.g, Quarters.b));
-    strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve.r, Twelve.g, Twelve.b));
+    if (Phase >= 2) // Draw 5 min divisions
+      for (int i = 0; i < 60; i = i + 5)
+        strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions.r, Divisions.g, Divisions.b)); // for Phase = 2 or more, draw 5 minute divisions
+
+    if (Phase >= 3) { // Draw 15 min markers
+      for (int i = 0; i < 60; i = i + 15)
+        strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters.r, Quarters.g, Quarters.b));
+      strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve.r, Twelve.g, Twelve.b));
+    }
+
+    if (Phase >= 4) { // Draw hands
+      int iminute = minute(t);
+      int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
+      strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
+      strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
+      if (second() % 2)
+        strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+      else
+        strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+    }
   }
+  else {
+    if (Phase >= 1) // Draw all pixels background color
+      for (int i = 0; i < 60; i++)
+        strip.setPixelColor(ClockCorrect(i), strip.Color(BackgroundNight.r, BackgroundNight.g, BackgroundNight.b));
 
-  if (Phase >= 4) { // Draw hands
-    int iminute = minute(t);
-    int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
-    strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-    strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
-    strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-    strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
-    if (second() % 2)
-      strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-    else
-      strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+    if (Phase >= 2) // Draw 5 min divisions
+      for (int i = 0; i < 60; i = i + 5)
+        strip.setPixelColor(ClockCorrect(i), strip.Color(DivisionsNight.r, DivisionsNight.g, DivisionsNight.b)); // for Phase = 2 or more, draw 5 minute divisions
+
+    if (Phase >= 3) { // Draw 15 min markers
+      for (int i = 0; i < 60; i = i + 15)
+        strip.setPixelColor(ClockCorrect(i), strip.Color(QuartersNight.r, QuartersNight.g, QuartersNight.b));
+      strip.setPixelColor(ClockCorrect(0), strip.Color(TwelveNight.r, TwelveNight.g, TwelveNight.b));
+    }
+
+    if (Phase >= 4) { // Draw hands
+      int iminute = minute(t);
+      int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
+      //strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      strip.setPixelColor(ClockCorrect(ihour), strip.Color(HourNight.r, HourNight.g, HourNight.b));
+      //strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      //strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
+      //if (second() % 2)
+      //  strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+      //else
+      //  strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+    }
   }
-
   SetBrightness(t); // Set the clock brightness dependant on the time
   strip.show(); // show all the pixels
 }
 
-//************* Function to set the clock brightness ******************************
-void SetBrightness(time_t t)
+bool IsDay(time_t t)
 {
   int NowHour = hour(t);
   int NowMinute = minute(t);
 
   if ((weekday() >= 2) && (weekday() <= 6))
     if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
-      strip.setBrightness(night_brightness);
+      return false;
     else
-      strip.setBrightness(day_brightness);
+      return true;
   else if ((NowHour > WeekendNight.Hour) || ((NowHour == WeekendNight.Hour) && (NowMinute >= WeekendNight.Minute)) || ((NowHour == WeekendMorning.Hour) && (NowMinute <= WeekendMorning.Minute)) || (NowHour < WeekendMorning.Hour))
-    strip.setBrightness(night_brightness);
+    return false;
   else
+    return true;
+}
+
+//************* Function to set the clock brightness ******************************
+void SetBrightness(time_t t)
+{
+  if (IsDay(t))
     strip.setBrightness(day_brightness);
+  else
+    strip.setBrightness(night_brightness);
 }
 
 //************* This function reverses the pixel order ******************************
