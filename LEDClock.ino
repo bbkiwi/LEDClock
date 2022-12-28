@@ -102,14 +102,14 @@ RGB Twelve = {0, 0, 60}; // blue
 //The colour of the "quarters" 3, 6 & 9 to give visual reference
 RGB Quarters = { 0, 0, 60 }; //blue
 //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-RGB Divisions = { 0, 0, 30 }; //blue
+RGB Divisions = { 0, 0, 6 }; //blue
 //All the other pixels with no information
-RGB Background = { 0, 0, 6 }; //blue
+RGB Background = { 0, 0, 0 }; //blue
 
 //The Hour hand
-RGB Hour = { 0, 100, 0 };//green
+RGB Hour = { 0, 255, 0 };//green
 //The Minute hand
-RGB Minute = { 64, 32, 0 };//orange medium
+RGB Minute = { 255, 127, 0 };//orange medium
 //The Second hand
 RGB Second = { 0, 0, 100 }; //blue
 
@@ -135,11 +135,19 @@ RGB SecondNight = { 0, 0, 0 }; //off
 bool ClockGoBackwards = true;
 
 //Set brightness by time for night and day mode
-//TODO auto dawn and dusk computation
 TIME WeekNight = {18, 00}; // Night time to go dim
 TIME WeekMorning = {7, 15}; //Morning time to go bright
 TIME WeekendNight = {18, 00}; // Night time to go dim
 TIME WeekendMorning = {7, 15}; //Morning time to go bright
+TIME Sunrise;
+TIME Sunset;
+TIME CivilSunrise;
+TIME CivilSunset;
+TIME NauticalSunrise;
+TIME NauticalSunset;
+TIME AstroSunrise;
+TIME AstroSunset;
+
 
 byte day_brightness = 127;
 byte night_brightness = 16;
@@ -270,14 +278,18 @@ void loop() {
 
   //if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
   if (light_alarm_flag)  {
-    showlights(10000, 0, 0, 0, 0, 0, 0, 50, 0, now());
-    showlights(10000, 0, 0, 0, 0, 0, 0, 25, 0, now());
-    showlights(10000, 0, 0, 0, 0, 0, 0, 10, 0, now());
+    light_alarm_flag = false;
+    showlights(10000, -1, -1, -1, -1, -1, -1, 50, -1, now());
+    showlights(10000, -1, -1, -1, -1, -1, -1, 25, -1, now());
+    showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
+    showlights(10000, -1, -1, -1, -1, -1, -1, 4, -1, now());
   }
+
   if (led_color_alarm_flag)  {
     colorAll(led_color_alarm_rgb, 1000, now());
     led_color_alarm_flag = false;
   }
+
   if (sound_alarm_flag)
   {
     uint16_t time_start = millis();
@@ -299,6 +311,35 @@ void loop() {
     sound_alarm_flag = false;
   }
 
+  // Check for alarm
+  if (alarmSet && prevDisplay >= makeTime(alarmTime))
+  {
+    currentTime = now();
+    showlights(alarmInfo.duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
+    Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
+    sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
+            second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
+            monthNames[month(currentTime)].c_str(), year(currentTime));
+    Serial.println();
+    Serial.println(buf);
+    webSocket.sendTXT(websocketId_num, buf);
+
+    if (alarmInfo.repeat <= 0)
+    {
+      alarmSet = false;
+    } else {
+      // For repeat
+      nextAlarmTime = makeTime(alarmTime);
+      while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo.repeat;
+      breakTime(nextAlarmTime, alarmTime);
+      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
+              second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
+              monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+      Serial.println();
+      Serial.println(buf);
+      webSocket.sendTXT(websocketId_num, buf);
+    }
+  }
   // read the analog in value coming from microphone
   int sensorValue = analogRead(analogInPin);
   if (sensorValue > 900 ) {
@@ -308,54 +349,21 @@ void loop() {
   }
 
 
-  time_t t = now(); // Get the current time
+  time_t t = now(); // Get the current time seconds
   if (now() != prevDisplay) { //update the display only if time has changed
     prevDisplay = now();
     if (second() == 0)
       digitalClockDisplay();
     else
       Serial.print('-');
-
     Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
     ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
+  }
 
-    // Check for alarm
-    if (alarmSet && prevDisplay >= makeTime(alarmTime))
-    {
-      currentTime = now();
-      showlights(alarmInfo.duration, 1, -1, -1, -1, -1, -1, -1, -1, t);
-      sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
-              second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
-              monthNames[month(currentTime)].c_str(), year(currentTime));
-      Serial.println();
-      Serial.println(buf);
-      webSocket.sendTXT(websocketId_num, buf);
-
-      if (alarmInfo.repeat <= 0)
-      {
-        alarmSet = false;
-      } else {
-        // For repeat
-        nextAlarmTime = makeTime(alarmTime);
-        while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo.repeat;
-        breakTime(nextAlarmTime, alarmTime);
-        sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
-                second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-                monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
-        Serial.println();
-        Serial.println(buf);
-        webSocket.sendTXT(websocketId_num, buf);
-      }
-    }
-
-    // Check if new day and recalculate sunSet etc.
-    if (prevDisplay >= makeTime(calcTime))
-    {
-      calcSun(); // computes sun rise and sun set, updates calcTime
-    }
-
-
-
+  // Check if new day and recalculate sunSet etc.
+  if (prevDisplay >= makeTime(calcTime))
+  {
+    calcSun(); // computes sun rise and sun set, updates calcTime
   }
   delay(10); // needed to keep wifi going
 }
@@ -739,11 +747,22 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         light_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
-        sprintf(buf, "num %d, %d:%02d:%02d %s %d %s %d", num, hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
+        sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
       } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
-        Serial.printf("Set Alarm Code\n");
+        char Aday[4]; //3 char
+        char Amonth[4]; //3 char
+        int Adate;
+        int Ayear;
+        int Ahour;
+        int Aminute;
+        //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
+        //webSocket.sendTXT(num, buf);
+        sscanf((char *) payload, "A %s %s %2d %4d %2d:%2d", Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        Serial.printf("Set alarm for %s %s %2d %4d %2d:%2d\n", Aday, Amonth, Adate, Ayear, Ahour, Aminute);
+        sprintf(buf, "Set alarm for %s %s %2d %4d %2d:%2d", Aday, Amonth, Adate, Ayear, Ahour, Aminute);
+        webSocket.sendTXT(num, buf);
       } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
         Serial.printf("Compute Sunsets\n");
         calcSun();
@@ -772,11 +791,11 @@ void setalarm()
   String d = server.arg("day");
   String mth = server.arg("month");
   String y = server.arg("year");
-  //alarmInfo.duration = 10000;
+  alarmInfo.duration = 10000;
   if (strlen(t.c_str()) > 0) alarmInfo.duration = t.toInt();
   //Serial.println(alarmInfo.duration);
 
-  //alarmInfo.repeat = SECS_PER_DAY;
+  alarmInfo.repeat = SECS_PER_DAY;
   if (strlen(r.c_str()) > 0) alarmInfo.repeat = r.toInt();
   //Serial.println(alarmInfo.repeat);
 
@@ -851,12 +870,26 @@ void calcSun()
   astrosunrise = sun.calcAstronomicalSunrise();
   astrosunset = sun.calcAstronomicalSunset();
 
-  WeekNight.Hour = sunset / 60;
-  WeekNight.Minute = sunset - 60 * WeekNight.Hour + 0.5;
+  Sunset.Hour = sunset / 60;
+  Sunset.Minute = sunset - 60 * Sunset.Hour + 0.5;
+  CivilSunset.Hour = civilsunset / 60;
+  CivilSunset.Minute = civilsunset - 60 * CivilSunset.Hour + 0.5;
+  NauticalSunset.Hour = nauticalsunset / 60;
+  NauticalSunset.Minute = nauticalsunset - 60 * NauticalSunset.Hour + 0.5;
+  AstroSunset.Hour = astrosunset / 60;
+  AstroSunset.Minute = astrosunset - 60 * AstroSunset.Hour + 0.5;
 
-  WeekMorning.Hour = sunrise / 60;
-  WeekMorning.Minute = sunrise - 60 * WeekMorning.Hour + 0.5;
+  Sunrise.Hour = sunrise / 60;
+  Sunrise.Minute = sunrise - 60 * Sunrise.Hour + 0.5;
+  CivilSunrise.Hour = civilsunrise / 60;
+  CivilSunrise.Minute = civilsunrise - 60 * CivilSunrise.Hour + 0.5;
+  NauticalSunrise.Hour = nauticalsunrise / 60;
+  NauticalSunrise.Minute = nauticalsunrise - 60 * NauticalSunrise.Hour + 0.5;
+  AstroSunrise.Hour = astrosunrise / 60;
+  AstroSunrise.Minute = astrosunrise - 60 * AstroSunrise.Hour + 0.5;
 
+  WeekMorning = CivilSunrise;
+  WeekNight = CivilSunset;
 
   WeekendNight = WeekNight;
   WeekendMorning = WeekMorning;
@@ -877,7 +910,16 @@ void calcSun()
   Serial.print(" minutes past midnight.");
 
 
-  sprintf(buf, "Sunrise %f, Sunset %f, Civilsunset %f mins after midnight, dim at %d:%02d, brighten at %d:%02d", sunrise, sunset, civilsunset, WeekNight.Hour, WeekNight.Minute, WeekMorning.Hour, WeekMorning.Minute);
+  sprintf(buf, "Sunset at %d:%02d, Sunrise at %d:%02d", Sunset.Hour, Sunset.Minute, Sunrise.Hour, Sunrise.Minute);
+  webSocket.sendTXT(websocketId_num, buf);
+
+  sprintf(buf, "CivilSunset at %d:%02d, CivilSunrise at %d:%02d", CivilSunset.Hour, CivilSunset.Minute, CivilSunrise.Hour, CivilSunrise.Minute);
+  webSocket.sendTXT(websocketId_num, buf);
+
+  sprintf(buf, "NauticalSunset at %d:%02d, NauticalSunrise at %d:%02d", NauticalSunset.Hour, NauticalSunset.Minute, NauticalSunrise.Hour, NauticalSunrise.Minute);
+  webSocket.sendTXT(websocketId_num, buf);
+
+  sprintf(buf, "AstroSunset at %d:%02d, AstroSunrise at %d:%02d", AstroSunset.Hour, AstroSunset.Minute, AstroSunrise.Hour, AstroSunrise.Minute);
   webSocket.sendTXT(websocketId_num, buf);
 
   sprintf(buf, "Next calcSun %d:%02d:%02d %s %d %s %d", hour(makeTime(calcTime)), minute(makeTime(calcTime)),
@@ -885,6 +927,8 @@ void calcSun()
           monthNames[month(makeTime(calcTime))].c_str(), year(makeTime(calcTime)));
   webSocket.sendTXT(websocketId_num, buf);
 
+  sprintf(buf, "dim at %d:%02d, brighten at %d:%02d", WeekNight.Hour, WeekNight.Minute, WeekMorning.Hour, WeekMorning.Minute);
+  webSocket.sendTXT(websocketId_num, buf);
 }
 
 bool SetClockFromNTP()
@@ -1060,20 +1104,19 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
   while (time_elapsed < duration)
   {
     // Fill along the length of the strip in various colors...
-    if (w1 > 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
-    if (w2 > 0) colorWipe(strip.Color(  0, 255,   0), w2, t); // Green
-    if (w3 > 0) colorWipe(strip.Color(  0,   0, 255), w3, t); // Blue
+    if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
+    if (w2 >= 0) colorWipe(strip.Color(  0, 255,   0), w2, t); // Green
+    if (w3 >= 0) colorWipe(strip.Color(  0,   0, 255), w3, t); // Blue
 
     // Do a theater marquee effect in various colors...
-    if (w4 > 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
-    if (w5 > 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
-    if (w6 > 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
+    if (w4 >= 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
+    if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
+    if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
 
-    if (w7 > 0) rainbow(w7, 1, t);             // Flowing rainbow cycle along the whole strip
-    if (w8 > 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
+    if (w7 >= 0) rainbow(w7, 1, t);             // Flowing rainbow cycle along the whole strip
+    if (w8 >= 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
     time_elapsed = millis() - time_start;
   }
-  light_alarm_flag = false;
 }
 
 //********* Bills NeoPixel Routines
