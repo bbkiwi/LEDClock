@@ -97,6 +97,7 @@ struct TIME {
 };
 
 //************* Editable Options ******************************
+/*
 //The colour of the "12" to give visual reference to the top
 RGB Twelve = {0, 0, 60}; // blue
 //The colour of the "quarters" 3, 6 & 9 to give visual reference
@@ -112,6 +113,23 @@ RGB Hour = { 0, 255, 0 };//green
 RGB Minute = { 255, 127, 0 };//orange medium
 //The Second hand
 RGB Second = { 0, 0, 100 }; //blue
+*/
+//Use black for hands
+//The colour of the "12" to give visual reference to the top
+RGB Twelve = {0, 100, 0}; // green
+//The colour of the "quarters" 3, 6 & 9 to give visual reference
+RGB Quarters = {0, 100, 0}; // green
+//The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
+RGB Divisions = {0, 100, 0}; // green
+//All the other pixels with no information
+RGB Background = {0, 100, 0}; // green
+
+//The Hour hand
+RGB Hour = { 0, 0, 0 };//black
+//The Minute hand
+RGB Minute = { 0, 0, 0 };//black
+//The Second hand
+RGB Second = { 0, 0, 0 };//black
 
 //Night Options
 //The colour of the "12" to give visual reference to the top
@@ -739,6 +757,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
         int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
         int b =          rgb & 0x3FF;                      // B: bits  0-9
+        sprintf(buf, "led color r = %d, g = %d, b = %d", r,g,b);
+        webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
         led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2); // colors 0 to 255
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
@@ -1017,14 +1037,28 @@ void Draw_Clock(time_t t, byte Phase)
     if (Phase >= 4) { // Draw hands
       int iminute = minute(t);
       int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
+      strip.setPixelColor(ClockCorrect(ihour - 3), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      strip.setPixelColor(ClockCorrect(ihour - 2), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
       strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
       strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
       strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      strip.setPixelColor(ClockCorrect(ihour + 2), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      strip.setPixelColor(ClockCorrect(ihour + 3), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      
       strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
-      if (second() % 2)
+      if (second() % 2) {
+        strip.setPixelColor(ClockCorrect(iminute-2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute-1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
         strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-      else
+        strip.setPixelColor(ClockCorrect(iminute+1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute+2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+      } else {
+        strip.setPixelColor(ClockCorrect(iminute-2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        strip.setPixelColor(ClockCorrect(iminute-1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
         strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        strip.setPixelColor(ClockCorrect(iminute+1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        strip.setPixelColor(ClockCorrect(iminute+2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+      }  
     }
   }
   else {
