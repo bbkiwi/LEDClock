@@ -16,6 +16,10 @@
    C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
    was also here but have removed as was part of installing arduino app from win 10 store
    D:\Bill\My Documents\ArduinoData\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
+
+   2 Jan 2023
+   Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
+       and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
 
 //NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
@@ -97,7 +101,7 @@ struct TIME {
 };
 
 //************* Editable Options ******************************
-/*
+
 //The colour of the "12" to give visual reference to the top
 RGB Twelve = {0, 0, 60}; // blue
 //The colour of the "quarters" 3, 6 & 9 to give visual reference
@@ -113,24 +117,24 @@ RGB Hour = { 0, 255, 0 };//green
 RGB Minute = { 255, 127, 0 };//orange medium
 //The Second hand
 RGB Second = { 0, 0, 100 }; //blue
+/*
+  //Use black for hands
+  //The colour of the "12" to give visual reference to the top
+  RGB Twelve = {0, 100, 0}; // green
+  //The colour of the "quarters" 3, 6 & 9 to give visual reference
+  RGB Quarters = {0, 100, 0}; // green
+  //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
+  RGB Divisions = {0, 100, 0}; // green
+  //All the other pixels with no information
+  RGB Background = {0, 100, 0}; // green
+
+  //The Hour hand
+  RGB Hour = { 0, 0, 0 };//black
+  //The Minute hand
+  RGB Minute = { 0, 0, 0 };//black
+  //The Second hand
+  RGB Second = { 0, 0, 0 };//black
 */
-//Use black for hands
-//The colour of the "12" to give visual reference to the top
-RGB Twelve = {0, 100, 0}; // green
-//The colour of the "quarters" 3, 6 & 9 to give visual reference
-RGB Quarters = {0, 100, 0}; // green
-//The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-RGB Divisions = {0, 100, 0}; // green
-//All the other pixels with no information
-RGB Background = {0, 100, 0}; // green
-
-//The Hour hand
-RGB Hour = { 0, 0, 0 };//black
-//The Minute hand
-RGB Minute = { 0, 0, 0 };//black
-//The Second hand
-RGB Second = { 0, 0, 0 };//black
-
 //Night Options
 //The colour of the "12" to give visual reference to the top
 RGB TwelveNight = {0, 0, 0}; // off
@@ -148,6 +152,8 @@ RGB MinuteNight = { 0, 0, 0 };//off
 //The Second hand
 RGB SecondNight = { 0, 0, 0 }; //off
 
+//To save color set by slider
+RGB SliderColor = {0, 0, 0};
 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = true;
@@ -252,15 +258,18 @@ void setup() {
 
   startSPIFFS();               // Start the SPIFFS and list all contents
 
-  if (!saveConfig()) {
-    Serial.println("Failed to save config");
-  } else {
-    Serial.println("Config saved");
-  }
 
   if (!loadConfig()) {
     Serial.println("Failed to load config");
+    // use default parameters
+    // attempt to save in configuration file
+    if (!saveConfig()) {
+      Serial.println("Failed to save config");
+    } else {
+      Serial.println("Config saved");
+    }
   } else {
+    // will have loaded the saved parameters
     Serial.println("Config loaded");
   }
 
@@ -334,6 +343,7 @@ void loop() {
   {
     currentTime = now();
     showlights(alarmInfo.duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
+    // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
     Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
     sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
             second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
@@ -455,8 +465,8 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
   Serial.println("\" started\r\n");
 
   wifiMulti.addAP(homeSSID, homePW);  // add Wi-Fi networks you want to connect to
-  wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+  //wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+  //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting");
   while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect to station or a station connects to AP
@@ -757,12 +767,29 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
         int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
         int b =          rgb & 0x3FF;                      // B: bits  0-9
-        sprintf(buf, "led color r = %d, g = %d, b = %d", r,g,b);
+        sprintf(buf, "led color r = %d, g = %d, b = %d", r, g, b);
+        SliderColor  = {r >> 2, g >> 2, b >> 2};
         webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
         led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2); // colors 0 to 255
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
+      } else if (payload[0] == 'V') {                      // browser sent V to save config file
+        if (!saveConfig()) {
+          Serial.println("Failed to save config");
+          sprintf(buf, "Failed to save config");
+          webSocket.sendTXT(num, buf);
+        } else {
+          Serial.println("Config saved");
+          sprintf(buf, "Config saved");
+          webSocket.sendTXT(num, buf);
+        }
+      } else if (payload[0] == 'B') {                      // browser sent B to set background color from SliderColor
+        Background = SliderColor;
+      } else if (payload[0] == 'H') {                      // browser sent H to set hour hand color from SliderColor
+        Hour = SliderColor;
+      } else if (payload[0] == 'M') {                      // browser sent M to set minute hand color from SliderColor
+        Minute = SliderColor;
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
         light_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
@@ -783,6 +810,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Serial.printf("Set alarm for %s %s %2d %4d %2d:%2d\n", Aday, Amonth, Adate, Ayear, Ahour, Aminute);
         sprintf(buf, "Set alarm for %s %s %2d %4d %2d:%2d", Aday, Amonth, Adate, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
+        //TODO save for new alarm but now just Report existing alarm
+        sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
+                hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
+                daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
+                monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)),
+                alarmInfo.duration, alarmInfo.repeat);
+        webSocket.sendTXT(num, buf);
+
       } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
         Serial.printf("Compute Sunsets\n");
         calcSun();
@@ -1044,21 +1079,21 @@ void Draw_Clock(time_t t, byte Phase)
       strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
       strip.setPixelColor(ClockCorrect(ihour + 2), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
       strip.setPixelColor(ClockCorrect(ihour + 3), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      
+
       strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
       if (second() % 2) {
-        strip.setPixelColor(ClockCorrect(iminute-2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute-1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute - 2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute - 1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
         strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute+1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute+2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute + 1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute + 2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
       } else {
-        strip.setPixelColor(ClockCorrect(iminute-2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute-1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        strip.setPixelColor(ClockCorrect(iminute - 2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        strip.setPixelColor(ClockCorrect(iminute - 1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
         strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute+1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute+2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-      }  
+        strip.setPixelColor(ClockCorrect(iminute + 1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        strip.setPixelColor(ClockCorrect(iminute + 2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+      }
     }
   }
   else {
@@ -1112,7 +1147,7 @@ bool IsDay(time_t t)
 //************* Function to set the clock brightness ******************************
 void SetBrightness(time_t t)
 {
-  if (IsDay(t))
+  if (IsDay(t) & ClockInitialized)
     strip.setBrightness(day_brightness);
   else
     strip.setBrightness(night_brightness);

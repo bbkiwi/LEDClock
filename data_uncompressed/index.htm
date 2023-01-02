@@ -30,10 +30,23 @@
 </head>
 
 <body>
+<button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
 <button onclick="toggleShowHide('Led-Control')">LED Control</button>
 <button class="simplepicker-btn">Show Picker</button>
+<div id="Clock-Control" style="display: none;">
+    <center>
+        <header>
+            <h1>Clock Control</h1>
+        </header>
+        <div>
+             <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
+             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button></p>
+             <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
+       </div>
+    </center>
+</div>
 <div id="Led-Control" style="display: none;">
-
     <center>
         <header>
             <h1>LED Control</h1>
@@ -53,9 +66,9 @@
                     <td><input class="enabled" id="b" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
                 </tr>
             </table>
-             <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
-             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button></p>
-             <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
+             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setbackground();">Set Background</button></p>
+             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="sethour();">Set Hour</button></p>
+             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setminute();">Set Minute</button></p>
        </div>
     </center>
 	</div>

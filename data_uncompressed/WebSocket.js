@@ -29,6 +29,22 @@ function sendRGB() {
     connection.send(rgbstr);
 }
 
+function setbackground() {
+    connection.send("B");
+}
+
+function sethour() {
+    connection.send("H");
+}
+
+function setminute() {
+    connection.send("M");
+}
+
+function requestSaveConfig() {
+    connection.send("V");
+}
+
 function whattimeAnswer() {
     connection.send("W");
 }
