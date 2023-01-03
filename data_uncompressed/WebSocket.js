@@ -56,7 +56,7 @@ function calcSunsets() {
 function pickerTimeDate(date) {
 	console.log(date.getDay(), date.getHours(), date);
 	document.getElementById('whattime').innerHTML = date;
-	connection.send("A" + date);
+	connection.send("A" + date.getMonth() +" " + date);
 }
 
 function rainbowEffect(){

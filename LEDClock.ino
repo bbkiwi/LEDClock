@@ -187,23 +187,26 @@ bool sound_alarm_flag = false;
 bool light_alarm_flag = false;
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
-tmElements_t alarmTime;
+//tmElements_t alarmTime;
 tmElements_t calcTime = {0};
 
-typedef enum {
-  ONCE,
-  DAILY,
-  WEEKLY
-} alarmType;
+//typedef enum {
+//  ONCE,
+//  DAILY,
+//  WEEKLY
+//} alarmType;
 
-struct {
-  alarmType at;
+struct ALARM {
+  bool alarmSet = false;
+  uint8_t alarmType;
   uint16_t duration;
   uint32_t repeat;
-  //tmElements_t alarmTime;
-} alarmInfo;
+  tmElements_t alarmTime;
+};
 
-bool alarmSet = false;
+ALARM alarmInfo;
+
+//bool alarmSet = false;
 
 uint16_t time_elapsed = 0;
 int TopOfClock = 15; // to make given pixel the top
@@ -286,7 +289,7 @@ void setup() {
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
 
   // Initialize alarmTime(s)
-  breakTime(now(), alarmTime);
+  breakTime(now(), alarmInfo.alarmTime);
 
   calcSun();
 
@@ -339,7 +342,7 @@ void loop() {
   }
 
   // Check for alarm
-  if (alarmSet && prevDisplay >= makeTime(alarmTime))
+  if (alarmInfo.alarmSet && prevDisplay >= makeTime(alarmInfo.alarmTime))
   {
     currentTime = now();
     showlights(alarmInfo.duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
@@ -354,15 +357,15 @@ void loop() {
 
     if (alarmInfo.repeat <= 0)
     {
-      alarmSet = false;
+      alarmInfo.alarmSet = false;
     } else {
       // For repeat
-      nextAlarmTime = makeTime(alarmTime);
+      nextAlarmTime = makeTime(alarmInfo.alarmTime);
       while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo.repeat;
-      breakTime(nextAlarmTime, alarmTime);
-      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmTime)), minute(makeTime(alarmTime)),
-              second(makeTime(alarmTime)), daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-              monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)));
+      breakTime(nextAlarmTime, alarmInfo.alarmTime);
+      sprintf(buf, "Next Alarm %d:%02d:%02d %s %d %s %d", hour(makeTime(alarmInfo.alarmTime)), minute(makeTime(alarmInfo.alarmTime)),
+              second(makeTime(alarmInfo.alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo.alarmTime))].c_str(), day(makeTime(alarmInfo.alarmTime)),
+              monthNames[month(makeTime(alarmInfo.alarmTime))].c_str(), year(makeTime(alarmInfo.alarmTime)));
       Serial.println();
       Serial.println(buf);
       webSocket.sendTXT(websocketId_num, buf);
@@ -420,39 +423,46 @@ bool loadConfig() {
   // use configFile.readString instead.
   configFile.readBytes(buf.get(), size);
 
-  StaticJsonDocument<200> doc;
+  StaticJsonDocument<384> doc;
   auto error = deserializeJson(doc, buf.get());
   if (error) {
-    Serial.println("Failed to parse config file");
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.c_str());
     return false;
   }
+  alarmInfo.alarmSet = doc["alarmSet"]; // false
+  alarmInfo.alarmType = doc["alarmType"]; // 99
+  alarmInfo.duration = doc["duration"]; // 1000000
+  alarmInfo.repeat = doc["repeat"]; // 864000
 
-  const char* serverName = doc["serverName"];
-  const char* accessToken = doc["accessToken"];
-  int WN = doc["weeknight"];
-
-  // Real world application would store these values in some variables for
-  // later use.
-
-  Serial.print("Loaded serverName: ");
-  Serial.println(serverName);
-  Serial.print("Loaded accessToken: ");
-  Serial.println(accessToken);
+  JsonObject alarmTime = doc["alarmTime"];
+  alarmInfo.alarmTime.Second = alarmTime["sec"];
+  alarmInfo.alarmTime.Minute = alarmTime["min"];
+  alarmInfo.alarmTime.Hour = alarmTime["hour"];
+  alarmInfo.alarmTime.Day = alarmTime["date"];
+  alarmInfo.alarmTime.Month = alarmTime["month"];
+  alarmInfo.alarmTime.Year = alarmTime["year"];
   return true;
 }
 
 bool saveConfig() {
-  StaticJsonDocument<200> doc;
-  doc["serverName"] = "api.example.com";
-  doc["accessToken"] = "128du9as8du12eoue8da98h123ueh9h98";
-  doc["weeknight"] = 234;
-
+  StaticJsonDocument<192> doc;
+  doc["alarmSet"] = alarmInfo.alarmSet;
+  doc["alarmType"] = alarmInfo.alarmType;
+  doc["duration"] = alarmInfo.duration;
+  doc["repeat"] = alarmInfo.repeat;
+  JsonObject alarmTime = doc.createNestedObject("alarmTime");
+  alarmTime["sec"] = alarmInfo.alarmTime.Second;
+  alarmTime["min"] = alarmInfo.alarmTime.Minute;
+  alarmTime["hour"] = alarmInfo.alarmTime.Hour;
+  alarmTime["date"] = alarmInfo.alarmTime.Day;
+  alarmTime["month"] = alarmInfo.alarmTime.Month;
+  alarmTime["year"] = alarmInfo.alarmTime.Year;
   File configFile = SPIFFS.open("/config.json", "w");
   if (!configFile) {
     Serial.println("Failed to open config file for writing");
     return false;
   }
-
   serializeJson(doc, configFile);
   return true;
 }
@@ -610,7 +620,7 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
 
   server.on("/settime", settime);
 
-  server.on("/setalarm", setalarm);
+  server.on("/setalarm", setalarmurl);
 
   server.onNotFound(handleNotFound);          // if someone requests any other file or page, go to function 'handleNotFound'
   // and check if the file exists
@@ -798,23 +808,29 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
       } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
+        // TODO Now only sets one alarm, but will allow many
         char Aday[4]; //3 char
         char Amonth[4]; //3 char
+        int  AmonthNum;
         int Adate;
         int Ayear;
         int Ahour;
         int Aminute;
+
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
-        sscanf((char *) payload, "A %s %s %2d %4d %2d:%2d", Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
-        Serial.printf("Set alarm for %s %s %2d %4d %2d:%2d\n", Aday, Amonth, Adate, Ayear, Ahour, Aminute);
-        sprintf(buf, "Set alarm for %s %s %2d %4d %2d:%2d", Aday, Amonth, Adate, Ayear, Ahour, Aminute);
+        sscanf((char *) payload, "A%d %s %s %2d %4d %2d:%2d", &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        Serial.printf("Set alarm for %s %s %2d %2d %4d %2d:%2d\n", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
+        sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
-        //TODO save for new alarm but now just Report existing alarm
+
+        setalarmtime(10000, SECS_PER_DAY, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
+        alarmInfo.alarmSet = true;
+
         sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
-                hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
-                daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-                monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)),
+                hour(makeTime(alarmInfo.alarmTime)), minute(makeTime(alarmInfo.alarmTime)), second(makeTime(alarmInfo.alarmTime)),
+                daysOfWeek[weekday(makeTime(alarmInfo.alarmTime))].c_str(), day(makeTime(alarmInfo.alarmTime)),
+                monthNames[month(makeTime(alarmInfo.alarmTime))].c_str(), year(makeTime(alarmInfo.alarmTime)),
                 alarmInfo.duration, alarmInfo.repeat);
         webSocket.sendTXT(num, buf);
 
@@ -826,18 +842,23 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-//void setalarmtime(uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint8_t y) {
-//	alarmTime.Second = s;
-//	alarmTime.Minute = m;
-//	alarmTime.Hour = h;
-//	alarmTime.Day = d;
-//	alarmTime.Month = mth;
-//	alarmTime.Year = y;
-//}
+void setalarmtime(uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
+  Serial.printf("setalarmtime: %d %d %d %d %d %d %d %d\n", t, r, s, m, h, d, mth, y);
 
-void setalarm()
+  alarmInfo.duration = t;
+  alarmInfo.repeat = r;
+  alarmInfo.alarmTime.Second = s;
+  alarmInfo.alarmTime.Minute = m;
+  alarmInfo.alarmTime.Hour = h;
+  alarmInfo.alarmTime.Day = d;
+  alarmInfo.alarmTime.Month = mth;
+  //NOTE year is excess from 1970
+  alarmInfo.alarmTime.Year = y - 1970;
+}
+
+void setalarmurl()
 {
-  alarmSet = true;
+  alarmInfo.alarmSet = true;
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
   String h = server.arg("hour");
@@ -846,26 +867,22 @@ void setalarm()
   String d = server.arg("day");
   String mth = server.arg("month");
   String y = server.arg("year");
-  alarmInfo.duration = 10000;
-  if (strlen(t.c_str()) > 0) alarmInfo.duration = t.toInt();
-  //Serial.println(alarmInfo.duration);
 
-  alarmInfo.repeat = SECS_PER_DAY;
-  if (strlen(r.c_str()) > 0) alarmInfo.repeat = r.toInt();
-  //Serial.println(alarmInfo.repeat);
 
-  breakTime(now(), alarmTime);
-  if (strlen(s.c_str()) > 0) alarmTime.Second = s.toInt();
-  if (strlen(m.c_str()) > 0) alarmTime.Minute = m.toInt();
-  if (strlen(h.c_str()) > 0) alarmTime.Hour = h.toInt();
-  if (strlen(d.c_str()) > 0) alarmTime.Day = d.toInt();
-  if (strlen(mth.c_str()) > 0) alarmTime.Month = mth.toInt();
-  if (strlen(y.c_str()) > 0) alarmTime.Year = y.toInt();
+  breakTime(now(), alarmInfo.alarmTime);
+  setalarmtime((strlen(t.c_str()) > 0) ? t.toInt() : 10000,
+               (strlen(r.c_str()) > 0) ? r.toInt() : SECS_PER_DAY,
+               (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo.alarmTime.Second,
+               (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo.alarmTime.Minute,
+               (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo.alarmTime.Hour,
+               (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo.alarmTime.Day,
+               (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo.alarmTime.Month,
+               (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo.alarmTime.Year);
 
   sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
-          hour(makeTime(alarmTime)), minute(makeTime(alarmTime)), second(makeTime(alarmTime)),
-          daysOfWeek[weekday(makeTime(alarmTime))].c_str(), day(makeTime(alarmTime)),
-          monthNames[month(makeTime(alarmTime))].c_str(), year(makeTime(alarmTime)),
+          hour(makeTime(alarmInfo.alarmTime)), minute(makeTime(alarmInfo.alarmTime)), second(makeTime(alarmInfo.alarmTime)),
+          daysOfWeek[weekday(makeTime(alarmInfo.alarmTime))].c_str(), day(makeTime(alarmInfo.alarmTime)),
+          monthNames[month(makeTime(alarmInfo.alarmTime))].c_str(), year(makeTime(alarmInfo.alarmTime)),
           alarmInfo.duration, alarmInfo.repeat);
   server.send(200, "text/plain", buf);
   Serial.println(buf);
@@ -873,6 +890,7 @@ void setalarm()
 
 
 void settime()
+// if connected to time server, it will overwrite asap
 {
   String h = server.arg("hour");
   String m = server.arg("min");
@@ -882,7 +900,8 @@ void settime()
   String y = server.arg("year");
   setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
   ClockInitialized = false;
-  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(), daysOfWeek[d.toInt()].c_str(), day(makeTime(alarmTime)), monthNames[mth.toInt()].c_str(),  y.toInt());
+  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(),
+          daysOfWeek[d.toInt()].c_str(), day(makeTime(alarmInfo.alarmTime)), monthNames[mth.toInt()].c_str(),  y.toInt());
   server.send(200, "text/plain", buf);
   Serial.println(buf);
 }
