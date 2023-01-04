@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>LED Control</title>
+    <link href='main.css' rel='stylesheet' type='text/css'>
+	<link rel="stylesheet" href="dist/simplepicker.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="144x144"  href="/favicon-144x144.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon.ico">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00878f">
+    <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0' name='viewport'>
+    <script src="WebSocket.js" type="text/javascript"></script>
+
+	<style>
+	  body { font-family: 'Roboto'; }
+		.event-log {
+		  font-family: consolas, Monaco, monospace;
+		  margin: 10px 5px;
+		  line-height: 1;
+		  border: 1px solid #4c4c4c;
+		  height: auto;
+		  width: 90%;
+		  padding: 2px 6px;
+		  color: #4c4c4c;
+		  white-space: pre;
+		}
+  </style>
+</head>
+
+<body>
+<button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
+<button onclick="toggleShowHide('Led-Control')">LED Control</button>
+<button class="simplepicker-btn">Show Picker</button>
+<div id="Clock-Control" style="display: none;">
+    <center>
+        <header>
+            <h1>Clock Control</h1>
+        </header>
+        <div>
+             <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
+             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button></p>
+             <p style="margin:8px 0px"><button id="melody" class="button" style="background-color:#999" onclick="melodyEffect();">Melody</button></p>
+             <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
+       </div>
+    </center>
+</div>
+<div id="Led-Control" style="display: none;">
+    <center>
+        <header>
+            <h1>LED Control</h1>
+        </header>
+        <div>
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: right">R: </td>
+                    <td><input class="enabled" id="r" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();" value="0"></td>
+                </tr>
+                <tr>
+                    <td style="width:14.4px; text-align: right">G: </td>
+                    <td><input class="enabled" id="g" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
+                </tr>
+                <tr>
+                    <td style="width:14.4px; text-align: right">B: </td>
+                    <td><input class="enabled" id="b" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
+                </tr>
+            </table>
+             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setbackground();">Set Background</button></p>
+             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="sethour();">Set Hour</button></p>
+             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setminute();">Set Minute</button></p>
+       </div>
+    </center>
+	</div>
+  <div class="picker-area">
+  <h2>Event logs:</h2>
+  <div class="event-log"></div>
+  <script src="dist/simplepicker.js"></script>
+  <script>
+    let simplepicker = new SimplePicker(
+	'.picker-area',
+	{
+      zIndex: 10,
+	  compactMode: true,
+	  disableTimeSection: false,
+    });
+
+    //simplepicker.open();
+
+    const $button = document.querySelector('.simplepicker-btn');
+    const $eventLog = document.querySelector('.event-log');
+    $button.addEventListener('click', (e) => {
+      simplepicker.open();
+    });
+
+    // $eventLog.innerHTML += '\n\n';
+    simplepicker.on('submit', (date, readableDate) => {
+	  //console.log(date.getDay(), date, readableDate);
+      $eventLog.innerHTML = readableDate + '\n'+ $eventLog.innerHTML;
+	  pickerTimeDate(date);
+    });
+
+    simplepicker.on('close', (date) => {
+      $eventLog.innerHTML = 'Picker Closed'  + '\n' + $eventLog.innerHTML;
+    });
+  </script>
+  </div>
+</body>
+</html>

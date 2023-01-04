@@ -212,14 +212,17 @@ uint16_t time_elapsed = 0;
 int TopOfClock = 15; // to make given pixel the top
 
 // notes in the melody for the sound alarm:
-int melody[] = { // Shave and a hair cut two bits
-  NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, 0, NOTE_B4, NOTE_C5
+int melody[] = { // Shave and a hair cut (3x) two bits terminate with -1 = STOP
+  NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST,
+  NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST,
+  NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST, NOTE_B4, NOTE_C5, STOP
 };
-int whole_note_duration = 4000; // milliseconds
+int whole_note_duration = 1000; // milliseconds
 // note durations: 4 = quarter note, 8 = eighth note, etc.:
 int noteDurations[] = {
-  4, 8, 8, 4, 4, 4, 4, 4
+  4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 4
 };
+int maxnumNotes = 2000;
 
 WiFiUDP ntpUDP;
 //NTPClient timeClient(ntpUDP);
@@ -320,24 +323,9 @@ void loop() {
     led_color_alarm_flag = false;
   }
 
-  if (sound_alarm_flag)
-  {
-    uint16_t time_start = millis();
-    Serial.println("1 second sound alarm, then clock will start");
-    for (int thisNote = 0; thisNote < 8; thisNote++) {
-      // to calculate the note duration, take whole note durations divided by the note type.
-      //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
-      int noteDuration = whole_note_duration / noteDurations[thisNote];
-      if (melody[thisNote] > 30) {
-        tone(PIEZO_PIN, melody[thisNote], noteDuration);
-      }
-      // to distinguish the notes, set a minimum time between them.
-      // the note's duration + 30% seems to work well:
-      int pauseBetweenNotes = noteDuration * 1.30;
-      delay(pauseBetweenNotes);
-      // stop the tone playing:
-      noTone(PIEZO_PIN);
-    }
+  if (sound_alarm_flag) {
+    Serial.println("sound flag on\n");
+    playsong(melody, noteDurations, whole_note_duration, PIEZO_PIN);
     sound_alarm_flag = false;
   }
 
@@ -399,6 +387,26 @@ void loop() {
   delay(10); // needed to keep wifi going
 }
 
+void playsong(int * melody, int * noteDurations, int whole_note_duration, int pin) {
+  int maxnumNotes = 2000;
+  uint16_t time_start = millis();
+  Serial.println("sound alarm, then clock will start");
+  for (int thisNote = 0; thisNote < maxnumNotes; thisNote++) {
+    if (melody[thisNote] == -1) break;
+    // to calculate the note duration, take whole note durations divided by the note type.
+    //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
+    int noteDuration = whole_note_duration / noteDurations[thisNote];
+    if (melody[thisNote] > 30) {
+      tone(pin, melody[thisNote], noteDuration);
+    }
+    // to distinguish the notes, set a minimum time between them.
+    // the note's duration + 30% seems to work well:
+    int pauseBetweenNotes = noteDuration * 1.30;
+    delay(pauseBetweenNotes);
+    // stop the tone playing:
+    noTone(pin);
+  }
+}
 
 /*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
 // Taken from ConfigFile example
@@ -760,6 +768,7 @@ void handleFileList() {
 
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) { // When a WebSocket message is received
+  //NOTE messages get queued up
   websocketId_num = num; // save so can send to websock from other places
   switch (type) {
     case WStype_DISCONNECTED:             // if the websocket is disconnected
@@ -794,14 +803,16 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           sprintf(buf, "Config saved");
           webSocket.sendTXT(num, buf);
         }
-      } else if (payload[0] == 'B') {                      // browser sent B to set background color from SliderColor
+      } else if (payload[0] == 'B') {                      // browser sent B to set Background color from SliderColor
         Background = SliderColor;
-      } else if (payload[0] == 'H') {                      // browser sent H to set hour hand color from SliderColor
+      } else if (payload[0] == 'H') {                      // browser sent H to set Hour hand color from SliderColor
         Hour = SliderColor;
-      } else if (payload[0] == 'M') {                      // browser sent M to set minute hand color from SliderColor
+      } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
         Minute = SliderColor;
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
         light_alarm_flag = true;
+      } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
+        sound_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
         sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
