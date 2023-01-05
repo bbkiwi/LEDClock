@@ -205,6 +205,8 @@ struct ALARM {
 };
 
 ALARM alarmInfo;
+//alarmInfo.alarmSet = false;
+
 
 //bool alarmSet = false;
 
@@ -265,6 +267,16 @@ void setup() {
   startSPIFFS();               // Start the SPIFFS and list all contents
 
 
+  // Initialize alarmTime(s) to default (now)
+  breakTime(now(), alarmInfo.alarmTime);
+
+  sprintf(buf, "Default alarminfo set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarmInfo.alarmSet, alarmInfo.duration, alarmInfo.repeat,
+          hour(makeTime(alarmInfo.alarmTime)), minute(makeTime(alarmInfo.alarmTime)),
+          second(makeTime(alarmInfo.alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo.alarmTime))].c_str(), day(makeTime(alarmInfo.alarmTime)),
+          monthNames[month(makeTime(alarmInfo.alarmTime))].c_str(), year(makeTime(alarmInfo.alarmTime)));
+  Serial.println();
+  Serial.println(buf);
+
   if (!loadConfig()) {
     Serial.println("Failed to load config");
     // use default parameters
@@ -279,6 +291,13 @@ void setup() {
     Serial.println("Config loaded");
   }
 
+  sprintf(buf, "alarminfo set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarmInfo.alarmSet, alarmInfo.duration, alarmInfo.repeat,
+          hour(makeTime(alarmInfo.alarmTime)), minute(makeTime(alarmInfo.alarmTime)),
+          second(makeTime(alarmInfo.alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo.alarmTime))].c_str(), day(makeTime(alarmInfo.alarmTime)),
+          monthNames[month(makeTime(alarmInfo.alarmTime))].c_str(), year(makeTime(alarmInfo.alarmTime)));
+  Serial.println();
+  Serial.println(buf);
+
   startWebSocket();            // Start a WebSocket server
 
   startMDNS();                 // Start the mDNS responder
@@ -286,13 +305,10 @@ void setup() {
   startServer();               // Start a HTTP server with a file read handler and an upload handler
 
   strip.begin(); // This initializes the NeoPixel library.
-
+  colorAll(strip.Color(127, 0, 0), 1000, now());
   Draw_Clock(0, 3); // Add the quater hour indicators
 
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
-
-  // Initialize alarmTime(s)
-  breakTime(now(), alarmInfo.alarmTime);
 
   calcSun();
 
@@ -879,16 +895,16 @@ void setalarmurl()
   String mth = server.arg("month");
   String y = server.arg("year");
 
-
   breakTime(now(), alarmInfo.alarmTime);
-  setalarmtime((strlen(t.c_str()) > 0) ? t.toInt() : 10000,
-               (strlen(r.c_str()) > 0) ? r.toInt() : SECS_PER_DAY,
+
+  setalarmtime((strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo.duration, //10000,
+               (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo.repeat, //SECS_PER_DAY,
                (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo.alarmTime.Second,
                (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo.alarmTime.Minute,
                (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo.alarmTime.Hour,
                (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo.alarmTime.Day,
                (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo.alarmTime.Month,
-               (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo.alarmTime.Year);
+               (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo.alarmTime.Year + 1970);
 
   sprintf(buf, "Alarm Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec",
           hour(makeTime(alarmInfo.alarmTime)), minute(makeTime(alarmInfo.alarmTime)), second(makeTime(alarmInfo.alarmTime)),
@@ -1199,7 +1215,8 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 {
   time_elapsed = 0;
   uint16_t time_start = millis();
-  Serial.println("10 second minimum light alarm, then clock will start");
+  sprintf(buf, "showlights called with %d %d %d %d %d %d %d %d %d %d\n ", duration, w1, w2, w3, w4, w5, w6, w7, w8, t);
+  Serial.println(buf);
   while (time_elapsed < duration)
   {
     // Fill along the length of the strip in various colors...
