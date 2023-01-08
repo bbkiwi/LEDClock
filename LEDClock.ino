@@ -47,7 +47,6 @@
 #include <ESP8266WiFiMulti.h>
 #include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
-
 #include <ESP8266mDNS.h>
 #include <FS.h>
 #include <WebSocketsServer.h>
@@ -78,14 +77,6 @@ const char *OTAPassword = "ledclock";
 // must be longer than longest message
 char buf[200];
 
-double sunrise;
-double sunset;
-double civilsunrise;
-double civilsunset;
-double astrosunrise;
-double astrosunset;
-double nauticalsunrise;
-double nauticalsunset;
 
 time_t currentTime;
 
@@ -224,16 +215,18 @@ int whole_note_duration = 1000; // milliseconds
 int noteDurations[] = {
   4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 4
 };
-int maxnumNotes = 2000;
+
 
 WiFiUDP ntpUDP;
 //NTPClient timeClient(ntpUDP);
 unsigned long int update_interval_secs = 3601;
 NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
+
 // Which pin on the ESP8266 is connected to the NeoPixels?
-#define PIN            3 // This is the D9 pin
-#define PIEZO_PIN 5 // This is D1
-#define analogInPin  A0  // ESP8266 Analog Pin ADC0 = A0
+#define NEOPIXEL_PIN 3      // This is the D9 pin
+#define PIEZO_PIN 5         // This is D1
+#define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
+
 //************* Declare user functions ******************************
 void Draw_Clock(time_t t, byte Phase);
 int ClockCorrect(int Pixel);
@@ -246,7 +239,7 @@ bool IsDay();
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 bool ClockInitialized = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
@@ -257,15 +250,10 @@ void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
   delay(10);
   Serial.println("\r\n");
-
   sun.setPosition(LATITUDE, LONGITUDE, DST_OFFSET);
-
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
-
   startOTA();                  // Start the OTA service
-
   startSPIFFS();               // Start the SPIFFS and list all contents
-
 
   // Initialize alarmTime(s) to default (now)
   breakTime(now(), alarmInfo.alarmTime);
@@ -299,20 +287,13 @@ void setup() {
   Serial.println(buf);
 
   startWebSocket();            // Start a WebSocket server
-
   startMDNS();                 // Start the mDNS responder
-
   startServer();               // Start a HTTP server with a file read handler and an upload handler
-
   strip.begin(); // This initializes the NeoPixel library.
   colorAll(strip.Color(127, 0, 0), 1000, now());
   Draw_Clock(0, 3); // Add the quater hour indicators
-
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
-
   calcSun();
-
-
   //pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
 
@@ -328,10 +309,10 @@ void loop() {
   //if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
   if (light_alarm_flag)  {
     light_alarm_flag = false;
-    showlights(10000, -1, -1, -1, -1, -1, -1, 50, -1, now());
-    showlights(10000, -1, -1, -1, -1, -1, -1, 25, -1, now());
-    showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
-    showlights(10000, -1, -1, -1, -1, -1, -1, 4, -1, now());
+    //showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
+    //showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
+    //showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
+    showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
   }
 
   if (led_color_alarm_flag)  {
@@ -342,28 +323,41 @@ void loop() {
   if (sound_alarm_flag) {
     Serial.println("sound flag on\n");
     playsong(melody, noteDurations, whole_note_duration, PIEZO_PIN);
+    //BUG? if use below generates tone, but then clock produces spurious leds
+    // lighting up on ring (obvious in night mode)
+    // something to do with timer2 changed???
+    //tone(PIEZO_PIN, 300, 1000);
+    // This code does seem to cause the problem
+    //  will try implementing playsong to use noTone as
+    // below which is not causeing spurious leds lighting
+    //tone(PIEZO_PIN, 300);
+    //delay(1000);
+    //noTone(PIEZO_PIN);
     sound_alarm_flag = false;
   }
 
   // Check for alarm
   if (alarmInfo.alarmSet && prevDisplay >= makeTime(alarmInfo.alarmTime))
   {
-    currentTime = now();
-    showlights(alarmInfo.duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
-    // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
-    Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
-    sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
-            second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
-            monthNames[month(currentTime)].c_str(), year(currentTime));
-    Serial.println();
-    Serial.println(buf);
-    webSocket.sendTXT(websocketId_num, buf);
+    if (prevDisplay - 10 < makeTime(alarmInfo.alarmTime)) {
+      // only show the alarm if close to set time
+      // this prevents alarm from going off on a restart where configured alarm is in past
+      currentTime = now();
+      showlights(alarmInfo.duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
+      // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
+      Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
+      sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
+              second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
+              monthNames[month(currentTime)].c_str(), year(currentTime));
+      Serial.println();
+      Serial.println(buf);
+      webSocket.sendTXT(websocketId_num, buf);
+    }
 
     if (alarmInfo.repeat <= 0)
     {
       alarmInfo.alarmSet = false;
-    } else {
-      // For repeat
+    } else { // update next repeat
       nextAlarmTime = makeTime(alarmInfo.alarmTime);
       while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo.repeat;
       breakTime(nextAlarmTime, alarmInfo.alarmTime);
@@ -405,23 +399,34 @@ void loop() {
 
 void playsong(int * melody, int * noteDurations, int whole_note_duration, int pin) {
   int maxnumNotes = 2000;
-  uint16_t time_start = millis();
+  uint32_t time_start;
+  uint32_t time_finish_tone;
+  uint32_t time_finish;
   Serial.println("sound alarm, then clock will start");
   for (int thisNote = 0; thisNote < maxnumNotes; thisNote++) {
-    if (melody[thisNote] == -1) break;
+    time_start = millis();
+    if (melody[thisNote] == STOP) break; //STOP is defined to be -1
     // to calculate the note duration, take whole note durations divided by the note type.
     //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
     int noteDuration = whole_note_duration / noteDurations[thisNote];
+    time_finish_tone = time_start + noteDuration;
     if (melody[thisNote] > 30) {
       tone(pin, melody[thisNote], noteDuration);
+      // alternative not giving duration as param to tone, as caused LEDs to fire afterwards
+      // but seems if just give noTone at end of melody that is ok too
+      //tone(pin, melody[thisNote]);
+      //while (millis() < time_finish_tone);
+      //noTone(pin);
     }
     // to distinguish the notes, set a minimum time between them.
     // the note's duration + 30% seems to work well:
     int pauseBetweenNotes = noteDuration * 1.30;
-    delay(pauseBetweenNotes);
-    // stop the tone playing:
-    noTone(pin);
+    time_finish = time_start + pauseBetweenNotes;
+    while (millis() < time_finish);
   }
+  //IMPORTANT to call noTone after melody is done
+  //  otherwise get funny signal going to LED ring aftwerwards
+  noTone(pin);
 }
 
 /*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
@@ -804,7 +809,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int b =          rgb & 0x3FF;                      // B: bits  0-9
         sprintf(buf, "led color r = %d, g = %d, b = %d", r, g, b);
         SliderColor  = {r >> 2, g >> 2, b >> 2};
-        webSocket.sendTXT(num, buf);
+        //webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
         led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2); // colors 0 to 255
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
@@ -821,10 +826,18 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
       } else if (payload[0] == 'B') {                      // browser sent B to set Background color from SliderColor
         Background = SliderColor;
+      } else if (payload[0] == 't') {                      // browser sent t to set Twelve color from SliderColor
+        Twelve = SliderColor;
+      } else if (payload[0] == 'q') {                      // browser sent q to set Quarters color from SliderColor
+        Quarters = SliderColor;
+      } else if (payload[0] == 'd') {                      // browser sent d to set Divisions color from SliderColor
+        Divisions = SliderColor;
       } else if (payload[0] == 'H') {                      // browser sent H to set Hour hand color from SliderColor
         Hour = SliderColor;
       } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
         Minute = SliderColor;
+      } else if (payload[0] == 's') {                      // browser sent s to set Second hand color from SliderColor
+        Second = SliderColor;
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
         light_alarm_flag = true;
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
@@ -946,6 +959,15 @@ void setBright()
 
 void calcSun()
 {
+  double sunrise;
+  double sunset;
+  double civilsunrise;
+  double civilsunset;
+  double astrosunrise;
+  double astrosunset;
+  double nauticalsunrise;
+  double nauticalsunset;
+
   /* Get the current time, and set the Sunrise code to use the current date */
   currentTime = now();
 
@@ -989,7 +1011,7 @@ void calcSun()
   AstroSunrise.Hour = astrosunrise / 60;
   AstroSunrise.Minute = astrosunrise - 60 * AstroSunrise.Hour + 0.5;
 
-  WeekMorning = CivilSunrise;
+  WeekMorning = Sunrise;
   WeekNight = CivilSunset;
 
   WeekendNight = WeekNight;
@@ -1229,7 +1251,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
     if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
     if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
 
-    if (w7 >= 0) rainbow(w7, 1, t);             // Flowing rainbow cycle along the whole strip
+    if (w7 >= 0) rainbow2(w7, 1, t, duration);             // Flowing rainbow cycle along the whole strip
     if (w8 >= 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
     time_elapsed = millis() - time_start;
   }
@@ -1305,6 +1327,41 @@ void rainbow(int wait, int ncolorloop, time_t t) {
     delay(wait);  // Pause for a moment
   }
 }
+
+// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
+void rainbow2(int wait, int ncolorloop, time_t t, uint16_t duration) {
+  // Hue of first pixel runs ncolorloop complete loops through the color wheel.
+  // Color wheel has a range of 65536 but it's OK if we roll over, so
+  // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
+  // means we'll make ncolorloop*65536/256   passes through this outer loop:
+  time_elapsed = 0;
+  uint16_t time_start = millis();
+  long firstPixelHue = 0;
+  int j;
+  while (time_elapsed < duration) {
+    firstPixelHue += 256;
+    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
+      // Offset pixel hue by an amount to make one full revolution of the
+      // color wheel (range of 65536) along the length of the strip
+      // (strip.numPixels() steps):
+      j = i;
+      if (i > strip.numPixels() / 2) j = strip.numPixels() - i;
+      int pixelHue = firstPixelHue + (j * 4 * 65536L / strip.numPixels());
+      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
+      // optionally add saturation and value (brightness) (each 0 to 255).
+      // Here we're using just the single-argument hue variant. The result
+      // is passed through strip.gamma32() to provide 'truer' colors
+      // before assigning to each pixel:
+      strip.setPixelColor(ClockCorrect(i + 15), strip.gamma32(strip.ColorHSV(pixelHue)));
+    }
+    SetBrightness(t); // Set the clock brightness dependant on the time
+    strip.show(); // Update strip with new contents
+    delay(wait);  // Pause for a moment
+    time_elapsed = millis() - time_start;
+  }
+}
+
+
 
 // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
 void theaterChaseRainbow(int wait, time_t t) {

@@ -41,6 +41,22 @@ function setminute() {
     connection.send("M");
 }
 
+function setsecond() {
+    connection.send("s");
+}
+
+function set12() {
+    connection.send("t");
+}
+
+function setquarter() {
+    connection.send("q");
+}
+
+function setdivision() {
+    connection.send("d");
+}
+
 function requestSaveConfig() {
     connection.send("V");
 }
