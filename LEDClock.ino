@@ -239,7 +239,8 @@ bool IsDay();
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+#define NUM_LEDS 60
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 bool ClockInitialized = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
@@ -312,7 +313,17 @@ void loop() {
     //showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
     //showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
     //showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
-    showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
+    //showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
+    rainbow2(0, 1, 1, now(), 3000);
+    rainbow2(0, 1, 4, now(), 3000);
+    rainbow2(0, 2, 1, now(), 3000);
+    rainbow2(0, 2, 4, now(), 3000);
+    rainbow2(0, 3, 1, now(), 3000);
+    rainbow2(0, 3, 4, now(), 3000);
+    rainbow2(0, 4, 1, now(), 3000);
+    rainbow2(0, 4, 4, now(), 3000);
+    rainbow2(0, 5, 1, now(), 3000);
+    rainbow2(0, 5, 4, now(), 3000);
   }
 
   if (led_color_alarm_flag)  {
@@ -1118,21 +1129,21 @@ void printDigits(int digits)
 void Draw_Clock(time_t t, byte Phase)
 {
   if (Phase <= 0) // Set all pixes black
-    for (int i = 0; i < 60; i++)
+    for (int i = 0; i < NUM_LEDS; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
 
   if (IsDay(t)) {
     if (Phase >= 1) // Draw all pixels background color
-      for (int i = 0; i < 60; i++)
+      for (int i = 0; i < NUM_LEDS; i++)
         strip.setPixelColor(ClockCorrect(i), strip.Color(Background.r, Background.g, Background.b));
 
     if (Phase >= 2) // Draw 5 min divisions
-      for (int i = 0; i < 60; i = i + 5)
+      for (int i = 0; i < NUM_LEDS; i = i + 5)
         strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions.r, Divisions.g, Divisions.b)); // for Phase = 2 or more, draw 5 minute divisions
 
     if (Phase >= 3) { // Draw 15 min markers
-      for (int i = 0; i < 60; i = i + 15)
+      for (int i = 0; i < NUM_LEDS; i = i + 15)
         strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters.r, Quarters.g, Quarters.b));
       strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve.r, Twelve.g, Twelve.b));
     }
@@ -1166,15 +1177,15 @@ void Draw_Clock(time_t t, byte Phase)
   }
   else {
     if (Phase >= 1) // Draw all pixels background color
-      for (int i = 0; i < 60; i++)
+      for (int i = 0; i < NUM_LEDS; i++)
         strip.setPixelColor(ClockCorrect(i), strip.Color(BackgroundNight.r, BackgroundNight.g, BackgroundNight.b));
 
     if (Phase >= 2) // Draw 5 min divisions
-      for (int i = 0; i < 60; i = i + 5)
+      for (int i = 0; i < NUM_LEDS; i = i + 5)
         strip.setPixelColor(ClockCorrect(i), strip.Color(DivisionsNight.r, DivisionsNight.g, DivisionsNight.b)); // for Phase = 2 or more, draw 5 minute divisions
 
     if (Phase >= 3) { // Draw 15 min markers
-      for (int i = 0; i < 60; i = i + 15)
+      for (int i = 0; i < NUM_LEDS; i = i + 15)
         strip.setPixelColor(ClockCorrect(i), strip.Color(QuartersNight.r, QuartersNight.g, QuartersNight.b));
       strip.setPixelColor(ClockCorrect(0), strip.Color(TwelveNight.r, TwelveNight.g, TwelveNight.b));
     }
@@ -1225,9 +1236,9 @@ void SetBrightness(time_t t)
 //              and ajusts top of clock
 int ClockCorrect(int Pixel)
 {
-  Pixel = (Pixel + TopOfClock) % 60;
+  Pixel = (Pixel + TopOfClock) % NUM_LEDS;
   if (ClockGoBackwards)
-    return ((60 - Pixel + 30) % 60); // my first attempt at clock driving had it going backwards :)
+    return ((NUM_LEDS - Pixel + NUM_LEDS / 2) % NUM_LEDS); // my first attempt at clock driving had it going backwards :)
   else
     return (Pixel);
 }
@@ -1245,19 +1256,37 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
     if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
     if (w2 >= 0) colorWipe(strip.Color(  0, 255,   0), w2, t); // Green
     if (w3 >= 0) colorWipe(strip.Color(  0,   0, 255), w3, t); // Blue
-
     // Do a theater marquee effect in various colors...
     if (w4 >= 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
     if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
     if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
-
-    if (w7 >= 0) rainbow2(w7, 1, t, duration);             // Flowing rainbow cycle along the whole strip
+    if (w7 >= 0) rainbow2(w7, 1, 4, t, duration);            // Flowing rainbow cycle along the whole strip
     if (w8 >= 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
     time_elapsed = millis() - time_start;
   }
 }
 
 //********* Bills NeoPixel Routines
+
+#include <cmath>
+#include <vector>
+
+using namespace std;
+
+int8_t piecewise_linear(int8_t x, vector<pair<int8_t, int8_t>> points) {
+  for (int i = 0; i < points.size() - 1; i++) {
+    if (x < points[i + 1].first) {
+      int x1 = points[i].first;
+      int y1 = points[i].second;
+      int x2 = points[i + 1].first;
+      int y2 = points[i + 1].second;
+      return y1 + (y2 - y1) * (x - x1) / static_cast<double>(x2 - x1);
+    }
+  }
+  return static_cast<int8_t>(points.back().second);
+}
+
+
 // Set All Leds to given color for wait seconds
 void colorAll(uint32_t color, int duration, time_t t) {
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
@@ -1267,6 +1296,57 @@ void colorAll(uint32_t color, int duration, time_t t) {
   strip.show();                          //  Update strip to match
   delay(duration);                           //  Pause for a moment
 }
+
+// Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
+void rainbow2(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
+  // Hue of first pixel runs ncolorloop complete loops through the color wheel.
+  // Color wheel has a range of 65536 but it's OK if we roll over, so
+  // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
+  // means we'll make ncolorloop*65536/256   passes through this outer loop:
+  time_elapsed = 0;
+  uint16_t time_start = millis();
+  long firstPixelHue = 0;
+  vector<pair<int8_t, int8_t>> points;
+  int j;
+  switch (ex) {
+    case 1:
+      points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS}};
+      break;
+    case 2:
+      points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
+      break;
+    case 3:
+      points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS}, {NUM_LEDS - 1, 0}};
+      break;
+    case 4:
+      points = {{0, 0}, {NUM_LEDS / 3, NUM_LEDS / 3 - 1}, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS / 3}};
+      break;
+    default:
+      points = {{0, 0}, {NUM_LEDS / 4, NUM_LEDS}, {NUM_LEDS / 2, 0}, {3 * NUM_LEDS / 4, NUM_LEDS}, {NUM_LEDS - 1, 0}};
+  }
+
+  while (time_elapsed < duration) {
+    firstPixelHue += 256;
+    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
+      // Offset pixel hue by an amount to make one full revolution of the
+      // color wheel (range of 65536) along the length of the strip
+      // (strip.numPixels() steps):
+      j = piecewise_linear(i, points);
+      int pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
+      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
+      // optionally add saturation and value (brightness) (each 0 to 255).
+      // Here we're using just the single-argument hue variant. The result
+      // is passed through strip.gamma32() to provide 'truer' colors
+      // before assigning to each pixel:
+      strip.setPixelColor(ClockCorrect(i + 15), strip.gamma32(strip.ColorHSV(pixelHue)));
+    }
+    SetBrightness(t); // Set the clock brightness dependant on the time
+    strip.show(); // Update strip with new contents
+    delay(wait);  // Pause for a moment
+    time_elapsed = millis() - time_start;
+  }
+}
+
 
 //********* Adafruit NeoPIxel Routines
 // Some functions of our own for creating animated effects -----------------
@@ -1325,39 +1405,6 @@ void rainbow(int wait, int ncolorloop, time_t t) {
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     delay(wait);  // Pause for a moment
-  }
-}
-
-// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow2(int wait, int ncolorloop, time_t t, uint16_t duration) {
-  // Hue of first pixel runs ncolorloop complete loops through the color wheel.
-  // Color wheel has a range of 65536 but it's OK if we roll over, so
-  // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
-  // means we'll make ncolorloop*65536/256   passes through this outer loop:
-  time_elapsed = 0;
-  uint16_t time_start = millis();
-  long firstPixelHue = 0;
-  int j;
-  while (time_elapsed < duration) {
-    firstPixelHue += 256;
-    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-      // Offset pixel hue by an amount to make one full revolution of the
-      // color wheel (range of 65536) along the length of the strip
-      // (strip.numPixels() steps):
-      j = i;
-      if (i > strip.numPixels() / 2) j = strip.numPixels() - i;
-      int pixelHue = firstPixelHue + (j * 4 * 65536L / strip.numPixels());
-      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
-      // optionally add saturation and value (brightness) (each 0 to 255).
-      // Here we're using just the single-argument hue variant. The result
-      // is passed through strip.gamma32() to provide 'truer' colors
-      // before assigning to each pixel:
-      strip.setPixelColor(ClockCorrect(i + 15), strip.gamma32(strip.ColorHSV(pixelHue)));
-    }
-    SetBrightness(t); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
-    time_elapsed = millis() - time_start;
   }
 }
 
