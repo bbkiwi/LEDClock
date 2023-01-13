@@ -314,16 +314,17 @@ void loop() {
     //showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
     //showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
     //showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
-    rainbow2(0, 1, 1, now(), 3000);
-    rainbow2(0, 1, 4, now(), 3000);
-    rainbow2(0, 2, 1, now(), 3000);
-    rainbow2(0, 2, 4, now(), 3000);
-    rainbow2(0, 3, 1, now(), 3000);
-    rainbow2(0, 3, 4, now(), 3000);
-    rainbow2(0, 4, 1, now(), 3000);
-    rainbow2(0, 4, 4, now(), 3000);
-    rainbow2(0, 5, 1, now(), 3000);
-    rainbow2(0, 5, 4, now(), 3000);
+    moveworms(15, 1, 1, now(), 10000);
+    //    rainbow2(0, 1, 1, now(), 3000);
+    //    rainbow2(0, 1, 4, now(), 3000);
+    //    rainbow2(0, 2, 1, now(), 3000);
+    //    rainbow2(0, 2, 4, now(), 3000);
+    //    rainbow2(0, 3, 1, now(), 3000);
+    //    rainbow2(0, 3, 4, now(), 3000);
+    //    rainbow2(0, 4, 1, now(), 3000);
+    //    rainbow2(0, 4, 4, now(), 3000);
+    //    rainbow2(0, 5, 1, now(), 3000);
+    //    rainbow2(0, 5, 4, now(), 3000);
   }
 
   if (led_color_alarm_flag)  {
@@ -1272,7 +1273,6 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 #include <vector>
 
 using namespace std;
-
 int8_t piecewise_linear(int8_t x, vector<pair<int8_t, int8_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
@@ -1347,6 +1347,102 @@ void rainbow2(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
   }
 }
 
+class Worm
+{
+    // colors, a list of worm segment (starting with head) hues
+    // path a list of the LED indices over which the worm will travel (from 0 to 59 for clock)
+    // cyclelen controls speed, worm movement only when LED upload cycles == 0 mod cyclelen
+    // height (of worm segments) is same length as colors: higher value worms segments go over top of lower value worms
+    // equal value segments have later worm having priority
+  private:
+    vector < int >colors;
+    vector < int >path;
+    int cyclelen;
+    vector < int >height;
+    int activecount;
+    int direction;
+    int headposition;
+  public:
+    Worm (vector < int >colors, vector < int >path, int cyclelen,
+          int direction, vector < int >height)
+    {
+      this->colors = colors;
+      this->colors.push_back (0); // add blank seqment to end worm
+      this->path = path;
+      this->cyclelen = cyclelen;  // movement only occurs on LED upload cycles == 0 mod cyclelen
+      this->height = height;
+      this->height.push_back (-1);  // add lowest value for height
+      this->activecount = 0;
+      this->direction = direction;
+      this->headposition = -this->direction;
+    }
+
+    //    void move (vector < int >&LEDStripBuf,
+    //               vector < int >&LEDsegheights)
+    void move ()
+    {
+      bool acted = this->activecount == 0;
+      if (acted)
+      {
+        // % does not work with negative
+        this->headposition = this->headposition + this->direction + this->path.size ();
+        this->headposition %= this->path.size ();
+        // Put worm into strip and blank end
+        int segpos = this->headposition;
+        Serial.println(" ");
+        for (int x = 0; x < this->colors.size (); x++)
+        {
+          int strippos = this->path[segpos];
+          //sprintf(buf, "x = %d, c[x]=%d,  segpos=%d, strippos=%d, pathsize=%d", x, this->colors[x], segpos,   strippos, this->path.size() );
+          //Serial.println(buf);
+          //sprintf(buf, "%d, ",this->colors[x] );
+          //sprintf(buf, "%d, ", segpos);
+          //sprintf(buf, "%d, ", strippos);
+          //Serial.print(buf);
+
+          if (true) //(this->height[x] >= LEDsegheights[this->path[segpos]])
+          {
+            if (this->colors[x] == 0) {
+              strip.setPixelColor(ClockCorrect(strippos), 0, 0, 0);
+              //strip.setPixelColor(strippos, 0, 0, 0);
+            } else {
+              strip.setPixelColor(ClockCorrect(strippos), strip.gamma32(strip.ColorHSV(this->colors[x])));
+              //strip.setPixelColor(strippos, strip.gamma32(strip.ColorHSV(this->colors[x])));
+              //            LEDsegheights[this->path[segpos]] = this->height[x];
+            }
+
+          }
+          // % does not work with negative
+          segpos = segpos - this->direction + this->path.size ();
+          segpos  %= this->path.size ();
+        }
+      };
+      this->activecount++;
+      this->activecount %= this->cyclelen;
+    };
+};
+
+void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
+  time_elapsed = 0;
+  uint16_t time_start = millis();
+  vector < int >colors = {100, 101, 102, 103, 104, 105};
+  vector < int >colors2 = {15000, 15000, 15000};
+  vector < int >path2 = {5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29};
+  vector < int >path =   {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
+  int cyclelen = 1;
+  int direction = 1;
+  vector < int >height = {100, 100, 100, 100, 100, 100};
+  Worm w1(colors, path, cyclelen, direction, height);
+  Worm w2(colors2, path2, 5, -1, colors2);
+  while (time_elapsed < duration) {
+    w1.move();
+    w2.move();
+    SetBrightness(t); // Set the clock brightness dependant on the time
+    strip.show(); // Update strip with new contents
+    delay(wait);  // Pause for a moment
+    time_elapsed = millis() - time_start;
+  }
+}
 
 //********* Adafruit NeoPIxel Routines
 // Some functions of our own for creating animated effects -----------------
