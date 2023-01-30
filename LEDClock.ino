@@ -295,6 +295,7 @@ void setup() {
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
   calcSun();
+  randomSeed(now());
   //pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
 
@@ -314,17 +315,41 @@ void loop() {
     //showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
     //showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
     //showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
-    moveworms(15, 1, 1, now(), 10000);
-    //    rainbow2(0, 1, 1, now(), 3000);
-    //    rainbow2(0, 1, 4, now(), 3000);
-    //    rainbow2(0, 2, 1, now(), 3000);
-    //    rainbow2(0, 2, 4, now(), 3000);
-    //    rainbow2(0, 3, 1, now(), 3000);
-    //    rainbow2(0, 3, 4, now(), 3000);
-    //    rainbow2(0, 4, 1, now(), 3000);
-    //    rainbow2(0, 4, 4, now(), 3000);
-    //    rainbow2(0, 5, 1, now(), 3000);
-    //    rainbow2(0, 5, 4, now(), 3000);
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    moveworms(1, 1, 1, now(), 2000);
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+    firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+    firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), 10000);
+    firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), 10000);
+    firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), 10000);
+    rainbow2(0, 1, 0, 256, 1, 1, 15, now(), 3000); // full rainbow ring rotating
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 1, 0, 32, 1, 1, 15, now(), 3000);  // full rainbox ring rotating 8 times slower
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 1, 0, 256, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 1, 0, 32, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating 8 times slower
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), 3000); // 4 full rainbows as above starting different place
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 2, 0, 256, 4, 1, 15, now(), 3000); //  4 full and 4 reverse flowing from 15 min
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 2, 0, 256, 1, 4, 15, now(), 3000); //  1/4 rainbox and its reverse flowing from 15 min
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 2, 0, 256, 1, 4, 30, now(), 3000); //  1/4 rainbox and its reverse flowing from 30 min
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 2, 0, 16, 1, 4, 30, now(), 3000); //   1/64 rainbox and its reverse flowing from 30 min
+    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), 3000); // start diff place 1/64 rainbox and its reverse flowing from 30 min
+    //
+    //
+    //    rainbow2(0, 3, 0, 256, 1, 1, 15, now(), 3000);
+    //    rainbow2(0, 3, 0, 256, 4, 1, 15, now(), 3000);
+    //    rainbow2(0, 4, 0, 256, 1, 1, 15, now(), 3000);
+    //    rainbow2(0, 4, 0, 256, 4, 1, 15, now(), 3000);
+    //    rainbow2(0, 5, 0, 256, 1, 1, 15, now(), 3000);
+    //    rainbow2(0, 5, 0, 256, 4, 1, 15, now(), 3000);
   }
 
   if (led_color_alarm_flag)  {
@@ -1261,7 +1286,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
     if (w4 >= 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
     if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
     if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
-    if (w7 >= 0) rainbow2(w7, 1, 4, t, duration);            // Flowing rainbow cycle along the whole strip
+    if (w7 >= 0) rainbow2(w7, 1, 0, 256, 4, 1, 15, t, duration);            // Flowing rainbow cycle along the whole strip
     if (w8 >= 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
     time_elapsed = millis() - time_start;
   }
@@ -1289,23 +1314,21 @@ int8_t piecewise_linear(int8_t x, vector<pair<int8_t, int8_t>> points) {
 
 // Set All Leds to given color for wait seconds
 void colorAll(uint32_t color, int duration, time_t t) {
-  for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-    strip.setPixelColor(ClockCorrect(i), color);         //  Set pixel's color (in RAM)
-  }
+  strip.fill(color);
   SetBrightness(t); // Set the clock brightness dependant on the time
   strip.show();                          //  Update strip to match
   delay(duration);                           //  Pause for a moment
 }
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow2(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
+void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
   // means we'll make ncolorloop*65536/256   passes through this outer loop:
   time_elapsed = 0;
   uint16_t time_start = millis();
-  long firstPixelHue = 0;
+  long firstPixelHue = firsthue;
   vector<pair<int8_t, int8_t>> points;
   int j;
   switch (ex) {
@@ -1326,19 +1349,19 @@ void rainbow2(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
   }
 
   while (time_elapsed < duration) {
-    firstPixelHue += 256;
+    firstPixelHue += hueinc;
     for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-      // Offset pixel hue by an amount to make one full revolution of the
+      // Offset pixel hue by an amount to make ncolorloop/ ncolorfrac  revolutions of the
       // color wheel (range of 65536) along the length of the strip
       // (strip.numPixels() steps):
       j = piecewise_linear(i, points);
-      int pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
+      int pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
       // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
       // optionally add saturation and value (brightness) (each 0 to 255).
       // Here we're using just the single-argument hue variant. The result
       // is passed through strip.gamma32() to provide 'truer' colors
       // before assigning to each pixel:
-      strip.setPixelColor(ClockCorrect(i + 15), strip.gamma32(strip.ColorHSV(pixelHue)));
+      strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
@@ -1408,7 +1431,7 @@ class Worm
             } else {
               strip.setPixelColor(ClockCorrect(strippos), strip.gamma32(strip.ColorHSV(this->colors[x])));
               //strip.setPixelColor(strippos, strip.gamma32(strip.ColorHSV(this->colors[x])));
-              //            LEDsegheights[this->path[segpos]] = this->height[x];
+              //LEDsegheights[this->path[segpos]] = this->height[x];
             }
 
           }
@@ -1427,22 +1450,60 @@ void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
   uint16_t time_start = millis();
   vector < int >colors = {100, 101, 102, 103, 104, 105};
   vector < int >colors2 = {15000, 15000, 15000};
+  vector < int >colors3 = {25000, 25000, 25000};
   vector < int >path2 = {5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29};
-  vector < int >path =   {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
+  vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
   int cyclelen = 1;
   int direction = 1;
   vector < int >height = {100, 100, 100, 100, 100, 100};
   Worm w1(colors, path, cyclelen, direction, height);
-  Worm w2(colors2, path2, 5, -1, colors2);
+  Worm w2(colors2, path, 5, -1, colors2);
+  Worm w3(colors3, path, 4, 1, colors3);
   while (time_elapsed < duration) {
     w1.move();
     w2.move();
+    w3.move();
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
 }
+
+void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uint8_t minSat, uint8_t maxSat, uint16_t minVal, uint16_t maxVal, time_t t, uint16_t duration) {
+  time_elapsed = 0;
+  uint8_t pixel;
+  long pixelHue;
+  uint8_t Sat;
+  uint8_t Val;
+  uint16_t time_start = millis();
+  pixelHue = minHue;
+  while (time_elapsed < duration) {
+    strip.fill(); // clear
+    for (int i = 0; i < numff; i++) {
+      pixel = random(NUM_LEDS);
+      if (hueInc == 0) {
+        // Choose random color
+        pixelHue = random(minHue, maxHue);
+      } else { // inc
+        pixelHue += hueInc;
+        if (pixelHue > maxHue) {
+          pixelHue = minHue;
+        }
+      }
+      Sat = random(minSat, maxSat);
+      Val = random(minVal, maxVal);
+      strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+    }
+    SetBrightness(t); // Set the clock brightness dependant on the time
+    strip.show(); // Update strip with new contents
+    delay(wait);  // Pause for a moment
+    time_elapsed = millis() - time_start;
+  }
+}
+
+
+
 
 //********* Adafruit NeoPIxel Routines
 // Some functions of our own for creating animated effects -----------------
