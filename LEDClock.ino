@@ -319,39 +319,45 @@ void loop() {
     //moveworms(1, 1, 1, now(), 2000);
     //firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
     //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
-    cellularAutomata(50, 26, random(65535), now(), 10000);
-    cellularAutomata(50, 30, random(65535), now(), 10000);
-    cellularAutomata(50, 45, random(65535), now(), 10000);
-    cellularAutomata(50, 57, random(65535), now(), 10000);
-    cellularAutomata(50, 60, random(65535), now(), 10000);
-    cellularAutomata(50, 73, random(65535), now(), 10000);
-    cellularAutomata(50, 110, random(65535), now(), 10000);
+    cellularAutomata(250, 26, 30, 60, random(65535), now(), 10000);
+    cellularAutomata(250, 26, 26, 26, random(65535), now(), 10000);
+    cellularAutomata(250, 30, 30, 30, random(65535), now(), 10000);
+    cellularAutomata(250, 60, 60, 60, random(65535), now(), 10000);
+    cellularAutomata(250, 104, 104, 104, random(65535), now(), 10000);
+    cellularAutomata(250, 110, 110, 110, random(65535), now(), 10000);
+//    cellularAutomata(50, 26, random(65535), now(), 10000);
+//    cellularAutomata(50, 30, random(65535), now(), 10000);
+//    cellularAutomata(50, 45, random(65535), now(), 10000);
+//    cellularAutomata(50, 57, random(65535), now(), 10000);
+//    cellularAutomata(50, 60, random(65535), now(), 10000);
+//    cellularAutomata(50, 73, random(65535), now(), 10000);
+//    cellularAutomata(50, 110, random(65535), now(), 10000);
     //fire(now(), 10000);
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
-//    firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
-//    firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), 10000);
-//    firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), 10000);
-//    firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), 10000);
-//    rainbow2(0, 1, 0, 256, 1, 1, 15, now(), 3000); // full rainbow ring rotating
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 1, 0, 32, 1, 1, 15, now(), 3000);  // full rainbox ring rotating 8 times slower
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 1, 0, 256, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 1, 0, 32, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating 8 times slower
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), 3000); // 4 full rainbows as above starting different place
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 2, 0, 256, 4, 1, 15, now(), 3000); //  4 full and 4 reverse flowing from 15 min
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 2, 0, 256, 1, 4, 15, now(), 3000); //  1/4 rainbox and its reverse flowing from 15 min
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 2, 0, 256, 1, 4, 30, now(), 3000); //  1/4 rainbox and its reverse flowing from 30 min
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 2, 0, 16, 1, 4, 30, now(), 3000); //   1/64 rainbox and its reverse flowing from 30 min
-//    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-//    rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), 3000); // start diff place 1/64 rainbox and its reverse flowing from 30 min
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+    //    firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+    //    firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), 10000);
+    //    firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), 10000);
+    //    firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), 10000);
+    //    rainbow2(0, 1, 0, 256, 1, 1, 15, now(), 3000); // full rainbow ring rotating
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 1, 0, 32, 1, 1, 15, now(), 3000);  // full rainbox ring rotating 8 times slower
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 1, 0, 256, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 1, 0, 32, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating 8 times slower
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), 3000); // 4 full rainbows as above starting different place
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 2, 0, 256, 4, 1, 15, now(), 3000); //  4 full and 4 reverse flowing from 15 min
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 2, 0, 256, 1, 4, 15, now(), 3000); //  1/4 rainbox and its reverse flowing from 15 min
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 2, 0, 256, 1, 4, 30, now(), 3000); //  1/4 rainbox and its reverse flowing from 30 min
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 2, 0, 16, 1, 4, 30, now(), 3000); //   1/64 rainbox and its reverse flowing from 30 min
+    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
+    //    rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), 3000); // start diff place 1/64 rainbox and its reverse flowing from 30 min
     //
     //
     //    rainbow2(0, 3, 0, 256, 1, 1, 15, now(), 3000);
@@ -1605,12 +1611,12 @@ void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t 
   strip.setPixelColor(0, strip.gamma32(strip.ColorHSV(pixelHue)));
   while (time_elapsed < duration) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      uint8_t nbrs = ((strip.getPixelColor(i)!=0)<<2) + ((strip.getPixelColor((i+1)%NUM_LEDS)!=0)<<1) +  (strip.getPixelColor((i+2)%NUM_LEDS)!=0);
+      uint8_t nbrs = ((strip.getPixelColor(i) != 0) << 2) + ((strip.getPixelColor((i + 1) % NUM_LEDS) != 0) << 1) +  (strip.getPixelColor((i + 2) % NUM_LEDS) != 0);
       // have 3 CAs for r,g,b then use
-      //uint8_t nbrsR = ((((uint8_t)(strip.getPixelColor(i) >> 16))!=0)<<2) + ((((uint8_t)(strip.getPixelColor((i+1)%NUM_LEDS) >> 16))!=0)<<1) +  (((uint8_t)(strip.getPixelColor((i+2)%NUM_LEDS) >> 16))!=0);
+      uint8_t nbrsR = ((((uint8_t)(strip.getPixelColor(i) >> 16)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 16)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 16)) != 0);
       //uint8_t nbrsG = ((((uint8_t)(strip.getPixelColor(i) >> 8))!=0)<<2) + ((((uint8_t)(strip.getPixelColor((i+1)%NUM_LEDS) >> 8))!=0)<<1) +  (((uint8_t)(strip.getPixelColor((i+2)%NUM_LEDS) >> 8))!=0);
       //uint8_t nbrsB = ((((uint8_t)(strip.getPixelColor(i) >> 0))!=0)<<2) + ((((uint8_t)(strip.getPixelColor((i+1)%NUM_LEDS) >> 0))!=0)<<1) +  (((uint8_t)(strip.getPixelColor((i+2)%NUM_LEDS) >> 0))!=0);
-      next[(i+1)%NUM_LEDS] = (rule >> nbrs)& 0x1;
+      next[(i + 1) % NUM_LEDS] = (rule >> nbrs) & 0x1;
     }
     strip.fill(); // clear
     for (int i = 0; i < NUM_LEDS; i++) {
@@ -1624,6 +1630,40 @@ void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t 
     time_elapsed = millis() - time_start;
   }
 }
+
+
+void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, long pixelHue, time_t t, uint16_t duration) {
+  time_elapsed = 0;
+  vector < int >nextR(NUM_LEDS);
+  vector < int >nextG(NUM_LEDS);
+  vector < int >nextB(NUM_LEDS);
+  uint16_t time_start = millis();
+  // initial state
+  strip.fill();
+  strip.setPixelColor(0, 0xff0000);
+  strip.setPixelColor(20, 0x00ff00);
+  strip.setPixelColor(40, 0x0000ff);
+  while (time_elapsed < duration) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      // have 3 CAs for r,g,b then use
+      uint8_t nbrsR = ((((uint8_t)(strip.getPixelColor(i) >> 16)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 16)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 16)) != 0);
+      uint8_t nbrsG = ((((uint8_t)(strip.getPixelColor(i) >> 8)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 8)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 8)) != 0);
+      uint8_t nbrsB = ((((uint8_t)(strip.getPixelColor(i) >> 0)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 0)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 0)) != 0);
+      nextR[(i + 1) % NUM_LEDS] = (ruleR >> nbrsR) & 0x1;
+      nextG[(i + 1) % NUM_LEDS] = (ruleG >> nbrsG) & 0x1;
+      nextB[(i + 1) % NUM_LEDS] = (ruleB >> nbrsB) & 0x1;
+    }
+    strip.fill(); // clear
+    for (int i = 0; i < NUM_LEDS; i++) {
+      strip.setPixelColor(i, nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
+    }
+    SetBrightness(t); // Set the clock brightness dependant on the time
+    strip.show(); // Update strip with new contents
+    delay(wait); // wait
+    time_elapsed = millis() - time_start;
+  }
+}
+
 
 //********* Adafruit NeoPIxel Routines
 // Some functions of our own for creating animated effects -----------------
