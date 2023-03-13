@@ -176,7 +176,7 @@ String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Th
 String monthNames[13] = {"dummy", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 bool ota_flag = true;
 bool sound_alarm_flag = false;
-bool light_alarm_flag = false;
+int light_alarm_num = 0;
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
 //tmElements_t alarmTime;
@@ -259,37 +259,34 @@ void setup() {
   startSPIFFS();               // Start the SPIFFS and list all contents
 
   // Initialize alarmTime(s) to default (now)
-  for (int i = 0; i < NUM_ALARMS; i++) {
-    breakTime(now(), alarmInfo[i].alarmTime);
-
-
-    sprintf(buf, "Default alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", i, alarmInfo[i].alarmSet, alarmInfo[i].duration, alarmInfo[i].repeat,
-            hour(makeTime(alarmInfo[i].alarmTime)), minute(makeTime(alarmInfo[i].alarmTime)),
-            second(makeTime(alarmInfo[i].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[i].alarmTime))].c_str(), day(makeTime(alarmInfo[i].alarmTime)),
-            monthNames[month(makeTime(alarmInfo[i].alarmTime))].c_str(), year(makeTime(alarmInfo[i].alarmTime)));
-    Serial.println();
+  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
+    breakTime(now(), alarmInfo[alarm_ind].alarmTime);
+    sprintf(buf, "Default alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+            hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+            second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+            monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+    //Serial.println();
     Serial.println(buf);
   }
 
   if (!loadConfig()) {
-    Serial.println("Failed to load config");
+    Serial.println("Failed to load config will use defaults");
     // use default parameters
     // attempt to save in configuration file
     if (!saveConfig()) {
       Serial.println("Failed to save config");
     } else {
-      Serial.println("Config saved");
+      Serial.println("default Config saved");
     }
   } else {
     // will have loaded the saved parameters
     Serial.println("Config loaded");
-
-    for (int i = 0; i < NUM_ALARMS; i++) {
-      sprintf(buf, "alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", i, alarmInfo[i].alarmSet, alarmInfo[i].duration, alarmInfo[i].repeat,
-              hour(makeTime(alarmInfo[i].alarmTime)), minute(makeTime(alarmInfo[i].alarmTime)),
-              second(makeTime(alarmInfo[i].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[i].alarmTime))].c_str(), day(makeTime(alarmInfo[i].alarmTime)),
-              monthNames[month(makeTime(alarmInfo[i].alarmTime))].c_str(), year(makeTime(alarmInfo[i].alarmTime)));
-      Serial.println();
+    for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
+      sprintf(buf, "alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+              hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+              second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+              monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+      //Serial.println();
       Serial.println(buf);
     }
   }
@@ -314,64 +311,9 @@ void loop() {
   ArduinoOTA.handle();                        // listen for OTA events
   MDNS.update();                              // must have above as well
 
-  //if (light_alarm_flag)  showlights(10000, 50, 50, 50, 50, 50, 50, 10, 50, now());
-  if (light_alarm_flag)  {
-    light_alarm_flag = false;
-    //showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
-    //showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
-    //showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
-    //showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
-    //firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //moveworms(1, 1, 1, now(), 2000);
-    //firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
-    cellularAutomata(250, 26, 30, 60, random(65535), now(), 10000);
-    cellularAutomata(250, 26, 26, 26, random(65535), now(), 10000);
-    cellularAutomata(250, 30, 30, 30, random(65535), now(), 10000);
-    cellularAutomata(250, 60, 60, 60, random(65535), now(), 10000);
-    // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), 10000);
-    cellularAutomata(250, 110, 110, 110, random(65535), now(), 10000);
-    //    cellularAutomata(50, 26, random(65535), now(), 10000);
-    //    cellularAutomata(50, 30, random(65535), now(), 10000);
-    //    cellularAutomata(50, 45, random(65535), now(), 10000);
-    //    cellularAutomata(50, 57, random(65535), now(), 10000);
-    //    cellularAutomata(50, 60, random(65535), now(), 10000);
-    //    cellularAutomata(50, 73, random(65535), now(), 10000);
-    //    cellularAutomata(50, 110, random(65535), now(), 10000);
-    //fire(now(), 10000);
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
-    //    firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
-    //    firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), 10000);
-    //    firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), 10000);
-    //    firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), 10000);
-    //    rainbow2(0, 1, 0, 256, 1, 1, 15, now(), 3000); // full rainbow ring rotating
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 1, 0, 32, 1, 1, 15, now(), 3000);  // full rainbox ring rotating 8 times slower
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 1, 0, 256, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 1, 0, 32, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating 8 times slower
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), 3000); // 4 full rainbows as above starting different place
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 2, 0, 256, 4, 1, 15, now(), 3000); //  4 full and 4 reverse flowing from 15 min
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 2, 0, 256, 1, 4, 15, now(), 3000); //  1/4 rainbox and its reverse flowing from 15 min
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 2, 0, 256, 1, 4, 30, now(), 3000); //  1/4 rainbox and its reverse flowing from 30 min
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 2, 0, 16, 1, 4, 30, now(), 3000); //   1/64 rainbox and its reverse flowing from 30 min
-    //    firefly(100, 0, 0, 65535, 256, 0, 1,  1, 256, now(), 1000); // clear for 1 sec
-    //    rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), 3000); // start diff place 1/64 rainbox and its reverse flowing from 30 min
-    //
-    //
-    //    rainbow2(0, 3, 0, 256, 1, 1, 15, now(), 3000);
-    //    rainbow2(0, 3, 0, 256, 4, 1, 15, now(), 3000);
-    //    rainbow2(0, 4, 0, 256, 1, 1, 15, now(), 3000);
-    //    rainbow2(0, 4, 0, 256, 4, 1, 15, now(), 3000);
-    //    rainbow2(0, 5, 0, 256, 1, 1, 15, now(), 3000);
-    //    rainbow2(0, 5, 0, 256, 4, 1, 15, now(), 3000);
+  if (light_alarm_num)  {
+    show_alarm_pattern(light_alarm_num);
+    light_alarm_num = 0;
   }
 
   if (led_color_alarm_flag)  {
@@ -437,7 +379,7 @@ void loop() {
   int sensorValue = analogRead(analogInPin);
   if (sensorValue > 900 ) {
     Serial.println(sensorValue);
-    light_alarm_flag = true;
+    light_alarm_num = random(1, 40);
     time_elapsed = 0;
   }
 
@@ -459,6 +401,133 @@ void loop() {
     calcSun(); // computes sun rise and sun set, updates calcTime
   }
   delay(10); // needed to keep wifi going
+}
+
+void show_alarm_pattern(byte light_alarm_num) {
+  Serial.println(light_alarm_num);
+  switch (light_alarm_num) {
+    case 1:
+      showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
+      break;
+    case 2:
+      showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
+      break;
+    case 3:
+      showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
+      break;
+    case 4:
+      showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
+      break;
+    case 5:
+      moveworms(1, now(), 2000);
+      break;
+    case 6:
+      moveworms(5, now(), 2000);
+      break;
+    case 7:
+      //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
+      cellularAutomata(250, 26, 30, 60, random(65535), now(), 10000);
+      break;
+    case 8:
+      cellularAutomata(250, 26, 26, 26, random(65535), now(), 10000);
+      break;
+    case 9:
+      cellularAutomata(250, 30, 30, 30, random(65535), now(), 10000);
+      break;
+    case 10:
+      cellularAutomata(250, 60, 60, 60, random(65535), now(), 10000);
+      break;
+    case 11:
+      // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), 10000);
+      cellularAutomata(250, 110, 110, 110, random(65535), now(), 10000);
+      break;
+    case 12:
+      cellularAutomata(50, 26, random(65535), now(), 10000);
+      break;
+    case 13:
+      cellularAutomata(50, 30, random(65535), now(), 10000);
+      break;
+    case 14:
+      cellularAutomata(50, 45, random(65535), now(), 10000);
+      break;
+    case 15:
+      cellularAutomata(50, 57, random(65535), now(), 10000);
+      break;
+    case 16:
+      cellularAutomata(50, 60, random(65535), now(), 10000);
+      break;
+    case 17:
+      cellularAutomata(50, 73, random(65535), now(), 10000);
+      break;
+    case 18:
+      cellularAutomata(50, 110, random(65535), now(), 10000);
+      break;
+    case 19:
+      fire(now(), 10000);
+      break;
+    case 20:
+      firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+      break;
+    case 21:
+      firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+      break;
+    case 22:
+      firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), 10000);
+      break;
+    case 23:
+      firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), 10000);
+      break;
+    case 24:
+      firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), 10000);
+      break;
+    case 25:
+      rainbow2(0, 1, 0, 256, 1, 1, 15, now(), 3000); // full rainbow ring rotating
+      break;
+    case 26:
+      rainbow2(0, 1, 0, 32, 1, 1, 15, now(), 3000);  // full rainbox ring rotating 8 times slower
+      break;
+    case 27:
+      rainbow2(0, 1, 0, 256, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating
+      break;
+    case 28:
+      rainbow2(0, 1, 0, 32, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating 8 times slower
+      break;
+    case 29:
+      rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), 3000); // 4 full rainbows as above starting different place
+      break;
+    case 30:
+      rainbow2(0, 2, 0, 256, 4, 1, 15, now(), 3000); //  4 full and 4 reverse flowing from 15 min
+      break;
+    case 31:
+      rainbow2(0, 2, 0, 256, 1, 4, 15, now(), 3000); //  1/4 rainbox and its reverse flowing from 15 min
+      break;
+    case 32:
+      rainbow2(0, 2, 0, 256, 1, 4, 30, now(), 3000); //  1/4 rainbox and its reverse flowing from 30 min
+      break;
+    case 33:
+      rainbow2(0, 2, 0, 16, 1, 4, 30, now(), 3000); //   1/64 rainbox and its reverse flowing from 30 min
+      break;
+    case 34:
+      rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), 3000); // start diff place 1/64 rainbox and its reverse flowing from 30 min
+      break;
+    case 35:
+      rainbow2(0, 3, 0, 256, 1, 1, 15, now(), 3000);
+      break;
+    case 36:
+      rainbow2(0, 3, 0, 256, 4, 1, 15, now(), 3000);
+      break;
+    case 37:
+      rainbow2(0, 4, 0, 256, 1, 1, 15, now(), 3000);
+      break;
+    case 38:
+      rainbow2(0, 4, 0, 256, 4, 1, 15, now(), 3000);
+      break;
+    case 39:
+      rainbow2(0, 5, 0, 256, 1, 1, 15, now(), 3000);
+      break;
+    default:
+      rainbow2(0, 5, 0, 256, 4, 1, 15, now(), 3000);
+  }
 }
 
 void playsong(int * melody, int * noteDurations, int whole_note_duration, int pin) {
@@ -702,9 +771,11 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
   //    });
 
   server.on("/lightalarm", []() {
+    String numstr = server.arg("num");
+    light_alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 1;
     server.send(200, "text/plain", "Light alarm Starting ...");
     delay(1000);
-    light_alarm_flag = true;
+    //light_alarm_num = random(1, 40);
     time_elapsed = 0;
   });
 
@@ -914,8 +985,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Minute = SliderColor;
       } else if (payload[0] == 's') {                      // browser sent s to set Second hand color from SliderColor
         Second = SliderColor;
-      } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
-        light_alarm_flag = true;
+      } else if (payload[0] == 'R') {                      // the browser sends an RNN when the rainbow effect is enabled
+        //TODO why if light_alarm_num was declared byte did this blow up had to make int
+        sscanf((char *) payload, "R%2d", &light_alarm_num);
+        //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
@@ -932,23 +1005,33 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int Ayear;
         int Ahour;
         int Aminute;
-        int i = 0;
+        int alarm_ind;
+        int alarmtype;
+        int alarmrepeat;
+        int alarmduration;
 
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
-        sscanf((char *) payload, "A%d %s %s %2d %4d %2d:%2d", &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
-        Serial.printf("Set alarm for %s %s %2d %2d %4d %2d:%2d\n", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
+        sscanf((char *) payload, "A%d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        //PREVENT bad input
+        if (alarm_ind >= 5) alarm_ind = 0;
+        if (alarm_ind < 0) alarm_ind = 0;
+
+
+        Serial.printf("Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
 
-        setalarmtime(i, 10000, SECS_PER_DAY, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
-        alarmInfo[i].alarmSet = true;
+        setalarm(alarm_ind, alarmtype, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
+        alarmInfo[alarm_ind].alarmSet = true;
 
-        sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec", i,
-                hour(makeTime(alarmInfo[i].alarmTime)), minute(makeTime(alarmInfo[i].alarmTime)), second(makeTime(alarmInfo[i].alarmTime)),
-                daysOfWeek[weekday(makeTime(alarmInfo[i].alarmTime))].c_str(), day(makeTime(alarmInfo[i].alarmTime)),
-                monthNames[month(makeTime(alarmInfo[i].alarmTime))].c_str(), year(makeTime(alarmInfo[i].alarmTime)),
-                alarmInfo[i].duration, alarmInfo[i].repeat);
+
+
+        sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec", alarm_ind,
+                hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)), second(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat);
         webSocket.sendTXT(num, buf);
 
       } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
@@ -959,18 +1042,18 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-void setalarmtime(int i, uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
-  Serial.printf("setalarmtime: %d %d %d %d %d %d %d %d\n", t, r, s, m, h, d, mth, y);
-
-  alarmInfo[i].duration = t;
-  alarmInfo[i].repeat = r;
-  alarmInfo[i].alarmTime.Second = s;
-  alarmInfo[i].alarmTime.Minute = m;
-  alarmInfo[i].alarmTime.Hour = h;
-  alarmInfo[i].alarmTime.Day = d;
-  alarmInfo[i].alarmTime.Month = mth;
+void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
+  Serial.printf("setalarmtime: %d %d %d %d %d %d %d %d %d\n", alarmtype, t, r, s, m, h, d, mth, y);
+  alarmInfo[alarm_ind].alarmType = alarmtype;
+  alarmInfo[alarm_ind].duration = t;
+  alarmInfo[alarm_ind].repeat = r;
+  alarmInfo[alarm_ind].alarmTime.Second = s;
+  alarmInfo[alarm_ind].alarmTime.Minute = m;
+  alarmInfo[alarm_ind].alarmTime.Hour = h;
+  alarmInfo[alarm_ind].alarmTime.Day = d;
+  alarmInfo[alarm_ind].alarmTime.Month = mth;
   //NOTE year is excess from 1970
-  alarmInfo[i].alarmTime.Year = y - 1970;
+  alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
 }
 
 void setalarmurl()
@@ -983,6 +1066,7 @@ void setalarmurl()
   if (alarm_num < 0) return;
 
   alarmInfo[alarm_num].alarmSet = true;
+  String type = server.arg("type");
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
   String h = server.arg("hour");
@@ -994,7 +1078,8 @@ void setalarmurl()
 
   breakTime(now(), alarmInfo[alarm_num].alarmTime);
 
-  setalarmtime(alarm_num,
+  setalarm(alarm_num,
+               (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
                (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
                (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
                (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
@@ -1004,11 +1089,11 @@ void setalarmurl()
                (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
                (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
 
-  sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec", alarm_num,
+  sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, type %d duration %d ms repeat %d sec", alarm_num,
           hour(makeTime(alarmInfo[alarm_num].alarmTime)), minute(makeTime(alarmInfo[alarm_num].alarmTime)), second(makeTime(alarmInfo[alarm_num].alarmTime)),
           daysOfWeek[weekday(makeTime(alarmInfo[alarm_num].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_num].alarmTime)),
           monthNames[month(makeTime(alarmInfo[alarm_num].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_num].alarmTime)),
-          alarmInfo[alarm_num].duration, alarmInfo[alarm_num].repeat);
+          alarmInfo[alarm_num].alarmType, alarmInfo[alarm_num].duration, alarmInfo[alarm_num].repeat);
   server.send(200, "text/plain", buf);
   Serial.println(buf);
 }
@@ -1325,6 +1410,8 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
   sprintf(buf, "showlights called with %d %d %d %d %d %d %d %d %d %d\n ", duration, w1, w2, w3, w4, w5, w6, w7, w8, t);
   Serial.println(buf);
   while (time_elapsed < duration)
+    //TODO need to interupt otherwise will always go thru loop an integral number of times
+    //  if duration too small will be ignored.
   {
     // Fill along the length of the strip in various colors...
     if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
@@ -1410,6 +1497,7 @@ void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int 
       // is passed through strip.gamma32() to provide 'truer' colors
       // before assigning to each pixel:
       strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
+      yield();
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
@@ -1460,7 +1548,7 @@ class Worm
         this->headposition %= this->path.size ();
         // Put worm into strip and blank end
         int segpos = this->headposition;
-        Serial.println(" ");
+        //Serial.println(" ");
         for (int x = 0; x < this->colors.size (); x++)
         {
           int strippos = this->path[segpos];
@@ -1493,7 +1581,7 @@ class Worm
     };
 };
 
-void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
+void moveworms(int wait, time_t t, uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
   vector < int >colors = {100, 101, 102, 103, 104, 105};

@@ -1,6 +1,7 @@
 var rainbowEnable = false;
 var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
 //var connection = new WebSocket('wss://echo.websocket.org/');
+var savedate;
 
 connection.onopen = function () {
     connection.send('Connect ' + new Date());
@@ -70,13 +71,27 @@ function calcSunsets() {
 }
 
 function pickerTimeDate(date) {
-	console.log(date.getDay(), date.getHours(), date);
-	document.getElementById('whattime').innerHTML = date;
-	connection.send("A" + date.getMonth() +" " + date);
+  var alarmnum = document.getElementById('alarmnum').value;
+  savedate = date;
+	console.log(date.getDay(), date.getHours(), date, alarmnum);
+	document.getElementById('saveddatetime').innerHTML = date;
+	//connection.send("A" + alarmnum + " " + date.getMonth() +" " + date);
 }
 
+function setalarm() {
+  var alarmnum = document.getElementById('alarmnum').value;
+  var alarmtype = document.getElementById('alarmtype').value;
+  var alarmrepeat = document.getElementById('alarmrepeat').value;
+  var alarmduration = document.getElementById('alarmduration').value;
+	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
+	//document.getElementById('whattime').innerHTML = savedate;
+	connection.send("A" + alarmnum + " " + alarmtype + " " + alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+}
+
+
 function rainbowEffect(){
-    connection.send("R");
+  var num = document.getElementById('numpattern').value;
+  connection.send("R" + num);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
 

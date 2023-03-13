@@ -56,7 +56,8 @@
 <body>
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
 <button onclick="toggleShowHide('Led-Control')">LED Control</button>
-<button class="simplepicker-btn">Show Picker</button>
+<button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
+<button class="simplepicker-btn">Choose Date and Time</button>
 <div id="Clock-Control" style="display: none;">
     <center>
         <header>
@@ -64,7 +65,8 @@
         </header>
         <div>
              <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
-             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button></p>
+             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button>
+             <input type="text" id="numpattern" value=1></p>
              <p style="margin:8px 0px"><button id="melody" class="button" style="background-color:#999" onclick="melodyEffect();">Melody</button></p>
              <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
              <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
@@ -105,6 +107,26 @@
        </div>
     </center>
 </div>
+
+<div id="Alarm-Control" style="display: none;">
+    <center>
+        <header>
+            <h1>Alarm Control</h1>
+        </header>
+        <div>
+          <p style="margin:8px 0px"><button id="saveddatetime" class="button" style="background-color:#999">Save Date Time</button></p>
+          <p style="margin:8px 0px"><button id="type" class="button" style="background-color:#999" onclick="savetype();">Type</button>
+          <input type="text" id="alarmtype" value=1></p>
+             <p style="margin:8px 0px"><button id="repeat" class="button" style="background-color:#999" onclick="saverepeat();">Repeat</button>
+             <input type="text" id="alarmrepeat" value=86400></p>
+             <p style="margin:8px 0px"><button id="duration" class="button" style="background-color:#999" onclick="saveduration();">Duration</button>
+             <input type="text" id="alarmduration" value=10000></p>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" style="background-color:#999" onclick="setalarm();">Set Alarm</button>
+             <input type="text" id="alarmnum" value=1></p>
+        </div>
+    </center>
+</div>
+
   <div class="picker-area">
   <h2>Event logs:</h2>
   <div class="event-log"></div>
