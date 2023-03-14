@@ -35,11 +35,12 @@ function setbackground() {
 }
 
 function sethour() {
-    connection.send("H");
+    connection.send("H" + document.getElementById('widthhour').value);
 }
 
 function setminute() {
-    connection.send("M");
+    var blink = (document.getElementById('blinkminute').checked) ? 1: 0
+    connection.send("M" + blink + " " + document.getElementById('widthminute').value);
 }
 
 function setsecond() {

@@ -55,9 +55,8 @@
 
 <body>
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
-<button onclick="toggleShowHide('Led-Control')">LED Control</button>
+<button onclick="toggleShowHide('Display-Control')">Display Control</button>
 <button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
-<button class="simplepicker-btn">Choose Date and Time</button>
 <div id="Clock-Control" style="display: none;">
     <center>
         <header>
@@ -73,10 +72,10 @@
        </div>
     </center>
 </div>
-<div id="Led-Control" style="display: none;">
+<div id="Display-Control" style="display: none;">
     <center>
         <header>
-            <h1>LED Control</h1>
+            <h1>Display Control</h1>
         </header>
         <div>
             <table>
@@ -94,16 +93,44 @@
                 </tr>
             </table>
        </div>
+
+
        <div class="btn-group">
              <button id="setbackground" class="button"  onclick="setbackground();">Back</button>
              <button id="set12" class="button"  onclick="set12();">12</button>
              <button id="setquarter" class="button"  onclick="setquarter();">Quad</button>
              <button id="setdivision" class="button"  onclick="setdivision();">Div</button>
        </div>
-       <div class="btn-group">
-             <button id="sethour" class="button"  onclick="sethour();">Hour</button>
-             <button id="setminute" class="button"  onclick="setminute();">Min</button>
-             <button id="setsecond" class="button"  onclick="setsecond();">Sec</button>
+       <div>
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: right"><button id="sethour" class="button"  onclick="sethour();">Hour</button> </td>
+                     <td style="width:14.4px; text-align: right"> <button id="setminute" class="button"  onclick="setminute();">Min</button></td>
+                     <td style="width:14.4px; text-align: right"> <button id="setsecond" class="button"  onclick="setsecond();">Sec</button></td>
+                </tr>
+                <tr>
+                    <td style="width:14.4px; text-align: right">
+                      <select id="widthhour">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                      </select></td>
+                     <td style="width:14.4px; text-align: right">
+                       <select id="widthminute">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                      </select> </td>
+                     <td style="width:14.4px; text-align: right"> </td>
+                 </tr>
+                 <tr>
+                    <td style="width:14.4px; text-align: right"> </td>
+                    <td style="width:14.4px; text-align: right"><input id="blinkminute" type="checkbox" checked="true">blink </td>
+                    <td style="width:14.4px; text-align: right"> </td>
+                </tr>
+            </table>
        </div>
     </center>
 </div>
@@ -114,6 +141,7 @@
             <h1>Alarm Control</h1>
         </header>
         <div>
+          <button class="simplepicker-btn">Choose Date and Time</button>
           <p style="margin:8px 0px"><button id="saveddatetime" class="button" style="background-color:#999">Save Date Time</button></p>
           <p style="margin:8px 0px"><button id="type" class="button" style="background-color:#999" onclick="savetype();">Type</button>
           <input type="text" id="alarmtype" value=1></p>

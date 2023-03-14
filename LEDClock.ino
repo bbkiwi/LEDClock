@@ -1,21 +1,6 @@
 /*********
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
-*********/
-
-/*********** IMPORTANT #include <ESP8266mDNS.h> below
-   With 1.8.10 and board 2.6.3
-   /Also with 1.8.13 but commenting out as below doesn't fix mDNS still not respond to ledclock.local
-   Was having problem with mDns
-   Changed ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/src/ESP8266mDNS.h
-   uncomment line 51 and comment line 52 to use legacy version which from googling works well for simple use
-
-   This is the reverse of comment at line 40 in example
-   ~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.3/libraries/ESP8266mDNS/examples/LEAmDNS/mDNS_Clock/mDNS_Clock.ino
-   NOTE on win 10 PC was in 2 locations (changed it in both seems to be using those on C: drive)
-   C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
-   was also here but have removed as was part of installing arduino app from win 10 store
-   D:\Bill\My Documents\ArduinoData\packages\esp8266\hardware\esp8266\2.6.3\libraries\ESP8266mDNS\src
 
    2 Jan 2023
    Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
@@ -149,6 +134,10 @@ RGB SliderColor = {0, 0, 0};
 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = false;
+
+bool minute_blink = true;
+int minute_width = 2;
+int hour_width = 3;
 
 //Set brightness by time for night and day mode
 TIME WeekNight = {18, 00}; // Night time to go dim
@@ -980,8 +969,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'd') {                      // browser sent d to set Divisions color from SliderColor
         Divisions = SliderColor;
       } else if (payload[0] == 'H') {                      // browser sent H to set Hour hand color from SliderColor
+        hour_width = payload[1] - '0';
         Hour = SliderColor;
       } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
+        minute_width = payload[3] - '0';
+        minute_blink = (payload[1] == '1');
         Minute = SliderColor;
       } else if (payload[0] == 's') {                      // browser sent s to set Second hand color from SliderColor
         Second = SliderColor;
@@ -1079,15 +1071,15 @@ void setalarmurl()
   breakTime(now(), alarmInfo[alarm_num].alarmTime);
 
   setalarm(alarm_num,
-               (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
-               (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
-               (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
-               (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
-               (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo[alarm_num].alarmTime.Minute,
-               (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo[alarm_num].alarmTime.Hour,
-               (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo[alarm_num].alarmTime.Day,
-               (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
-               (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
+           (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
+           (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
+           (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
+           (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
+           (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo[alarm_num].alarmTime.Minute,
+           (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo[alarm_num].alarmTime.Hour,
+           (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo[alarm_num].alarmTime.Day,
+           (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
+           (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
 
   sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, type %d duration %d ms repeat %d sec", alarm_num,
           hour(makeTime(alarmInfo[alarm_num].alarmTime)), minute(makeTime(alarmInfo[alarm_num].alarmTime)), second(makeTime(alarmInfo[alarm_num].alarmTime)),
@@ -1293,6 +1285,7 @@ void Draw_Clock(time_t t, byte Phase)
 
 
   if (IsDay(t)) {
+    // day mode
     if (Phase >= 1) // Draw all pixels background color
       for (int i = 0; i < NUM_LEDS; i++)
         strip.setPixelColor(ClockCorrect(i), strip.Color(Background.r, Background.g, Background.b));
@@ -1310,31 +1303,26 @@ void Draw_Clock(time_t t, byte Phase)
     if (Phase >= 4) { // Draw hands
       int iminute = minute(t);
       int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
-      strip.setPixelColor(ClockCorrect(ihour - 3), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      strip.setPixelColor(ClockCorrect(ihour - 2), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
       strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
-      strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      strip.setPixelColor(ClockCorrect(ihour + 2), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      strip.setPixelColor(ClockCorrect(ihour + 3), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-
+      for (int i = 0; i <= hour_width; i++) {
+        strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+        strip.setPixelColor(ClockCorrect(ihour + i), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
+      }
       strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
-      if (second() % 2) {
-        strip.setPixelColor(ClockCorrect(iminute - 2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute - 1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute + 1), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute + 2), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
+      uint32_t use_color;
+      if ((second() % 2) | (not minute_blink)) {
+        use_color = strip.Color(Minute.r, Minute.g, Minute.b);
       } else {
-        strip.setPixelColor(ClockCorrect(iminute - 2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute - 1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute + 1), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
-        strip.setPixelColor(ClockCorrect(iminute + 2), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+        use_color = strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2 );
+      }
+      strip.setPixelColor(ClockCorrect(iminute), use_color); // to help identification, minute hand flshes between normal and half intensity
+      for (int i = 1; i <= minute_width; i++) {
+        strip.setPixelColor(ClockCorrect(iminute - i), use_color); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute + i), use_color); // to help identification, minute hand flshes between normal and half intensity
       }
     }
-  }
-  else {
+  } else {
+    // night mode
     if (Phase >= 1) // Draw all pixels background color
       for (int i = 0; i < NUM_LEDS; i++)
         strip.setPixelColor(ClockCorrect(i), strip.Color(BackgroundNight.r, BackgroundNight.g, BackgroundNight.b));
