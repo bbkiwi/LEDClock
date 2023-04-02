@@ -57,7 +57,7 @@ const char *password = "ledclock";   // The password required to connect to it, 
 
 // OTA and mDns must have same name
 //TODO ??? PseudoSW ???
-const char *OTAandMdnsName = "LEDCLBB";           // A name and a password for the OTA and mDns service
+const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
 const char *OTAPassword = "ledclock";
 
 // must be longer than longest message
@@ -133,7 +133,7 @@ RGB SecondNight = { 0, 0, 0 }; //off
 RGB SliderColor = {0, 0, 0};
 
 // Make clock go forwards or backwards (dependant on hardware)
-bool ClockGoBackwards = false;
+bool ClockGoBackwards = true;
 
 bool minute_blink = true;
 int minute_width = 2;
@@ -1235,9 +1235,11 @@ bool SetClockFromNTP()
 }
 
 // Modified for Southern Hemisphere DST
+// NZ daylight savings ends first Sunday of April at 3AM
+// NZ daylight starts last Sunday of September at 2AM
 bool IsDst()
 {
-  int previousSunday = day() - weekday();
+  int previousSunday = day() - weekday() + 1;
   //Serial.print("    IsDst ");
   //Serial.print(month());
   //Serial.println(previousSunday);
@@ -1245,7 +1247,7 @@ bool IsDst()
   if (month() > 4 && month() < 9)  return false;
 
 
-  if (month() == 4) return previousSunday < 8;
+  if (month() == 4) return previousSunday < 1;
   if (month() == 9) return previousSunday > 23;
   return false; // this line never gonna happend
 }
@@ -1301,8 +1303,8 @@ void Draw_Clock(time_t t, byte Phase)
     }
 
     if (Phase >= 4) { // Draw hands
-      int iminute = minute(t);
-      int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
+      int iminute = (60 * minute(t) + second(t) + 30) / 60; // round to nearest minute
+      int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
       strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
       for (int i = 0; i <= hour_width; i++) {
         strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
