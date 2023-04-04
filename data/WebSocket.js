@@ -44,7 +44,11 @@ function setminute() {
 }
 
 function setsecond() {
-    connection.send("s");
+    connection.send("s" + " " + document.getElementById('widthsecond').value);
+}
+
+function setdispind() {
+      connection.send("D" + " " + document.getElementById('dispind').value);
 }
 
 function set12() {

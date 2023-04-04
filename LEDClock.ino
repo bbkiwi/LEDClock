@@ -77,67 +77,32 @@ struct TIME {
   byte Hour, Minute;
 };
 
-//************* Editable Options ******************************
-
+#define NUM_DISP_OPTIONS 5
+RGB SliderColor;
+// 5 Options for display index 0 normal day, 4 night,
 //The colour of the "12" to give visual reference to the top
-RGB Twelve = {0, 0, 60}; // blue
+RGB Twelve[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60}, {0, 0, 0}, };
 //The colour of the "quarters" 3, 6 & 9 to give visual reference
-RGB Quarters = { 0, 0, 60 }; //blue
+RGB Quarters[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60}, {0, 0, 0}, };
 //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-RGB Divisions = { 0, 0, 6 }; //blue
+RGB Divisions[NUM_DISP_OPTIONS] = {{ 0, 0, 6 }, { 0, 0, 0 }, { 0, 0, 6 }, { 0, 0, 6 }, { 0, 0, 0 } };
 //All the other pixels with no information
-RGB Background = { 0, 0, 0 }; //blue
+RGB Background[NUM_DISP_OPTIONS] = {{ 0, 0, 0 }, {255, 0, 0}};
 
 //The Hour hand
-RGB Hour = { 0, 255, 0 };//green
+RGB Hour[NUM_DISP_OPTIONS] = {{ 0, 255, 0 }, { 0, 0, 255 }, { 0, 255, 0 }, { 0, 255, 0 }, {100, 0, 0}}; //green
 //The Minute hand
-RGB Minute = { 255, 127, 0 };//orange medium
+RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 }, { 255, 255, 0 }, {0,0,0} };//yellow
 //The Second hand
-RGB Second = { 0, 0, 100 }; //blue
-/*
-  //Use black for hands
-  //The colour of the "12" to give visual reference to the top
-  RGB Twelve = {0, 100, 0}; // green
-  //The colour of the "quarters" 3, 6 & 9 to give visual reference
-  RGB Quarters = {0, 100, 0}; // green
-  //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-  RGB Divisions = {0, 100, 0}; // green
-  //All the other pixels with no information
-  RGB Background = {0, 100, 0}; // green
-
-  //The Hour hand
-  RGB Hour = { 0, 0, 0 };//black
-  //The Minute hand
-  RGB Minute = { 0, 0, 0 };//black
-  //The Second hand
-  RGB Second = { 0, 0, 0 };//black
-*/
-//Night Options
-//The colour of the "12" to give visual reference to the top
-RGB TwelveNight = {0, 0, 0}; // off
-//The colour of the "quarters" 3, 6 & 9 to give visual reference
-RGB QuartersNight = { 0, 0, 0 }; //off
-//The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-RGB DivisionsNight = { 0, 0, 0 }; //off
-//All the other pixels with no information
-RGB BackgroundNight = { 0, 0, 0 }; //off
-
-//The Hour hand
-RGB HourNight = { 100, 0, 0 };//red
-//The Minute hand
-RGB MinuteNight = { 0, 0, 0 };//off
-//The Second hand
-RGB SecondNight = { 0, 0, 0 }; //off
-
-//To save color set by slider
-RGB SliderColor = {0, 0, 0};
+RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = true;
-
-bool minute_blink = true;
-int minute_width = 2;
-int hour_width = 3;
+int day_disp_ind = 0;
+bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
+int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
+int hour_width[NUM_DISP_OPTIONS] = {3, 5, 3, 3, 0};
+int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 
 //Set brightness by time for night and day mode
 TIME WeekNight = {18, 00}; // Night time to go dim
@@ -943,11 +908,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
         int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
         int b =          rgb & 0x3FF;                      // B: bits  0-9
+        // r,g,b now from 0 to 1023
         sprintf(buf, "led color r = %d, g = %d, b = %d", r, g, b);
+        // scale from 0 to 255
         SliderColor  = {r >> 2, g >> 2, b >> 2};
         //webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
-        led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2); // colors 0 to 255
+        led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2);
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'V') {                      // browser sent V to save config file
@@ -961,22 +928,25 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           webSocket.sendTXT(num, buf);
         }
       } else if (payload[0] == 'B') {                      // browser sent B to set Background color from SliderColor
-        Background = SliderColor;
+        Background[day_disp_ind] = SliderColor;
       } else if (payload[0] == 't') {                      // browser sent t to set Twelve color from SliderColor
-        Twelve = SliderColor;
+        Twelve[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'q') {                      // browser sent q to set Quarters color from SliderColor
-        Quarters = SliderColor;
+        Quarters[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'd') {                      // browser sent d to set Divisions color from SliderColor
-        Divisions = SliderColor;
+        Divisions[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'H') {                      // browser sent H to set Hour hand color from SliderColor
-        hour_width = payload[1] - '0';
-        Hour = SliderColor;
+        hour_width[day_disp_ind] = payload[1] - '0';
+        Hour[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
-        minute_width = payload[3] - '0';
-        minute_blink = (payload[1] == '1');
-        Minute = SliderColor;
+        minute_width[day_disp_ind] = payload[3] - '0';
+        minute_blink[day_disp_ind] = (payload[1] == '1');
+        Minute[day_disp_ind] = SliderColor;
       } else if (payload[0] == 's') {                      // browser sent s to set Second hand color from SliderColor
-        Second = SliderColor;
+        second_width[day_disp_ind] = payload[2] - '0';
+        Second[day_disp_ind] = SliderColor;
+      } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
+        day_disp_ind = payload[2] - '0';
       } else if (payload[0] == 'R') {                      // the browser sends an RNN when the rainbow effect is enabled
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%2d", &light_alarm_num);
@@ -1281,77 +1251,62 @@ void printDigits(int digits)
 //************* Functions to draw the clock ******************************
 void Draw_Clock(time_t t, byte Phase)
 {
-  if (Phase <= 0) // Set all pixes black
+  if (Phase <= 0) // Set all pixels black
     for (int i = 0; i < NUM_LEDS; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
+  int disp_ind;
+  disp_ind = IsDay(t) ?  day_disp_ind : 4;
 
-  if (IsDay(t)) {
-    // day mode
-    if (Phase >= 1) // Draw all pixels background color
-      for (int i = 0; i < NUM_LEDS; i++)
-        strip.setPixelColor(ClockCorrect(i), strip.Color(Background.r, Background.g, Background.b));
+  if (Phase >= 1) // Draw all pixels background color
+    for (int i = 0; i < NUM_LEDS; i++)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b));
 
-    if (Phase >= 2) // Draw 5 min divisions
-      for (int i = 0; i < NUM_LEDS; i = i + 5)
-        strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions.r, Divisions.g, Divisions.b)); // for Phase = 2 or more, draw 5 minute divisions
+  if (Phase >= 2) // Draw 5 min divisions
+    for (int i = 0; i < NUM_LEDS; i = i + 5)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
 
-    if (Phase >= 3) { // Draw 15 min markers
-      for (int i = 0; i < NUM_LEDS; i = i + 15)
-        strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters.r, Quarters.g, Quarters.b));
-      strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve.r, Twelve.g, Twelve.b));
+  if (Phase >= 3) { // Draw 15 min markers
+    for (int i = 0; i < NUM_LEDS; i = i + 15)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
+    strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b));
+  }
+
+  if (Phase >= 4) { // Draw hands
+    int isecond = second(t);
+    int iminute = (60 * minute(t) + isecond + 30) / 60; // round to nearest minute
+    int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
+    //hour
+    strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+    for (int i = 0; i <= hour_width[disp_ind]; i++) {
+      strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+      strip.setPixelColor(ClockCorrect(ihour + i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
     }
-
-    if (Phase >= 4) { // Draw hands
-      int iminute = (60 * minute(t) + second(t) + 30) / 60; // round to nearest minute
-      int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
-      strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour.r, Hour.g, Hour.b));
-      for (int i = 0; i <= hour_width; i++) {
-        strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-        strip.setPixelColor(ClockCorrect(ihour + i), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      }
-      strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
-      uint32_t use_color;
-      if ((second() % 2) | (not minute_blink)) {
-        use_color = strip.Color(Minute.r, Minute.g, Minute.b);
+    //minute on top of hour
+    uint32_t use_color;
+    if (minute_width[disp_ind] >= 0) {
+      // optional to help identification, minute hand flshes between normal and half intensity
+      if ((second() % 2) | (not minute_blink[disp_ind])) {
+        use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
       } else {
-        use_color = strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2 );
+        use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
       }
-      strip.setPixelColor(ClockCorrect(iminute), use_color); // to help identification, minute hand flshes between normal and half intensity
-      for (int i = 1; i <= minute_width; i++) {
+      strip.setPixelColor(ClockCorrect(iminute), use_color);
+      for (int i = 1; i <= minute_width[disp_ind]; i++) {
         strip.setPixelColor(ClockCorrect(iminute - i), use_color); // to help identification, minute hand flshes between normal and half intensity
         strip.setPixelColor(ClockCorrect(iminute + i), use_color); // to help identification, minute hand flshes between normal and half intensity
       }
     }
-  } else {
-    // night mode
-    if (Phase >= 1) // Draw all pixels background color
-      for (int i = 0; i < NUM_LEDS; i++)
-        strip.setPixelColor(ClockCorrect(i), strip.Color(BackgroundNight.r, BackgroundNight.g, BackgroundNight.b));
-
-    if (Phase >= 2) // Draw 5 min divisions
-      for (int i = 0; i < NUM_LEDS; i = i + 5)
-        strip.setPixelColor(ClockCorrect(i), strip.Color(DivisionsNight.r, DivisionsNight.g, DivisionsNight.b)); // for Phase = 2 or more, draw 5 minute divisions
-
-    if (Phase >= 3) { // Draw 15 min markers
-      for (int i = 0; i < NUM_LEDS; i = i + 15)
-        strip.setPixelColor(ClockCorrect(i), strip.Color(QuartersNight.r, QuartersNight.g, QuartersNight.b));
-      strip.setPixelColor(ClockCorrect(0), strip.Color(TwelveNight.r, TwelveNight.g, TwelveNight.b));
-    }
-
-    if (Phase >= 4) { // Draw hands
-      int iminute = minute(t);
-      int ihour = ((hour(t) % 12) * 5) + minute(t) / 12;
-      //strip.setPixelColor(ClockCorrect(ihour - 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      strip.setPixelColor(ClockCorrect(ihour), strip.Color(HourNight.r, HourNight.g, HourNight.b));
-      //strip.setPixelColor(ClockCorrect(ihour + 1), strip.Color(Hour.r / 4, Hour.g / 4, Hour.b / 4));
-      //strip.setPixelColor(ClockCorrect(second(t)), strip.Color(Second.r, Second.g, Second.b));
-      //if (second() % 2)
-      //  strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r, Minute.g, Minute.b)); // to help identification, minute hand flshes between normal and half intensity
-      //else
-      //  strip.setPixelColor(ClockCorrect(iminute), strip.Color(Minute.r / 2, Minute.g / 2, Minute.b / 2)); // lower intensity minute hand
+    //second on top of both
+    if (second_width[disp_ind] >= 0) {
+      strip.setPixelColor(ClockCorrect(isecond), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+      for (int i = 0; i <= second_width[disp_ind]; i++) {
+        strip.setPixelColor(ClockCorrect(isecond - i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        strip.setPixelColor(ClockCorrect(isecond + i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+      }
     }
   }
+
   SetBrightness(t); // Set the clock brightness dependant on the time
   strip.show(); // show all the pixels
 }
@@ -1360,7 +1315,6 @@ bool IsDay(time_t t)
 {
   int NowHour = hour(t);
   int NowMinute = minute(t);
-
   if ((weekday() >= 2) && (weekday() <= 6))
     if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
       return false;
