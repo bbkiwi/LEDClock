@@ -92,7 +92,7 @@ RGB Background[NUM_DISP_OPTIONS] = {{ 0, 0, 0 }, {255, 0, 0}};
 //The Hour hand
 RGB Hour[NUM_DISP_OPTIONS] = {{ 0, 255, 0 }, { 0, 0, 255 }, { 0, 255, 0 }, { 0, 255, 0 }, {100, 0, 0}}; //green
 //The Minute hand
-RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 }, { 255, 255, 0 }, {0,0,0} };//yellow
+RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 }, { 255, 255, 0 }, {0, 0, 0} }; //yellow
 //The Second hand
 RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
@@ -266,7 +266,7 @@ void loop() {
   MDNS.update();                              // must have above as well
 
   if (light_alarm_num)  {
-    show_alarm_pattern(light_alarm_num);
+    show_alarm_pattern(light_alarm_num, 10000);
     light_alarm_num = 0;
   }
 
@@ -292,6 +292,8 @@ void loop() {
   }
 
   // Check for alarms
+  // Note if multiple alarms scheduled for same time they will go consecutively
+  //
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
     if (alarmInfo[alarm_ind].alarmSet && prevDisplay >= makeTime(alarmInfo[alarm_ind].alarmTime))
     {
@@ -299,7 +301,7 @@ void loop() {
         // only show the alarm if close to set time
         // this prevents alarm from going off on a restart where configured alarm is in past
         currentTime = now();
-        showlights(alarmInfo[alarm_ind].duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
+        show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
         // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
         Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
         sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
@@ -357,130 +359,130 @@ void loop() {
   delay(10); // needed to keep wifi going
 }
 
-void show_alarm_pattern(byte light_alarm_num) {
+void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
   Serial.println(light_alarm_num);
   switch (light_alarm_num) {
     case 1:
-      showlights(10000, -1, -1, -1, -1, -1, -1, 10, -1, now());
+      showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1, now());
       break;
     case 2:
-      showlights(10000, -1, -1, -1, -1, -1, -1, 5, -1, now());
+      showlights(duration, -1, -1, -1, -1, -1, -1, 5, -1, now());
       break;
     case 3:
-      showlights(10000, -1, -1, -1, -1, -1, -1, 1, -1, now());
+      showlights(duration, -1, -1, -1, -1, -1, -1, 1, -1, now());
       break;
     case 4:
-      showlights(10000, -1, -1, -1, -1, -1, -1, 0, -1, now());
+      showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
       break;
     case 5:
-      moveworms(1, now(), 2000);
+      moveworms(1, now(), duration);
       break;
     case 6:
-      moveworms(5, now(), 2000);
+      moveworms(5, now(), duration);
       break;
     case 7:
       //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
-      cellularAutomata(250, 26, 30, 60, random(65535), now(), 10000);
+      cellularAutomata(250, 26, 30, 60, random(65535), now(), duration);
       break;
     case 8:
-      cellularAutomata(250, 26, 26, 26, random(65535), now(), 10000);
+      cellularAutomata(250, 26, 26, 26, random(65535), now(), duration);
       break;
     case 9:
-      cellularAutomata(250, 30, 30, 30, random(65535), now(), 10000);
+      cellularAutomata(250, 30, 30, 30, random(65535), now(), duration);
       break;
     case 10:
-      cellularAutomata(250, 60, 60, 60, random(65535), now(), 10000);
+      cellularAutomata(250, 60, 60, 60, random(65535), now(), duration);
       break;
     case 11:
-      // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), 10000);
-      cellularAutomata(250, 110, 110, 110, random(65535), now(), 10000);
+      // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), duration);
+      cellularAutomata(250, 110, 110, 110, random(65535), now(), duration);
       break;
     case 12:
-      cellularAutomata(50, 26, random(65535), now(), 10000);
+      cellularAutomata(50, 26, random(65535), now(), duration);
       break;
     case 13:
-      cellularAutomata(50, 30, random(65535), now(), 10000);
+      cellularAutomata(50, 30, random(65535), now(), duration);
       break;
     case 14:
-      cellularAutomata(50, 45, random(65535), now(), 10000);
+      cellularAutomata(50, 45, random(65535), now(), duration);
       break;
     case 15:
-      cellularAutomata(50, 57, random(65535), now(), 10000);
+      cellularAutomata(50, 57, random(65535), now(), duration);
       break;
     case 16:
-      cellularAutomata(50, 60, random(65535), now(), 10000);
+      cellularAutomata(50, 60, random(65535), now(), duration);
       break;
     case 17:
-      cellularAutomata(50, 73, random(65535), now(), 10000);
+      cellularAutomata(50, 73, random(65535), now(), duration);
       break;
     case 18:
-      cellularAutomata(50, 110, random(65535), now(), 10000);
+      cellularAutomata(50, 110, random(65535), now(), duration);
       break;
     case 19:
-      fire(now(), 10000);
+      fire(now(), duration);
       break;
     case 20:
-      firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+      firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
       break;
     case 21:
-      firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), 10000);
+      firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
       break;
     case 22:
-      firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), 10000);
+      firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), duration);
       break;
     case 23:
-      firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), 10000);
+      firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), duration);
       break;
     case 24:
-      firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), 10000);
+      firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), duration);
       break;
     case 25:
-      rainbow2(0, 1, 0, 256, 1, 1, 15, now(), 3000); // full rainbow ring rotating
+      rainbow2(0, 1, 0, 256, 1, 1, 15, now(), duration); // full rainbow ring rotating
       break;
     case 26:
-      rainbow2(0, 1, 0, 32, 1, 1, 15, now(), 3000);  // full rainbox ring rotating 8 times slower
+      rainbow2(0, 1, 0, 32, 1, 1, 15, now(), duration);  // full rainbox ring rotating 8 times slower
       break;
     case 27:
-      rainbow2(0, 1, 0, 256, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating
+      rainbow2(0, 1, 0, 256, 4, 1, 15, now(), duration); // 4 full rainbows in ring rotating
       break;
     case 28:
-      rainbow2(0, 1, 0, 32, 4, 1, 15, now(), 3000); // 4 full rainbows in ring rotating 8 times slower
+      rainbow2(0, 1, 0, 32, 4, 1, 15, now(), duration); // 4 full rainbows in ring rotating 8 times slower
       break;
     case 29:
-      rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), 3000); // 4 full rainbows as above starting different place
+      rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), duration); // 4 full rainbows as above starting different place
       break;
     case 30:
-      rainbow2(0, 2, 0, 256, 4, 1, 15, now(), 3000); //  4 full and 4 reverse flowing from 15 min
+      rainbow2(0, 2, 0, 256, 4, 1, 15, now(), duration); //  4 full and 4 reverse flowing from 15 min
       break;
     case 31:
-      rainbow2(0, 2, 0, 256, 1, 4, 15, now(), 3000); //  1/4 rainbox and its reverse flowing from 15 min
+      rainbow2(0, 2, 0, 256, 1, 4, 15, now(), duration); //  1/4 rainbox and its reverse flowing from 15 min
       break;
     case 32:
-      rainbow2(0, 2, 0, 256, 1, 4, 30, now(), 3000); //  1/4 rainbox and its reverse flowing from 30 min
+      rainbow2(0, 2, 0, 256, 1, 4, 30, now(), duration); //  1/4 rainbox and its reverse flowing from 30 min
       break;
     case 33:
-      rainbow2(0, 2, 0, 16, 1, 4, 30, now(), 3000); //   1/64 rainbox and its reverse flowing from 30 min
+      rainbow2(0, 2, 0, 16, 1, 4, 30, now(), duration); //   1/64 rainbox and its reverse flowing from 30 min
       break;
     case 34:
-      rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), 3000); // start diff place 1/64 rainbox and its reverse flowing from 30 min
+      rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from 30 min
       break;
     case 35:
-      rainbow2(0, 3, 0, 256, 1, 1, 15, now(), 3000);
+      rainbow2(0, 3, 0, 256, 1, 1, 15, now(), duration);
       break;
     case 36:
-      rainbow2(0, 3, 0, 256, 4, 1, 15, now(), 3000);
+      rainbow2(0, 3, 0, 256, 4, 1, 15, now(), duration);
       break;
     case 37:
-      rainbow2(0, 4, 0, 256, 1, 1, 15, now(), 3000);
+      rainbow2(0, 4, 0, 256, 1, 1, 15, now(), duration);
       break;
     case 38:
-      rainbow2(0, 4, 0, 256, 4, 1, 15, now(), 3000);
+      rainbow2(0, 4, 0, 256, 4, 1, 15, now(), duration);
       break;
     case 39:
-      rainbow2(0, 5, 0, 256, 1, 1, 15, now(), 3000);
+      rainbow2(0, 5, 0, 256, 1, 1, 15, now(), duration);
       break;
     default:
-      rainbow2(0, 5, 0, 256, 4, 1, 15, now(), 3000);
+      rainbow2(0, 5, 0, 256, 4, 1, 15, now(), duration);
   }
 }
 
