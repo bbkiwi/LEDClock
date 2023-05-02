@@ -1,41 +1,35 @@
-/*********
-  Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
-  //https://github.com/PaulStoffregen/Time
-
-   2 Jan 2023
-   Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
-       and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
+/**
+      LEDClock using tasks
+      NOTE If have two strips defined with same pin
+        Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+        Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+        both can be used.
+        USES: if strip.show(); strip2.show();    acts like sending data to led strip of joined length
+              if have tasks to flip between the two shows, then will mix.
+        can call strip.show() and strip2.show() to alternate
+        also if call one after the other acts like joining two strips as very little gap between signals sent.
+  Test on Generic ESP8266 module (swage) 2MB with 256K FS
+  Test on Esp8266 Node bread board attached to 60 LED ring 4MB 2 MB FS
 */
 
-//NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
-/************* Declare included libraries ******************************/
-#include <NTPClient.h>
-#include <TimeLib.h>
-#include <Adafruit_NeoPixel.h>
-#include <string.h>
-#include "pitches.h"
-#include "sunset.h"
-
-/************ NOTE __has_include not work for esp8266
-  #if __has_include ("localwificonfig.h")
-  #  include "localwificonfig.h"
-  #endif
-  #ifndef homeSSID
-  #  define homeSSID "homeSSID"
-  #  define homePW "homePW"
-  #endif
-*************/
-// So MUST have this file which defines homeSSID and homePW
-#include "localwificonfig.h"
-
+//#define _TASK_SLEEP_ON_IDLE_RUN
+#define _TASK_STATUS_REQUEST
+#define _TASK_LTS_POINTER       // Compile with support for Local Task Storage pointer
+#include <TaskScheduler.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-#include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
+#include <WebSocketsServer.h>
+#include <WiFiUdp.h>
+#include <Adafruit_NeoPixel.h>
+#include <TimeLib.h>
 #include <FS.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
+#include <string.h>
+#include "pitches.h"
+#include "sunset.h"
+#include <ArduinoOTA.h>
+#include <ESP8266mDNS.h>
 
 /* Cass Bay */
 #define LATITUDE        -43.601131
@@ -45,26 +39,19 @@
 
 SunSet sun;
 
-ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
+
 ESP8266WebServer server(80);       // create a web server on port 80
 WebSocketsServer webSocket(81);    // create a websocket server on port 81
 uint8_t websocketId_num = 0;
 
 File fsUploadFile;                                    // a File variable to temporarily store the received file
 
-const char *ssid = "LED Clock Access Point"; // The name of the Wi-Fi network that will be created
-const char *password = "ledclock";   // The password required to connect to it, leave blank for an open network
-
 // OTA and mDns must have same name
-//TODO ??? PseudoSW ???
-const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
-const char *OTAPassword = "ledclock";
+const char *OTAandMdnsName = "ClockTest";           // A name and a password for the OTA and mDns service
+const char *OTAPassword = "pass";
 
 // must be longer than longest message
 char buf[200];
-
-
-time_t currentTime;
 
 //************* Declare structures ******************************
 //Create structure for LED RGB information
@@ -77,6 +64,7 @@ struct TIME {
   byte Hour, Minute;
 };
 
+//************* Editable Options ******************************
 #define NUM_DISP_OPTIONS 5
 RGB SliderColor;
 // 5 Options for display index 0 normal day, 4 night,
@@ -97,12 +85,13 @@ RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 },
 RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 // Make clock go forwards or backwards (dependant on hardware)
-bool ClockGoBackwards = true;
+bool ClockGoBackwards = false;
 int day_disp_ind = 0;
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
 int hour_width[NUM_DISP_OPTIONS] = {3, 5, 3, 3, 0};
 int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
+
 
 //Set brightness by time for night and day mode
 TIME WeekNight = {18, 00}; // Night time to go dim
@@ -118,29 +107,21 @@ TIME NauticalSunset;
 TIME AstroSunrise;
 TIME AstroSunset;
 
-
 byte day_brightness = 127;
 byte night_brightness = 16;
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
 
-
 String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 String monthNames[13] = {"dummy", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
-bool ota_flag = true;
+
 bool sound_alarm_flag = false;
 int light_alarm_num = 0;
-bool led_color_alarm_flag = false;
+bool light_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
-//tmElements_t alarmTime;
+#define LED_SHOW_TIME 2*TASK_SECOND
 tmElements_t calcTime = {0};
-
-//typedef enum {
-//  ONCE,
-//  DAILY,
-//  WEEKLY
-//} alarmType;
 
 struct ALARM {
   bool alarmSet = false;
@@ -152,10 +133,6 @@ struct ALARM {
 
 #define NUM_ALARMS 5
 ALARM alarmInfo[NUM_ALARMS];
-//alarmInfo.alarmSet = false;
-
-
-//bool alarmSet = false;
 
 uint16_t time_elapsed = 0;
 int TopOfClock = 15; // to make given pixel the top
@@ -171,17 +148,27 @@ int whole_note_duration = 1000; // milliseconds
 int noteDurations[] = {
   4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 4
 };
+int melodyNoteIndex;
 
+// for trainbow parms for call back
+typedef struct {
+  long firstPixelHue;
+  long start;
+  int wait = 5;
+  int ex = 1;
+  long firsthue;
+  int hueinc = 256;
+  int ncolorloop = 1;
+  int ncolorfrac = 1;
+  int nodepix = 0;
+  uint16_t duration = 10000;
+} rainbow_parm;
 
-WiFiUDP ntpUDP;
-//NTPClient timeClient(ntpUDP);
-unsigned long int update_interval_secs = 3601;
-NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
+rainbow_parm rainbowParm;
 
-// Which pin on the ESP8266 is connected to the NeoPixels?
-#define NEOPIXEL_PIN 3      // This is the D9 pin
-#define PIEZO_PIN 5         // This is D1
-#define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
+#include "localwificonfig.h"
+Scheduler ts;
+
 
 //************* Declare user functions ******************************
 void Draw_Clock(time_t t, byte Phase);
@@ -191,26 +178,104 @@ bool SetClockFromNTP();
 bool IsDst();
 bool IsDay();
 
+#define CONNECT_TIMEOUT   30      // Seconds
+#define CONNECT_OK        0       // Status of successful connection to WiFi
+#define CONNECT_FAILED    (-99)   // Status of failed connection to WiFi
+#define NTP_CHECK_SEC  36001       // NTP server called every interval
+// NTP Related Definitions
+#define NTP_PACKET_SIZE  48       // NTP time stamp is in the first 48 bytes of the message
+
+// Callback methods prototypes
+void connectInit();
+void ledCallback();
+bool ledOnEnable();
+void ledOnDisable();
+void ledRed();
+void ledBlue();
+void ntpUpdateInit();
+void ntpCheck();
+void serverRun();
+void webSocketRun();
+void OTARun();
+void MDNSRun();
+void playMelody();
+bool playMelodyOnEnable();
+void playMelodyOnDisable();
+void changeClock();
+void led_color_alarm();
+//bool led_color_alarmOnEnable();
+void rainbowCallback();
+//void rainbowOnDisable();
+bool rainbowOnEnable();
+
+// Tasks
+
+//TODO should tConnect be started in setup?
+Task  tConnect    (TASK_SECOND, TASK_FOREVER, &connectInit, &ts, true);
+Task  tRunServer  (TASK_SECOND / 16, TASK_FOREVER, &serverRun, &ts, false);
+Task  tRunWebSocket  (TASK_SECOND / 16, TASK_FOREVER, &webSocketRun, &ts, false);
+Task  tOTARun  (TASK_SECOND / 16, TASK_FOREVER, &OTARun, &ts, false);
+Task  tMDNSRun  (TASK_SECOND / 16, TASK_FOREVER, &MDNSRun, &ts, false);
+Task  tLED        (TASK_IMMEDIATE, TASK_FOREVER, &ledCallback, &ts, false, &ledOnEnable, &ledOnDisable);
+Task  tplayMelody (TASK_IMMEDIATE, TASK_FOREVER, &playMelody, &ts, false, &playMelodyOnEnable, &playMelodyOnDisable);
+Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
+Task trainbow (TASK_IMMEDIATE, TASK_FOREVER, &rainbowCallback, &ts, false, &rainbowOnEnable);
+Task tLed_color_alarm (TASK_IMMEDIATE, TASK_ONCE, &led_color_alarm, &ts, false);
+Task tntpCheck ( TASK_SECOND, CONNECT_TIMEOUT, &ntpCheck, &ts, false );
+// Tasks running on events
+Task  tntpUpdate  (&ntpUpdateInit, &ts);
+
+
+
+long  ledDelayRed, ledDelayBlue;
+
+IPAddress     timeServerIP;       // time.nist.gov NTP server address
+const char*   ntpServerName = "nz.pool.ntp.org";
+byte          packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+unsigned long epoch;
+
+WiFiUDP udp;                      // A UDP instance to let us send and receive packets over UDP
+
+#define LOCAL_NTP_PORT  2390      // Local UDP port for NTP update
+
+// Which pin on the ESP8266 is connected to the NeoPixels?
+#define NEOPIXEL_PIN 3      // This is the D9 pin
+#define PIEZO_PIN 5         // This is D1
+#define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
 
 //************* Declare NeoPixel ******************************
-//Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
+//Using 1M WS2812B 5050 RGB Non-Waterproof 16 LED Ring
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
 #define NUM_LEDS 60
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel stripred = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
 bool ClockInitialized = false;
+
+time_t currentTime;
 time_t nextCalcTime;
 time_t nextAlarmTime;
 
-const int ESP_BUILTIN_LED = 2;
-
 void setup() {
-  Serial.begin(115200);        // Start the Serial communication to send messages to the computer
-  delay(10);
-  Serial.println("\r\n");
+  Serial.begin(115200);
+  delay(10); // Needed???
+  Serial.println(F("LED CLOCK with modified TaskScheduler test #14 - Yield and internal StatusRequests"));
+  Serial.println(F("=========================================================="));
+  Serial.println();
+  tntpUpdate.waitFor( tConnect.getInternalStatusRequest() );  // NTP Task will start only after connection is made
   sun.setPosition(LATITUDE, LONGITUDE, DST_OFFSET);
-  startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
+  startWebSocket();            // Start a WebSocket server
+  startMDNS();                 // Start the mDNS responder
+  startServer();               // Start a HTTP server with a file read handler and an upload handler
   startOTA();                  // Start the OTA service
   startSPIFFS();               // Start the SPIFFS and list all contents
+  strip.begin(); // This initializes the NeoPixel library.
+  stripred.begin(); // This initializes the NeoPixel library.
+  stripblue.begin(); // This initializes the NeoPixel library.
+  stripred.fill(0x100000);
+  stripblue.fill(0x000010);
+  randomSeed(now());
 
   // Initialize alarmTime(s) to default (now)
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
@@ -222,6 +287,7 @@ void setup() {
     //Serial.println();
     Serial.println(buf);
   }
+
 
   if (!loadConfig()) {
     Serial.println("Failed to load config will use defaults");
@@ -244,388 +310,315 @@ void setup() {
       Serial.println(buf);
     }
   }
-  startWebSocket();            // Start a WebSocket server
-  startMDNS();                 // Start the mDNS responder
-  startServer();               // Start a HTTP server with a file read handler and an upload handler
-  strip.begin(); // This initializes the NeoPixel library.
-  colorAll(strip.Color(127, 0, 0), 1000, now());
-  Draw_Clock(0, 3); // Add the quater hour indicators
-  ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
-  calcSun();
-  randomSeed(now());
-  //pinMode(ESP_BUILTIN_LED, OUTPUT);
-}
 
-/*___________________LOOP__________________________________________________________*/
-time_t prevDisplay = 0; // when the digital clock was displayed
+  //colorAll(strip.Color(127, 0, 0), 1000, now());
+  //Draw_Clock(0, 3); // Add the quater hour indicators
+  calcSun();
+
+  // Must be here in startup
+  trainbow.setLtsPointer (&rainbowParm);
+}
 
 void loop() {
-  webSocket.loop();                           // constantly check for websocket events
+  ts.execute();                   // Only Scheduler should be executed in the loop
+}
+
+/**
+   Initiate connection to the WiFi network
+*/
+void connectInit() {
+  Serial.print(millis());
+  Serial.println(F(": connectInit."));
+  Serial.println(F("WiFi parameters: "));
+  Serial.print(F("SSID: ")); Serial.println(homeSSID);
+  Serial.print(F("PWD : ")); Serial.println(homePW);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.hostname("esp8266");
+  WiFi.begin(homeSSID, homePW);
+  yield();
+
+  ledDelayRed = TASK_SECOND / 2;
+  ledDelayBlue = TASK_SECOND / 4;
+  tLED.enable();
+
+  tConnect.yield(&connectCheck);            // This will pass control back to Scheduler and then continue with connection checking
+}
+
+/**
+   Periodically check if connected to WiFi
+   Re-request connection every 5 seconds
+   Stop trying after a timeout
+*/
+void connectCheck() {
+  Serial.print(millis());
+  Serial.println(F(": connectCheck."));
+
+  if (WiFi.status() == WL_CONNECTED) {                // Connection established
+    Serial.print(millis());
+    Serial.print(F(": Connected to AP. Local ip: "));
+    Serial.println(WiFi.localIP());
+    tConnect.disable();
+    tRunServer.enable();
+    tRunWebSocket.enable();
+    tOTARun.enable();
+    tMDNSRun.enable();
+  }
+  else {
+
+    if (tConnect.getRunCounter() % 5 == 0) {          // re-request connection every 5 seconds
+
+      Serial.print(millis());
+      Serial.println(F(": Re-requesting connection to AP..."));
+
+      WiFi.disconnect(true);
+      yield();                                        // This is an esp8266 standard yield to allow linux wifi stack run
+      WiFi.hostname("esp8266");
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(homeSSID, homePW);
+      yield();                                        // This is an esp8266 standard yield to allow linux wifi stack run
+    }
+
+    if (tConnect.getRunCounter() == CONNECT_TIMEOUT) {  // Connection Timeout
+      tConnect.getInternalStatusRequest()->signal(CONNECT_FAILED);  // Signal unsuccessful completion
+      tConnect.disable();
+
+      Serial.print(millis());
+      Serial.println(F(": connectOnDisable."));
+      Serial.print(millis());
+      Serial.println(F(": Unable to connect to WiFi."));
+
+      ledDelayRed = TASK_SECOND / 16;                  // Blink LEDs quickly due to error
+      ledDelayBlue = TASK_SECOND / 16;
+      tLED.enable();
+    }
+  }
+}
+
+/**
+   Initiate NTP update if connection was established
+*/
+void ntpUpdateInit() {
+  Serial.println();
+  Serial.print(millis());
+  Serial.println(F(": ntpUpdateInit."));
+
+  if ( tConnect.getInternalStatusRequest()->getStatus() != CONNECT_OK ) {  // Check status of the Connect Task
+    Serial.print(millis());
+    Serial.println(F(": cannot update NTP - not connected."));
+    return;
+  }
+
+  udp.begin(LOCAL_NTP_PORT);
+  if ( WiFi.hostByName(ntpServerName, timeServerIP) ) { //get a random server from the pool
+
+    Serial.print(millis());
+    Serial.print(F(": timeServerIP = "));
+    Serial.println(timeServerIP);
+
+    sendNTPpacket(timeServerIP); // send an NTP packet to a time server
+  }
+  else {
+    Serial.print(millis());
+    Serial.println(F(": NTP server address lookup failed."));
+    tLED.disable();
+    udp.stop();
+    tntpUpdate.disable();
+    return;
+  }
+
+  ledDelayRed = TASK_SECOND / 8;
+  ledDelayBlue = TASK_SECOND / 8;
+  tLED.enable();
+
+  // check NTP server response
+  tntpCheck.enableDelayed();
+}
+
+
+void serverRun () {
   server.handleClient();                      // run the server
+}
+
+void webSocketRun () {
+  webSocket.loop();                           // constantly check for websocket events
+}
+
+void OTARun () {
   ArduinoOTA.handle();                        // listen for OTA events
-  MDNS.update();                              // must have above as well
+}
 
-  if (light_alarm_num)  {
-    show_alarm_pattern(light_alarm_num, 10000);
-    light_alarm_num = 0;
+void MDNSRun () {
+  MDNS.update();                              // check for MDNS
+}
+
+
+// Modified for Southern Hemisphere DST
+// NZ daylight savings ends first Sunday of April at 3AM
+// NZ daylight starts last Sunday of September at 2AM
+bool IsDst()
+{
+  int previousSunday = day() - weekday() + 1;
+  //Serial.print("    IsDst ");
+  //Serial.print(month());
+  //Serial.println(previousSunday);
+  if (month() < 4 || month() > 9)  return true;
+  if (month() > 4 && month() < 9)  return false;
+
+
+  if (month() == 4) return previousSunday < 1;
+  if (month() == 9) return previousSunday > 23;
+  return false; // this line never gonna happen
+}
+
+
+/**
+   Check if NTP packet was received
+   Re-request every 5 seconds
+   Stop trying after a timeout
+*/
+void ntpCheck() {
+  Serial.print(millis());
+  Serial.println(F(": ntpCheck."));
+
+  // The last iteration will only occur if fails to update
+  if ( tntpCheck.isLastIteration() ) {
+    Serial.print(millis());
+    Serial.println(F(": NTP Update failed"));
+    ledDelayRed = TASK_SECOND / 2;
+    ledDelayBlue = TASK_SECOND / 16;
+    //TODO could reschedual in shorter time than usual
+    tntpUpdate.restartDelayed(NTP_CHECK_SEC * TASK_SECOND);
+    //tLED.disable();
+    udp.stop();
+    return;
   }
 
-  if (led_color_alarm_flag)  {
-    colorAll(led_color_alarm_rgb, 1000, now());
-    led_color_alarm_flag = false;
+  //  if ( tntpUpdate.getRunCounter() % 5 == 0) {
+  if ( tntpCheck.getRunCounter() % 5 == 0) {
+
+    Serial.print(millis());
+    Serial.println(F(": Re-requesting NTP update..."));
+
+    udp.stop();
+    yield();
+    udp.begin(LOCAL_NTP_PORT);
+    sendNTPpacket(timeServerIP);
+    return;
   }
 
-  if (sound_alarm_flag) {
-    Serial.println("sound flag on\n");
-    playsong(melody, noteDurations, whole_note_duration, PIEZO_PIN);
-    //BUG? if use below generates tone, but then clock produces spurious leds
-    // lighting up on ring (obvious in night mode)
-    // something to do with timer2 changed???
-    //tone(PIEZO_PIN, 300, 1000);
-    // This code does seem to cause the problem
-    //  will try implementing playsong to use noTone as
-    // below which is not causeing spurious leds lighting
-    //tone(PIEZO_PIN, 300);
-    //delay(1000);
-    //noTone(PIEZO_PIN);
-    sound_alarm_flag = false;
+  if ( doNtpUpdateCheck()) {
+    Serial.print(millis());
+    Serial.println(F(": NTP Update successful"));
+    Serial.printf("now %d\n", now());
+    Serial.print(millis());
+    Serial.print(F(": Unix time = "));
+    Serial.println(epoch);
+    setTime(epoch);
+    adjustTime(hours_Offset_From_GMT * 3600);
+    if (IsDst()) adjustTime(3600); // offset the system time by an hour for Daylight Savings
+    Serial.printf("now fixed %d\n", now());
+    ClockInitialized = true;
+    //ledDelayRed = TASK_SECOND / 3; //1
+    //ledDelayBlue = 2 * TASK_SECOND; //2
+    tLED.disable();
+    tchangeClock.enable();
+    tntpCheck.disable();
+    tntpUpdate.restartDelayed(NTP_CHECK_SEC * TASK_SECOND);
+    udp.stop();
   }
+}
 
-  // Check for alarms
-  // Note if multiple alarms scheduled for same time they will go consecutively
-  //
-  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    if (alarmInfo[alarm_ind].alarmSet && prevDisplay >= makeTime(alarmInfo[alarm_ind].alarmTime))
-    {
-      if (prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime)) {
-        // only show the alarm if close to set time
-        // this prevents alarm from going off on a restart where configured alarm is in past
-        currentTime = now();
-        show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
-        // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
-        Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
-        sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
-                second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
-                monthNames[month(currentTime)].c_str(), year(currentTime));
-        Serial.println();
-        Serial.println(buf);
-        webSocket.sendTXT(websocketId_num, buf);
-      }
+/**
+   Send NTP packet to NTP server
+*/
+void sendNTPpacket(IPAddress & address)
+{
+  Serial.print(millis());
+  Serial.println(F(": sendNTPpacket."));
 
-      if (alarmInfo[alarm_ind].repeat <= 0)
-      {
-        alarmInfo[alarm_ind].alarmSet = false;
-      } else { // update next repeat
-        nextAlarmTime = makeTime(alarmInfo[alarm_ind].alarmTime);
-        currentTime = now();
-        while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo[alarm_ind].repeat;
-        breakTime(nextAlarmTime, alarmInfo[alarm_ind].alarmTime);
-        sprintf(buf, "Next Alarm [%d] %d:%02d:%02d %s %d %s %d", alarm_ind, hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
-        Serial.println();
-        Serial.println(buf);
-        webSocket.sendTXT(websocketId_num, buf);
-      }
-    }
+  // set all bytes in the buffer to 0
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  // Initialize values needed to form NTP request
+  // (see URL above for details on the packets)
+  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
+  packetBuffer[1] = 0;     // Stratum, or type of clock
+  packetBuffer[2] = 6;     // Polling Interval
+  packetBuffer[3] = 0xEC;  // Peer Clock Precision
+  // 8 bytes of zero for Root Delay & Root Dispersion
+  packetBuffer[12]  = 49;
+  packetBuffer[13]  = 0x4E;
+  packetBuffer[14]  = 49;
+  packetBuffer[15]  = 52;
+
+  // all NTP fields have been given values, now
+  // you can send a packet requesting a timestamp:
+  udp.beginPacket(address, 123); //NTP requests are to port 123
+  udp.write(packetBuffer, NTP_PACKET_SIZE);
+  udp.endPacket();
+  yield();
+}
+
+/**
+   Check if a packet was recieved.
+   Process NTP information if yes
+*/
+bool doNtpUpdateCheck() {
+
+  Serial.print(millis());
+  Serial.println(F(": doNtpUpdateCheck."));
+
+  yield();
+  int cb = udp.parsePacket();
+  if (cb) {
+    // We've received a packet, read the data from it
+    udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+
+    //the timestamp starts at byte 40 of the received packet and is four bytes,
+    // or two words, long. First, esxtract the two words:
+
+    unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
+    unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
+    // combine the four bytes (two words) into a long integer
+    // this is NTP time (seconds since Jan 1 1900):
+    unsigned long secsSince1900 = highWord << 16 | lowWord;
+
+    // now convert NTP time into everyday time:
+    // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
+    const unsigned long seventyYears = 2208988800UL;
+    // subtract seventy years:
+    epoch = secsSince1900 - seventyYears;
+    return (epoch != 0);
   }
+  return false;
+}
 
-
-  // read the analog in value coming from microphone
-  int sensorValue = analogRead(analogInPin);
-  if (sensorValue > 900 ) {
-    Serial.println(sensorValue);
-    light_alarm_num = random(1, 40);
-    time_elapsed = 0;
-  }
-
-
-  time_t t = now(); // Get the current time seconds
-  if (now() != prevDisplay) { //update the display only if time has changed
-    prevDisplay = now();
-    if (second() == 0)
-      digitalClockDisplay();
-    else
-      Serial.print('-');
-    Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
-    ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
-  }
-
-  // Check if new day and recalculate sunSet etc.
-  if (prevDisplay >= makeTime(calcTime))
+void startSPIFFS() { // Start the SPIFFS and list all contents
+  SPIFFS.begin();                             // Start the SPI Flash File System (SPIFFS)
+  Serial.println("SPIFFS started. Contents:");
   {
-    calcSun(); // computes sun rise and sun set, updates calcTime
-  }
-  delay(10); // needed to keep wifi going
-}
-
-void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
-  Serial.println(light_alarm_num);
-  switch (light_alarm_num) {
-    case 1:
-      showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1, now());
-      break;
-    case 2:
-      showlights(duration, -1, -1, -1, -1, -1, -1, 5, -1, now());
-      break;
-    case 3:
-      showlights(duration, -1, -1, -1, -1, -1, -1, 1, -1, now());
-      break;
-    case 4:
-      showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
-      break;
-    case 5:
-      moveworms(1, now(), duration);
-      break;
-    case 6:
-      moveworms(5, now(), duration);
-      break;
-    case 7:
-      //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
-      cellularAutomata(250, 26, 30, 60, random(65535), now(), duration);
-      break;
-    case 8:
-      cellularAutomata(250, 26, 26, 26, random(65535), now(), duration);
-      break;
-    case 9:
-      cellularAutomata(250, 30, 30, 30, random(65535), now(), duration);
-      break;
-    case 10:
-      cellularAutomata(250, 60, 60, 60, random(65535), now(), duration);
-      break;
-    case 11:
-      // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), duration);
-      cellularAutomata(250, 110, 110, 110, random(65535), now(), duration);
-      break;
-    case 12:
-      cellularAutomata(50, 26, random(65535), now(), duration);
-      break;
-    case 13:
-      cellularAutomata(50, 30, random(65535), now(), duration);
-      break;
-    case 14:
-      cellularAutomata(50, 45, random(65535), now(), duration);
-      break;
-    case 15:
-      cellularAutomata(50, 57, random(65535), now(), duration);
-      break;
-    case 16:
-      cellularAutomata(50, 60, random(65535), now(), duration);
-      break;
-    case 17:
-      cellularAutomata(50, 73, random(65535), now(), duration);
-      break;
-    case 18:
-      cellularAutomata(50, 110, random(65535), now(), duration);
-      break;
-    case 19:
-      fire(now(), duration);
-      break;
-    case 20:
-      firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
-      break;
-    case 21:
-      firefly(100, 1, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
-      break;
-    case 22:
-      firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), duration);
-      break;
-    case 23:
-      firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), duration);
-      break;
-    case 24:
-      firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), duration);
-      break;
-    case 25:
-      rainbow2(0, 1, 0, 256, 1, 1, 15, now(), duration); // full rainbow ring rotating
-      break;
-    case 26:
-      rainbow2(0, 1, 0, 32, 1, 1, 15, now(), duration);  // full rainbox ring rotating 8 times slower
-      break;
-    case 27:
-      rainbow2(0, 1, 0, 256, 4, 1, 15, now(), duration); // 4 full rainbows in ring rotating
-      break;
-    case 28:
-      rainbow2(0, 1, 0, 32, 4, 1, 15, now(), duration); // 4 full rainbows in ring rotating 8 times slower
-      break;
-    case 29:
-      rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), duration); // 4 full rainbows as above starting different place
-      break;
-    case 30:
-      rainbow2(0, 2, 0, 256, 4, 1, 15, now(), duration); //  4 full and 4 reverse flowing from 15 min
-      break;
-    case 31:
-      rainbow2(0, 2, 0, 256, 1, 4, 15, now(), duration); //  1/4 rainbox and its reverse flowing from 15 min
-      break;
-    case 32:
-      rainbow2(0, 2, 0, 256, 1, 4, 30, now(), duration); //  1/4 rainbox and its reverse flowing from 30 min
-      break;
-    case 33:
-      rainbow2(0, 2, 0, 16, 1, 4, 30, now(), duration); //   1/64 rainbox and its reverse flowing from 30 min
-      break;
-    case 34:
-      rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from 30 min
-      break;
-    case 35:
-      rainbow2(0, 3, 0, 256, 1, 1, 15, now(), duration);
-      break;
-    case 36:
-      rainbow2(0, 3, 0, 256, 4, 1, 15, now(), duration);
-      break;
-    case 37:
-      rainbow2(0, 4, 0, 256, 1, 1, 15, now(), duration);
-      break;
-    case 38:
-      rainbow2(0, 4, 0, 256, 4, 1, 15, now(), duration);
-      break;
-    case 39:
-      rainbow2(0, 5, 0, 256, 1, 1, 15, now(), duration);
-      break;
-    default:
-      rainbow2(0, 5, 0, 256, 4, 1, 15, now(), duration);
-  }
-}
-
-void playsong(int * melody, int * noteDurations, int whole_note_duration, int pin) {
-  int maxnumNotes = 2000;
-  uint32_t time_start;
-  uint32_t time_finish_tone;
-  uint32_t time_finish;
-  Serial.println("sound alarm, then clock will start");
-  for (int thisNote = 0; thisNote < maxnumNotes; thisNote++) {
-    time_start = millis();
-    if (melody[thisNote] == STOP) break; //STOP is defined to be -1
-    // to calculate the note duration, take whole note durations divided by the note type.
-    //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
-    int noteDuration = whole_note_duration / noteDurations[thisNote];
-    time_finish_tone = time_start + noteDuration;
-    if (melody[thisNote] > 30) {
-      tone(pin, melody[thisNote], noteDuration);
-      // alternative not giving duration as param to tone, as caused LEDs to fire afterwards
-      // but seems if just give noTone at end of melody that is ok too
-      //tone(pin, melody[thisNote]);
-      //while (millis() < time_finish_tone);
-      //noTone(pin);
+    Dir dir = SPIFFS.openDir("/");
+    while (dir.next()) {                      // List the file system contents
+      String fileName = dir.fileName();
+      size_t fileSize = dir.fileSize();
+      Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
     }
-    // to distinguish the notes, set a minimum time between them.
-    // the note's duration + 30% seems to work well:
-    int pauseBetweenNotes = noteDuration * 1.30;
-    time_finish = time_start + pauseBetweenNotes;
-    while (millis() < time_finish);
+    Serial.printf("\n");
   }
-  //IMPORTANT to call noTone after melody is done
-  //  otherwise get funny signal going to LED ring aftwerwards
-  noTone(pin);
-}
-
-/*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
-// Taken from ConfigFile example
-bool loadConfig() {
-  File configFile = SPIFFS.open("/config.json", "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file");
-    return false;
-  }
-
-  size_t size = configFile.size();
-  if (size > 1024) {
-    Serial.println("Config file size is too large");
-    return false;
-  }
-
-  // Allocate a buffer to store contents of the file.
-  std::unique_ptr<char[]> buf(new char[size]);
-
-  // We don't use String here because ArduinoJson library requires the input
-  // buffer to be mutable. If you don't use ArduinoJson, you may as well
-  // use configFile.readString instead.
-  configFile.readBytes(buf.get(), size);
-  DynamicJsonDocument doc(1536);
-  DeserializationError error = deserializeJson(doc, buf.get());
-
-  if (error) {
-    Serial.print(F("deserializeJson() failed: "));
-    Serial.println(error.f_str());
-    return false;
-  }
-  int alarm_ind = 0;
-  for (JsonObject alarm : doc["alarms"].as<JsonArray>()) {
-    //TODO if alarm_ind >=NUM_ALARMS abort
-    alarmInfo[alarm_ind].alarmSet = alarm["alarmSet"]; // true, true, true, true, true
-    alarmInfo[alarm_ind].alarmType = alarm["alarmType"]; // 0, 0, 0, 0, 0
-    alarmInfo[alarm_ind].duration = alarm["duration"]; // 10000, 10000, 10000, 10000, 10000
-    alarmInfo[alarm_ind].repeat = alarm["repeat"]; // 86400, 86400, 86400, 86400, 86400
-
-    JsonObject alarm_alarmTime = alarm["alarmTime"];
-    alarmInfo[alarm_ind].alarmTime.Second = alarm_alarmTime["sec"]; // 0, 0, 0, 0, 0
-    alarmInfo[alarm_ind].alarmTime.Minute = alarm_alarmTime["min"]; // 0, 0, 0, 0, 0
-    alarmInfo[alarm_ind].alarmTime.Hour = alarm_alarmTime["hour"]; // 12, 12, 12, 12, 12
-    alarmInfo[alarm_ind].alarmTime.Day = alarm_alarmTime["date"]; // 7, 7, 7, 7, 7
-    alarmInfo[alarm_ind].alarmTime.Month = alarm_alarmTime["month"]; // 1, 1, 1, 1, 1
-    alarmInfo[alarm_ind].alarmTime.Year = alarm_alarmTime["year"]; // 53, 53, 53, 53, 53
-    alarm_ind++;
-  }
-  return true;
-}
-
-bool saveConfig() {
-
-  StaticJsonDocument<1024> doc;
-  JsonArray alarms = doc.createNestedArray("alarms");
-  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    JsonObject alarms_nested = alarms.createNestedObject();
-    alarms_nested["alarmSet"] = alarmInfo[alarm_ind].alarmSet;
-    alarms_nested["alarmType"] = alarmInfo[alarm_ind].alarmType;
-    alarms_nested["duration"] = alarmInfo[alarm_ind].duration;
-    alarms_nested["repeat"] = alarmInfo[alarm_ind].repeat;
-
-    JsonObject alarms_nested_alarmTime = alarms_nested.createNestedObject("alarmTime");
-    alarms_nested_alarmTime["sec"] = alarmInfo[alarm_ind].alarmTime.Second;
-    alarms_nested_alarmTime["min"] = alarmInfo[alarm_ind].alarmTime.Minute;
-    alarms_nested_alarmTime["hour"] = alarmInfo[alarm_ind].alarmTime.Hour;
-    alarms_nested_alarmTime["date"] = alarmInfo[alarm_ind].alarmTime.Day;
-    alarms_nested_alarmTime["month"] = alarmInfo[alarm_ind].alarmTime.Month;
-    alarms_nested_alarmTime["year"] = alarmInfo[alarm_ind].alarmTime.Year;
-  }
-
-  File configFile = SPIFFS.open("/config.json", "w");
-  if (!configFile) {
-    Serial.println("Failed to open config file for writing");
-    return false;
-  }
-  serializeJson(doc, configFile);
-  return true;
 }
 
 
-void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
-  WiFi.softAP(ssid, password);             // Start the access point
-  Serial.print("Access Point \"");
-  Serial.print(ssid);
-  Serial.println("\" started\r\n");
+void startWebSocket() { // Start a WebSocket server
+  webSocket.begin();                          // start the websocket server
+  webSocket.onEvent(webSocketEvent);          // if there's an incomming websocket message, go to function 'webSocketEvent'
+  Serial.println("WebSocket server started.");
+}
 
-  wifiMulti.addAP(homeSSID, homePW);  // add Wi-Fi networks you want to connect to
-  //wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
-
-  Serial.println("Connecting");
-  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect to station or a station connects to AP
-    delay(250);
-    Serial.print('.');
-  }
-  Serial.println("\r\n");
-  if (WiFi.softAPgetStationNum() == 0) {     // If the ESP is connected to an AP
-    Serial.print("Connected to ");
-    Serial.println(WiFi.SSID());             // Tell us what network we're connected to
-    Serial.print("IP address:\t");
-    Serial.println(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
-    WiFi.softAPdisconnect(false);             // Switch off soft AP mode
-    Serial.print("So switching soft AP off");
-  } else {                                   // If a station is connected to the ESP SoftAP
-    Serial.print("Station connected to ESP8266 AP");
-  }
-  Serial.println("\r\n");
-  delay(100);
+void startMDNS() { // Start the mDNS responder
+  MDNS.begin(OTAandMdnsName);                        // start the multicast domain name server
+  Serial.print("mDNS responder started: http://");
+  Serial.print(OTAandMdnsName);
+  Serial.println(".local");
 }
 
 void startOTA() { // Start the OTA service
@@ -654,32 +647,6 @@ void startOTA() { // Start the OTA service
   Serial.println("OTA ready\r\n");
 }
 
-void startSPIFFS() { // Start the SPIFFS and list all contents
-  SPIFFS.begin();                             // Start the SPI Flash File System (SPIFFS)
-  Serial.println("SPIFFS started. Contents:");
-  {
-    Dir dir = SPIFFS.openDir("/");
-    while (dir.next()) {                      // List the file system contents
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();
-      Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
-    }
-    Serial.printf("\n");
-  }
-}
-
-void startWebSocket() { // Start a WebSocket server
-  webSocket.begin();                          // start the websocket server
-  webSocket.onEvent(webSocketEvent);          // if there's an incomming websocket message, go to function 'webSocketEvent'
-  Serial.println("WebSocket server started.");
-}
-
-void startMDNS() { // Start the mDNS responder
-  MDNS.begin(OTAandMdnsName);                        // start the multicast domain name server
-  Serial.print("mDNS responder started: http://");
-  Serial.print(OTAandMdnsName);
-  Serial.println(".local");
-}
 
 void startServer() { // Start a HTTP server with a file read handler and an upload handler
 
@@ -701,58 +668,37 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     server.send(200, "text/plain", "");
   }, handleFileUpload);
 
-  // server.on("/makeAP",[](){
-  //    server.send(200,"text/plain", "Making AP http://192.168.4.1 ...");
-  //    delay(1000);
-  //    createAccessPoint();
-  //  });
-  //
-  //  server.on("/APOff",[](){
-  //    server.send(200,"text/plain", "Turn off AP ");
-  //    delay(1000);
-  //    WiFi.softAPdisconnect(true);
-  //  });
 
   server.on("/restart", []() {
     server.send(200, "text/plain", "Restarting ...");
-    delay(1000);
     ESP.restart();
   });
 
-  //    server.on("/startota",[](){
-  //      server.send(200,"text/plain", "Make OTA ready ...");
-  //      delay(1000);
-  //      ota_flag = true;
-  //      time_elapsed = 0;
-  //    });
-
-  server.on("/lightalarm", []() {
-    String numstr = server.arg("num");
-    light_alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 1;
-    server.send(200, "text/plain", "Light alarm Starting ...");
-    delay(1000);
-    //light_alarm_num = random(1, 40);
-    time_elapsed = 0;
+  //TODO probably not need was just for testing time correction
+  server.on("/add124sec", []() {
+    server.send(200, "text/plain", "Adjust time by 124 sec");
+    adjustTime(124);
   });
 
-  server.on("/soundalarm", []() {
-    server.send(200, "text/plain", "Sound alarm Starting ...");
-    delay(1000);
-    sound_alarm_flag = true;
-    time_elapsed = 0;
+  server.on("/spiff", []() {
+    Dir dir = SPIFFS.openDir("/");
+    String output = "SPIFF: \r\n\n";
+    while (dir.next()) {                      // List the file system contents
+      String fileName = dir.fileName();
+      size_t fileSize = dir.fileSize();
+      //Serial.println("NAME " + fileName);
+      sprintf(buf, "%s\t %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
+      output += buf;
+    }
+    server.send(200, "text/plain", output);
   });
 
   server.on("/whattime", []() {
     sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
     server.send(200, "text/plain", buf);
-    delay(1000);
+    //delay(1000);
   });
 
-  server.on("/setbright", setBright);
-
-  server.on("/settime", settime);
-
-  server.on("/setalarm", setalarmurl);
 
   server.onNotFound(handleNotFound);          // if someone requests any other file or page, go to function 'handleNotFound'
   // and check if the file exists
@@ -887,9 +833,8 @@ void handleFileList() {
   }
 
   output += "]";
-  server.send(200, "text/json", output);
+  server.send(200, "application/json", output);
 }
-
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) { // When a WebSocket message is received
   //NOTE messages get queued up
@@ -915,8 +860,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         // scale from 0 to 255
         SliderColor  = {r >> 2, g >> 2, b >> 2};
         //webSocket.sendTXT(num, buf);
-        led_color_alarm_flag = true;
         led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2);
+        tLed_color_alarm.restart(); // one shot task that turns all LEDS the above color
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'V') {                      // browser sent V to save config file
@@ -949,19 +894,25 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Second[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
-      } else if (payload[0] == 'R') {                      // the browser sends an RNN when the rainbow effect is enabled
+      } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
+        light_alarm_flag = true;
+        rainbowParm.ncolorloop = random(4);
+        rainbowParm.ncolorfrac = random(1, 5);
+        rainbowParm.hueinc = random(255);
+        rainbowParm.wait = random(20);
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%2d", &light_alarm_num);
-        //light_alarm_num = random(1, 40);
+        Serial.printf("ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d\n", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
+        trainbow.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
+        tplayMelody.enable();
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
         sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
-      } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
-        // TODO Now only sets one alarm, but will allow many
+      } else if (payload[0] == 'A') {                      // the browser sends an A to set alarms
         char Aday[4]; //3 char
         char Amonth[4]; //3 char
         int  AmonthNum;
@@ -1006,6 +957,17 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
+void setBright()
+{
+  String db = server.arg("day");
+  String nb = server.arg("night");
+  if (strlen(db.c_str()) > 0) day_brightness = db.toInt();
+  if (strlen(nb.c_str()) > 0) night_brightness = nb.toInt();
+  String rsp = "daybrightness set to: " + db + ", nightbrightness to  " + nb;
+  server.send(200, "text/plain", rsp);
+}
+
+
 void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   Serial.printf("setalarmtime: %d %d %d %d %d %d %d %d %d\n", alarmtype, t, r, s, m, h, d, mth, y);
   alarmInfo[alarm_ind].alarmType = alarmtype;
@@ -1020,76 +982,6 @@ void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, 
   alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
 }
 
-void setalarmurl()
-{
-
-  String numstr = server.arg("number");
-  int alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 0;
-
-  if (alarm_num >= NUM_ALARMS) return;
-  if (alarm_num < 0) return;
-
-  alarmInfo[alarm_num].alarmSet = true;
-  String type = server.arg("type");
-  String t = server.arg("duration"); // in ms
-  String r = server.arg("repeat"); // in seconds
-  String h = server.arg("hour");
-  String m = server.arg("min");
-  String s = server.arg("sec");
-  String d = server.arg("day");
-  String mth = server.arg("month");
-  String y = server.arg("year");
-
-  breakTime(now(), alarmInfo[alarm_num].alarmTime);
-
-  setalarm(alarm_num,
-           (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
-           (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
-           (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
-           (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
-           (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo[alarm_num].alarmTime.Minute,
-           (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo[alarm_num].alarmTime.Hour,
-           (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo[alarm_num].alarmTime.Day,
-           (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
-           (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
-
-  sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, type %d duration %d ms repeat %d sec", alarm_num,
-          hour(makeTime(alarmInfo[alarm_num].alarmTime)), minute(makeTime(alarmInfo[alarm_num].alarmTime)), second(makeTime(alarmInfo[alarm_num].alarmTime)),
-          daysOfWeek[weekday(makeTime(alarmInfo[alarm_num].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_num].alarmTime)),
-          monthNames[month(makeTime(alarmInfo[alarm_num].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_num].alarmTime)),
-          alarmInfo[alarm_num].alarmType, alarmInfo[alarm_num].duration, alarmInfo[alarm_num].repeat);
-  server.send(200, "text/plain", buf);
-  Serial.println(buf);
-}
-
-
-void settime()
-// if connected to time server, it will overwrite asap
-{
-  String h = server.arg("hour");
-  String m = server.arg("min");
-  String s = server.arg("sec");
-  String d = server.arg("day");
-  String mth = server.arg("month");
-  String y = server.arg("year");
-  setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
-  ClockInitialized = false;
-  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(),
-          daysOfWeek[d.toInt()].c_str(), d.toInt(), monthNames[mth.toInt()].c_str(),  y.toInt());
-  server.send(200, "text/plain", buf);
-  Serial.println(buf);
-}
-
-
-void setBright()
-{
-  String db = server.arg("day");
-  String nb = server.arg("night");
-  if (strlen(db.c_str()) > 0) day_brightness = db.toInt();
-  if (strlen(nb.c_str()) > 0) night_brightness = nb.toInt();
-  String rsp = "daybrightness set to: " + db + ", nightbrightness to  " + nb;
-  server.send(200, "text/plain", rsp);
-}
 
 void calcSun()
 {
@@ -1188,40 +1080,261 @@ void calcSun()
   webSocket.sendTXT(websocketId_num, buf);
 }
 
-bool SetClockFromNTP()
-{
-  // get the time from the NTP server (takes upto 1 sec) if last update was longer ago than update_interval OR has never been successful yet
-  bool updated = false;
-  //Serial.println("Trying to get info from NTP");
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    //Serial.println("  Connected to try timeClient update");
-    updated = timeClient.update();
+/*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
+// Taken from ConfigFile example
+bool loadConfig() {
+  File configFile = SPIFFS.open("/config.json", "r");
+  if (!configFile) {
+    Serial.println("Failed to open config file");
+    return false;
   }
-  // only starting using setTime once timeClient.update() has returned True once then it will have set EpochTime
-  if (ClockInitialized) {
-    setTime(timeClient.getEpochTime()); // Set the system time from the EpochTime
-    if (IsDst()) adjustTime(3600); // offset the system time by an hour for Daylight Savings
+
+  size_t size = configFile.size();
+  if (size > 1024) {
+    Serial.println("Config file size is too large");
+    return false;
   }
-  return updated;
+
+  // Allocate a buffer to store contents of the file.
+  std::unique_ptr<char[]> buf(new char[size]);
+
+  // We don't use String here because ArduinoJson library requires the input
+  // buffer to be mutable. If you don't use ArduinoJson, you may as well
+  // use configFile.readString instead.
+  configFile.readBytes(buf.get(), size);
+  DynamicJsonDocument doc(1536);
+  DeserializationError error = deserializeJson(doc, buf.get());
+
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    return false;
+  }
+  int alarm_ind = 0;
+  for (JsonObject alarm : doc["alarms"].as<JsonArray>()) {
+    //TODO if alarm_ind >=NUM_ALARMS abort
+    alarmInfo[alarm_ind].alarmSet = alarm["alarmSet"]; // true, true, true, true, true
+    alarmInfo[alarm_ind].alarmType = alarm["alarmType"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].duration = alarm["duration"]; // 10000, 10000, 10000, 10000, 10000
+    alarmInfo[alarm_ind].repeat = alarm["repeat"]; // 86400, 86400, 86400, 86400, 86400
+
+    JsonObject alarm_alarmTime = alarm["alarmTime"];
+    alarmInfo[alarm_ind].alarmTime.Second = alarm_alarmTime["sec"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].alarmTime.Minute = alarm_alarmTime["min"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].alarmTime.Hour = alarm_alarmTime["hour"]; // 12, 12, 12, 12, 12
+    alarmInfo[alarm_ind].alarmTime.Day = alarm_alarmTime["date"]; // 7, 7, 7, 7, 7
+    alarmInfo[alarm_ind].alarmTime.Month = alarm_alarmTime["month"]; // 1, 1, 1, 1, 1
+    alarmInfo[alarm_ind].alarmTime.Year = alarm_alarmTime["year"]; // 53, 53, 53, 53, 53
+    alarm_ind++;
+  }
+  return true;
 }
 
-// Modified for Southern Hemisphere DST
-// NZ daylight savings ends first Sunday of April at 3AM
-// NZ daylight starts last Sunday of September at 2AM
-bool IsDst()
-{
-  int previousSunday = day() - weekday() + 1;
-  //Serial.print("    IsDst ");
-  //Serial.print(month());
-  //Serial.println(previousSunday);
-  if (month() < 4 || month() > 9)  return true;
-  if (month() > 4 && month() < 9)  return false;
+bool saveConfig() {
+
+  StaticJsonDocument<1024> doc;
+  JsonArray alarms = doc.createNestedArray("alarms");
+  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
+    JsonObject alarms_nested = alarms.createNestedObject();
+    alarms_nested["alarmSet"] = alarmInfo[alarm_ind].alarmSet;
+    alarms_nested["alarmType"] = alarmInfo[alarm_ind].alarmType;
+    alarms_nested["duration"] = alarmInfo[alarm_ind].duration;
+    alarms_nested["repeat"] = alarmInfo[alarm_ind].repeat;
+
+    JsonObject alarms_nested_alarmTime = alarms_nested.createNestedObject("alarmTime");
+    alarms_nested_alarmTime["sec"] = alarmInfo[alarm_ind].alarmTime.Second;
+    alarms_nested_alarmTime["min"] = alarmInfo[alarm_ind].alarmTime.Minute;
+    alarms_nested_alarmTime["hour"] = alarmInfo[alarm_ind].alarmTime.Hour;
+    alarms_nested_alarmTime["date"] = alarmInfo[alarm_ind].alarmTime.Day;
+    alarms_nested_alarmTime["month"] = alarmInfo[alarm_ind].alarmTime.Month;
+    alarms_nested_alarmTime["year"] = alarmInfo[alarm_ind].alarmTime.Year;
+  }
+
+  File configFile = SPIFFS.open("/config.json", "w");
+  if (!configFile) {
+    Serial.println("Failed to open config file for writing");
+    return false;
+  }
+  serializeJson(doc, configFile);
+  return true;
+}
+
+/*_____________For Play Melody Task______________*/
+
+bool playMelodyOnEnable() {
+  melodyNoteIndex = 0;
+  return true;
+}
+
+void playMelodyOnDisable() {
+  noTone(PIEZO_PIN);
+}
+void playMelody() {
+  if (melody[melodyNoteIndex] == STOP) {  //STOP is defined to be -1
+    tplayMelody.disable();
+    return;
+  }
+  // to calculate the note duration, take whole note durations divided by the note type.
+  //e.g. quarter note = whole_note_duration / 4, eighth note = whole_note_duration/8, etc.
+  int noteDuration = whole_note_duration / noteDurations[melodyNoteIndex];
+  if (melody[melodyNoteIndex] > 30) {
+    tone(PIEZO_PIN, melody[melodyNoteIndex], noteDuration);
+  }
+  melodyNoteIndex++;
+  // to distinguish the notes, set a minimum time between them.
+  // the note's duration + 30% seems to work well:
+  int pauseBetweenNotes = noteDuration * 1.30;
+  tplayMelody.delay( pauseBetweenNotes );
+}
+
+//bool led_color_alarmOnEnable() {
+//  tchangeClock.disable();
+//  return true;
+//}
+
+void led_color_alarm() {
+  tchangeClock.enableDelayed(LED_SHOW_TIME);
+  strip.fill(led_color_alarm_rgb);
+  SetBrightness(now()); // Set the clock brightness dependant on the time
+  strip.show(); // Update strip with new contents
+}
+
+bool rainbowOnEnable() {
+  Task& T = ts.currentTask();
+  rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
+  parm.firstPixelHue = parm.firsthue;
+  parm.start = millis();
+  tchangeClock.disable();
+  return true;
+}
+
+void rainbowCallback() {
+  Task& T = ts.currentTask();
+  rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
+
+  for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
+    int pixelHue = parm.firstPixelHue + (i * parm.ncolorloop *  65536L / strip.numPixels() / parm.ncolorfrac);
+    strip.setPixelColor(ClockCorrect(i + parm.nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
+  }
+  SetBrightness(now()); // Set the clock brightness dependant on the time
+  strip.show(); // Update strip with new contents
+  parm.firstPixelHue += parm.hueinc;
+  if ((millis() - parm.start) > parm.duration) {
+    trainbow.disable();
+    tchangeClock.enable();
+  } else {
+    trainbow.delay(parm.wait);  // Pause for a moment
+  }
+}
 
 
-  if (month() == 4) return previousSunday < 1;
-  if (month() == 9) return previousSunday > 23;
-  return false; // this line never gonna happend
+
+/*
+   Flip the LED state based on the current state
+*/
+bool ledState;
+void ledCallback() {
+  if ( ledState ) ledBlue();
+  else ledRed();
+}
+
+/**
+   Make sure the LED starts red
+*/
+bool ledOnEnable() {
+  ledRed();
+  return true;
+}
+
+/**
+   Make sure LED ends dimmed
+*/
+void ledOnDisable() {
+  ledBlue();
+}
+
+/**
+   Turn ring red
+*/
+void ledRed() {
+  ledState = true;
+  //strip.fill(0x100000);
+  //strip.show();
+  stripred.show();
+  tLED.delay( ledDelayRed );
+}
+
+/**
+   Turn ring blue.
+*/
+void ledBlue() {
+  ledState = false;
+  //strip.fill(0x000010);
+  //strip.show();
+  stripblue.show();
+  tLED.delay( ledDelayBlue );
+}
+
+
+void changeClock() {
+  //tLED.disable();
+  //tLED.enableDelayed(500);
+  time_t tnow = now(); // Get the current time seconds
+  if (second() == 0)
+    digitalClockDisplay();
+  else
+    Serial.print('-');
+  Draw_Clock(tnow, 4); // Draw the whole clock face with hours minutes and seconds
+  //TODO could make daily task here
+  // Check if new day and recalculate sunSet etc.
+  if (tnow >= makeTime(calcTime))
+  {
+    calcSun(); // computes sun rise and sun set, updates calcTime
+  }
+}
+/*__________________________________________________________HELPER_FUNCTIONS__________________________________________________________*/
+
+String formatBytes(size_t bytes) { // convert sizes in bytes to KB and MB
+  if (bytes < 1024) {
+    return String(bytes) + "B";
+  } else if (bytes < (1024 * 1024)) {
+    return String(bytes / 1024.0) + "KB";
+  } else if (bytes < (1024 * 1024 * 1024)) {
+    return String(bytes / 1024.0 / 1024.0) + "MB";
+  } else {
+    return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
+  }
+}
+
+String getContentType(String filename) {
+  if (server.hasArg("download")) {
+    return "application/octet-stream";
+  } else if (filename.endsWith(".htm")) {
+    return "text/html";
+  } else if (filename.endsWith(".html")) {
+    return "text/html";
+  } else if (filename.endsWith(".css")) {
+    return "text/css";
+  } else if (filename.endsWith(".js")) {
+    return "application/javascript";
+  } else if (filename.endsWith(".png")) {
+    return "image/png";
+  } else if (filename.endsWith(".gif")) {
+    return "image/gif";
+  } else if (filename.endsWith(".jpg")) {
+    return "image/jpeg";
+  } else if (filename.endsWith(".ico")) {
+    return "image/x-icon";
+  } else if (filename.endsWith(".xml")) {
+    return "text/xml";
+  } else if (filename.endsWith(".pdf")) {
+    return "application/x-pdf";
+  } else if (filename.endsWith(".zip")) {
+    return "application/x-zip";
+  } else if (filename.endsWith(".gz")) {
+    return "application/x-gzip";
+  }
+  return "text/plain";
 }
 
 ////////////////////////////////////////////////////////////
@@ -1317,6 +1430,7 @@ bool IsDay(time_t t)
 {
   int NowHour = hour(t);
   int NowMinute = minute(t);
+
   if ((weekday() >= 2) && (weekday() <= 6))
     if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
       return false;
@@ -1356,8 +1470,6 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
   sprintf(buf, "showlights called with %d %d %d %d %d %d %d %d %d %d\n ", duration, w1, w2, w3, w4, w5, w6, w7, w8, t);
   Serial.println(buf);
   while (time_elapsed < duration)
-    //TODO need to interupt otherwise will always go thru loop an integral number of times
-    //  if duration too small will be ignored.
   {
     // Fill along the length of the strip in various colors...
     if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
@@ -1443,7 +1555,6 @@ void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int 
       // is passed through strip.gamma32() to provide 'truer' colors
       // before assigning to each pixel:
       strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
-      yield();
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
@@ -1494,7 +1605,7 @@ class Worm
         this->headposition %= this->path.size ();
         // Put worm into strip and blank end
         int segpos = this->headposition;
-        //Serial.println(" ");
+        Serial.println(" ");
         for (int x = 0; x < this->colors.size (); x++)
         {
           int strippos = this->path[segpos];
@@ -1527,7 +1638,7 @@ class Worm
     };
 };
 
-void moveworms(int wait, time_t t, uint16_t duration) {
+void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
   vector < int >colors = {100, 101, 102, 103, 104, 105};
@@ -1791,8 +1902,6 @@ void rainbow(int wait, int ncolorloop, time_t t) {
   }
 }
 
-
-
 // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
 void theaterChaseRainbow(int wait, time_t t) {
   int firstPixelHue = 0;     // First pixel starts at red (hue 0)
@@ -1814,49 +1923,4 @@ void theaterChaseRainbow(int wait, time_t t) {
       firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
     }
   }
-}
-
-/*__________________________________________________________HELPER_FUNCTIONS__________________________________________________________*/
-
-String formatBytes(size_t bytes) { // convert sizes in bytes to KB and MB
-  if (bytes < 1024) {
-    return String(bytes) + "B";
-  } else if (bytes < (1024 * 1024)) {
-    return String(bytes / 1024.0) + "KB";
-  } else if (bytes < (1024 * 1024 * 1024)) {
-    return String(bytes / 1024.0 / 1024.0) + "MB";
-  } else {
-    return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
-  }
-}
-
-String getContentType(String filename) {
-  if (server.hasArg("download")) {
-    return "application/octet-stream";
-  } else if (filename.endsWith(".htm")) {
-    return "text/html";
-  } else if (filename.endsWith(".html")) {
-    return "text/html";
-  } else if (filename.endsWith(".css")) {
-    return "text/css";
-  } else if (filename.endsWith(".js")) {
-    return "application/javascript";
-  } else if (filename.endsWith(".png")) {
-    return "image/png";
-  } else if (filename.endsWith(".gif")) {
-    return "image/gif";
-  } else if (filename.endsWith(".jpg")) {
-    return "image/jpeg";
-  } else if (filename.endsWith(".ico")) {
-    return "image/x-icon";
-  } else if (filename.endsWith(".xml")) {
-    return "text/xml";
-  } else if (filename.endsWith(".pdf")) {
-    return "application/x-pdf";
-  } else if (filename.endsWith(".zip")) {
-    return "application/x-zip";
-  } else if (filename.endsWith(".gz")) {
-    return "application/x-gzip";
-  }
-  return "text/plain";
 }
