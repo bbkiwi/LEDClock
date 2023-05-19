@@ -1,4 +1,5 @@
 /**
+      Adapted for LED strips on Liz shelves Top shelf 74 LEDS, then 20 LEDS and 20 LEDS
       LEDClock using tasks
       NOTE If have two strips defined with same pin
         Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -107,7 +108,7 @@ TIME NauticalSunset;
 TIME AstroSunrise;
 TIME AstroSunset;
 
-byte day_brightness = 127;
+byte day_brightness = 255;
 byte night_brightness = 16;
 
 //Set your timezone in hours difference rom GMT
@@ -246,7 +247,7 @@ WiFiUDP udp;                      // A UDP instance to let us send and receive p
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 16 LED Ring
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
-#define NUM_LEDS 60
+#define NUM_LEDS 120
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripred = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -1378,19 +1379,20 @@ void Draw_Clock(time_t t, byte Phase)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b));
 
   if (Phase >= 2) // Draw 5 min divisions
-    for (int i = 0; i < NUM_LEDS; i = i + 5)
+    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS/12)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
 
   if (Phase >= 3) { // Draw 15 min markers
-    for (int i = 0; i < NUM_LEDS; i = i + 15)
+    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS/4)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
     strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b));
   }
 
   if (Phase >= 4) { // Draw hands
-    int isecond = second(t);
-    int iminute = (60 * minute(t) + isecond + 30) / 60; // round to nearest minute
-    int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
+    // find indices of nearest LED
+    int isecond = second(t) * NUM_LEDS / 60;
+    int iminute = (60 * minute(t) + isecond + 30) * NUM_LEDS / 3600;
+    int ihour = ( 3600* (hour(t) % 12) + 60 * minute(t) + second(t) + 1800 ) * NUM_LEDS / 43020; 
     //hour
     strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
     for (int i = 0; i <= hour_width[disp_ind]; i++) {
