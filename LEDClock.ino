@@ -245,9 +245,9 @@ WiFiUDP udp;                      // A UDP instance to let us send and receive p
 #define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
 
 //************* Declare NeoPixel ******************************
-//Using 1M WS2812B 5050 RGB Non-Waterproof 16 LED Ring
+//Using WS2812B 5050 RGB
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
-#define NUM_LEDS 120
+#define NUM_LEDS 112
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripred = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -257,6 +257,73 @@ bool ClockInitialized = false;
 time_t currentTime;
 time_t nextCalcTime;
 time_t nextAlarmTime;
+
+// With assistance of ChatBot but buggy
+// Define the virtual LED strips
+class VirtualLEDStrip {
+  private:
+    Adafruit_NeoPixel& strip;
+    uint16_t startPixel;
+    uint16_t lenPixels;
+
+  public:
+    VirtualLEDStrip(Adafruit_NeoPixel& strip, uint16_t startPixel, uint16_t lenPixels)
+      : strip(strip), startPixel(startPixel), lenPixels(lenPixels) {
+    }
+
+    void begin() {
+      strip.begin();
+    }
+
+    void show() {
+      strip.show();
+    }
+
+    void setPixelColor(uint16_t n, uint32_t color) {
+      if (n < lenPixels) {
+        strip.setPixelColor(startPixel + n, color);
+      }
+    }
+
+    void fill(uint32_t color) {
+      strip.fill(color, startPixel, lenPixels);
+    }
+
+    uint32_t getPixelColor(uint16_t n) const {
+      if (n < lenPixels) {
+        return strip.getPixelColor(startPixel + n);
+      }
+      return 0;
+    }
+    //TODO BUG this affects whole strip
+    void setBrightness(uint8_t brightness) {
+      strip.setBrightness(brightness);
+    }
+
+    uint16_t getNumPixels() const {
+      return lenPixels;
+    }
+};
+
+// Create virtual LED strips
+VirtualLEDStrip virtualStripBottomShelf(strip, 0, 20);    // First 20 LEDs
+VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs
+VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
+
+// Blinking variables
+const unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
+unsigned long previousBlinkTime = 0;
+bool blinkState = false;
+
+// Moving pixel variables
+const unsigned long moveInterval = 1000;  // Moving interval in milliseconds
+unsigned long previousMoveTime = 0;
+uint16_t pixelIndex = 0;
+
+// Rainbow cycling variables
+const unsigned long hueInterval = 200;  // Hue change interval in milliseconds
+unsigned long previousHueTime = 0;
+long hue = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -276,6 +343,11 @@ void setup() {
   stripblue.begin(); // This initializes the NeoPixel library.
   stripred.fill(0x100000);
   stripblue.fill(0x000010);
+
+  virtualStripBottomShelf.begin();
+  virtualStripMiddleShelf.begin();
+  virtualStripTopShelf.begin();
+
   randomSeed(now());
 
   // Initialize alarmTime(s) to default (now)
@@ -322,6 +394,44 @@ void setup() {
 
 void loop() {
   ts.execute();                   // Only Scheduler should be executed in the loop
+
+
+  // Alternate color of all LEDs on the first virtual strip every specified period
+  if (millis() - previousBlinkTime >= blinkInterval) {
+    previousBlinkTime = millis();
+    blinkState = !blinkState;
+    if (blinkState) {
+      virtualStripBottomShelf.fill(virtualStripTopShelf.getPixelColor(4));
+      //virtualStripBottomShelf.fill(strip.Color(0, 0, 255));  // Blue color
+    } else {
+      virtualStripBottomShelf.fill(virtualStripTopShelf.getPixelColor(24));
+      //virtualStripBottomShelf.fill(strip.Color(127, 0, 127));    // Magenta
+    }
+    virtualStripBottomShelf.show();
+  }
+
+  // Move a single white pixel along the second virtual strip every specified period
+  if (millis() - previousMoveTime >= moveInterval) {
+    previousMoveTime = millis();
+    //virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(0, 0, 0));  // blank
+    virtualStripMiddleShelf.setPixelColor(pixelIndex, virtualStripTopShelf.getPixelColor(14));
+    virtualStripMiddleShelf.show();
+    pixelIndex = (pixelIndex + 1) % virtualStripMiddleShelf.getNumPixels();
+    virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(255, 255, 255));        // white on next
+  }
+
+  // Cycle through a rainbow pattern on the third virtual strip every specified periiod
+  if (millis() - previousHueTime >= hueInterval) {
+    previousHueTime = millis();
+    uint16_t numPixels = virtualStripTopShelf.getNumPixels();
+    for (uint16_t i = 0; i < numPixels; ++i) {
+      int pixelHue = hue + i * 65536L / numPixels;
+      virtualStripTopShelf.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+    }
+    virtualStripTopShelf.show();
+    hue += 256;
+  }
+
 }
 
 /**
@@ -1281,6 +1391,7 @@ void ledBlue() {
 
 
 void changeClock() {
+  return;
   //tLED.disable();
   //tLED.enableDelayed(500);
   time_t tnow = now(); // Get the current time seconds
