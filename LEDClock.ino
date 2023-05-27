@@ -1,6 +1,6 @@
 /**
-      Adapted for LED strips on Liz shelves Top shelf 74 LEDS, then 20 LEDS and 20 LEDS
-      LEDClock using tasks
+      Adapted for 112 LED strip on Liz shelves from bottom to top: 20+20+72
+      based on LEDClock using tasks
       NOTE If have two strips defined with same pin
         Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
         Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -10,7 +10,7 @@
         can call strip.show() and strip2.show() to alternate
         also if call one after the other acts like joining two strips as very little gap between signals sent.
   Test on Generic ESP8266 module (swage) 2MB with 256K FS
-  Test on Esp8266 Node bread board attached to 60 LED ring 4MB 2 MB FS
+  Test on Esp8266 Node bread board attached to 4MB 2 MB FS
 */
 
 //#define _TASK_SLEEP_ON_IDLE_RUN
@@ -48,7 +48,7 @@ uint8_t websocketId_num = 0;
 File fsUploadFile;                                    // a File variable to temporarily store the received file
 
 // OTA and mDns must have same name
-const char *OTAandMdnsName = "ClockTest";           // A name and a password for the OTA and mDns service
+const char *OTAandMdnsName = "Shelves";           // A name and a password for the OTA and mDns service
 const char *OTAPassword = "pass";
 
 // must be longer than longest message
@@ -109,7 +109,7 @@ TIME AstroSunrise;
 TIME AstroSunset;
 
 byte day_brightness = 255;
-byte night_brightness = 16;
+byte night_brightness = 64; //16;
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
@@ -136,7 +136,7 @@ struct ALARM {
 ALARM alarmInfo[NUM_ALARMS];
 
 uint16_t time_elapsed = 0;
-int TopOfClock = 15; // to make given pixel the top
+int TopOfClock = 0; // to make given pixel the top
 
 // notes in the melody for the sound alarm:
 int melody[] = { // Shave and a hair cut (3x) two bits terminate with -1 = STOP
@@ -675,11 +675,11 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     ESP.restart();
   });
 
-  //TODO probably not need was just for testing time correction
-  server.on("/add124sec", []() {
-    server.send(200, "text/plain", "Adjust time by 124 sec");
-    adjustTime(124);
-  });
+  //Not needed, was just for testing time correction
+  //  server.on("/add124sec", []() {
+  //    server.send(200, "text/plain", "Adjust time by 124 sec");
+  //    adjustTime(124);
+  //  });
 
   server.on("/spiff", []() {
     Dir dir = SPIFFS.openDir("/");
@@ -997,6 +997,9 @@ void calcSun()
 
   /* Get the current time, and set the Sunrise code to use the current date */
   currentTime = now();
+
+  sprintf(buf, "Prev Calculated Sunset at %d:%02d, Sunrise at %d:%02d", Sunset.Hour, Sunset.Minute, Sunrise.Hour, Sunrise.Minute);
+  webSocket.sendTXT(websocketId_num, buf);
 
   sprintf(buf, "calcSun at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
           second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
@@ -1372,18 +1375,19 @@ void Draw_Clock(time_t t, byte Phase)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
   int disp_ind;
-  disp_ind = IsDay(t) ?  day_disp_ind : 4;
+  //disp_ind = IsDay(t) ?  day_disp_ind : 4;
+  disp_ind = day_disp_ind;
 
   if (Phase >= 1) // Draw all pixels background color
     for (int i = 0; i < NUM_LEDS; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b));
 
   if (Phase >= 2) // Draw 5 min divisions
-    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS/12)
+    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS / 12)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
 
   if (Phase >= 3) { // Draw 15 min markers
-    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS/4)
+    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS / 4)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
     strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b));
   }
@@ -1392,7 +1396,7 @@ void Draw_Clock(time_t t, byte Phase)
     // find indices of nearest LED
     int isecond = second(t) * NUM_LEDS / 60;
     int iminute = (60 * minute(t) + isecond + 30) * NUM_LEDS / 3600;
-    int ihour = ( 3600* (hour(t) % 12) + 60 * minute(t) + second(t) + 1800 ) * NUM_LEDS / 43020; 
+    int ihour = ( 3600 * (hour(t) % 12) + 60 * minute(t) + second(t) + 1800 ) * NUM_LEDS / 43020;
     //hour
     strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
     for (int i = 0; i <= hour_width[disp_ind]; i++) {
