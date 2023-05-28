@@ -221,7 +221,7 @@ Task  tOTARun  (TASK_SECOND / 16, TASK_FOREVER, &OTARun, &ts, false);
 Task  tMDNSRun  (TASK_SECOND / 16, TASK_FOREVER, &MDNSRun, &ts, false);
 Task  tLED        (TASK_IMMEDIATE, TASK_FOREVER, &ledCallback, &ts, false, &ledOnEnable, &ledOnDisable);
 Task  tplayMelody (TASK_IMMEDIATE, TASK_FOREVER, &playMelody, &ts, false, &playMelodyOnEnable, &playMelodyOnDisable);
-Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
+//Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
 Task trainbow (TASK_IMMEDIATE, TASK_FOREVER, &rainbowCallback, &ts, false, &rainbowOnEnable);
 Task tshelfLoop (TASK_IMMEDIATE, TASK_FOREVER, &shelfLoop, &ts, false, &shelfLoopOnEnable);
 Task tLed_color_alarm (TASK_IMMEDIATE, TASK_ONCE, &led_color_alarm, &ts, false);
@@ -284,7 +284,7 @@ class VirtualLEDStrip {
 
     void setPixelColor(uint16_t n, uint32_t color) {
       if (n < lenPixels) {
-        strip.setPixelColor(startPixel + n, color);
+        strip.setPixelColor(startPixel + (lenPixels + n) % lenPixels, color);
       }
     }
 
@@ -294,7 +294,7 @@ class VirtualLEDStrip {
 
     uint32_t getPixelColor(uint16_t n) const {
       if (n < lenPixels) {
-        return strip.getPixelColor(startPixel + n);
+        return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
       }
       return 0;
     }
@@ -313,6 +313,8 @@ VirtualLEDStrip virtualStripBottomShelf(strip, 0, 20);    // First 20 LEDs
 VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs
 VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
 
+unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
+unsigned long previousClockTime = 0;
 // Blinking variables
 unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
 unsigned long previousBlinkTime = 0;
@@ -1246,6 +1248,9 @@ void led_color_alarm() {
 }
 
 bool shelfLoopOnEnable() {
+  // Clock variables
+  clockInterval = 1000;
+  previousClockTime = 0;
   // Blinking variables
   blinkInterval = 5000;  // Blinking interval in milliseconds
   previousBlinkTime = 0;
@@ -1261,6 +1266,8 @@ bool shelfLoopOnEnable() {
   return true;
 }
 
+// This is callback of main Loop task for LED displays
+// They all use timers to specify their frequency of occurance
 void shelfLoop() {
   switch (day_disp_ind) {
     case 0:
@@ -1301,7 +1308,12 @@ void shelfLoop() {
       }
       break;
     default:
-      changeClock();
+      // NOTE needed to use timer, without it was calling Serial output
+      //   in the changeClock() routine so much kept getting WDT resets
+      if (millis() - previousClockTime >= clockInterval) {
+        previousClockTime = millis();
+        changeClock();
+      }
   }
 }
 
@@ -1329,7 +1341,6 @@ void rainbowCallback() {
   if ((millis() - parm.start) > parm.duration) {
     trainbow.disable();
     //tchangeClock.enable();
-    tshelfLoop.enable();
     tshelfLoop.enable();
   } else {
     trainbow.delay(parm.wait);  // Pause for a moment
@@ -1385,9 +1396,8 @@ void ledBlue() {
 }
 
 
+// This should only be run once a second
 void changeClock() {
-  //tLED.disable();
-  //tLED.enableDelayed(500);
   time_t tnow = now(); // Get the current time seconds
   if (second() == 0)
     digitalClockDisplay();
@@ -1487,28 +1497,46 @@ void Draw_Clock(time_t t, byte Phase)
     for (int i = 0; i < NUM_LEDS; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b));
 
-  if (Phase >= 2) // Draw 5 min divisions
-    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS / 12)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
+  if (Phase >= 2) // Draw hour markers on top shelf
+    for (int i = 0; i < virtualStripTopShelf.getNumPixels(); i = i + virtualStripTopShelf.getNumPixels() / 12)
+      virtualStripTopShelf.setPixelColor(i, strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
 
-  if (Phase >= 3) { // Draw 15 min markers
-    for (int i = 0; i < NUM_LEDS; i = i + NUM_LEDS / 4)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
-    strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b));
+  if (Phase >= 3) { // Draw 15 min markers on middle shelf
+    for (int i = 0; i < virtualStripMiddleShelf.getNumPixels(); i = i + virtualStripMiddleShelf.getNumPixels() / 4)
+      virtualStripMiddleShelf.setPixelColor(i, strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
   }
 
   if (Phase >= 4) { // Draw hands
     // find indices of nearest LED
-    int isecond = second(t) * NUM_LEDS / 60;
-    int iminute = (60 * minute(t) + isecond + 30) * NUM_LEDS / 3600;
-    int ihour = ( 3600 * (hour(t) % 12) + 60 * minute(t) + second(t) + 1800 ) * NUM_LEDS / 43020;
-    //hour
-    strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
-    for (int i = 0; i <= hour_width[disp_ind]; i++) {
-      strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
-      strip.setPixelColor(ClockCorrect(ihour + i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+    int isecond = second(t) * virtualStripBottomShelf.getNumPixels() / 60;
+    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(t) + second(t) + 30) * virtualStripMiddleShelf.getNumPixels() / 3600;
+    int ihour = ( 3600 * ((hour(t) + 6 ) % 12) + 60 * minute(t) + second(t) + 1800 ) * virtualStripTopShelf.getNumPixels() / 43020;
+
+
+    //hour on Top Shelf
+    // Make color for hour
+    uint32_t hourcolor;
+    // Special case for disp_ind == 1
+    // Top shelf show hours 6, 7, ...     12,  1, 2,.. , 5
+    // Use colors           R  O Y G B V White V  B G Y  O
+    if (disp_ind == 1) {
+      int adjhour = (hour(t) + 6) % 12;
+      adjhour = (adjhour < 7) ? adjhour : 12 - adjhour;
+      if (adjhour == 6) {
+        hourcolor = strip.Color(255, 255, 255);
+      } else {
+        hourcolor = strip.gamma32(strip.ColorHSV(adjhour * 65536 / 6));
+      }
+    } else {
+      hourcolor = strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
     }
-    //minute on top of hour
+
+    virtualStripTopShelf.setPixelColor(ihour, hourcolor);
+    for (int i = 0; i <= hour_width[disp_ind]; i++) {
+      virtualStripTopShelf.setPixelColor(ihour - i, hourcolor);
+      virtualStripTopShelf.setPixelColor(ihour + i, hourcolor);
+    }
+    //minute on middle shelf
     uint32_t use_color;
     if (minute_width[disp_ind] >= 0) {
       // optional to help identification, minute hand flshes between normal and half intensity
@@ -1517,18 +1545,18 @@ void Draw_Clock(time_t t, byte Phase)
       } else {
         use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
       }
-      strip.setPixelColor(ClockCorrect(iminute), use_color);
+      virtualStripMiddleShelf.setPixelColor(iminute, use_color);
       for (int i = 1; i <= minute_width[disp_ind]; i++) {
-        strip.setPixelColor(ClockCorrect(iminute - i), use_color); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute + i), use_color); // to help identification, minute hand flshes between normal and half intensity
+        virtualStripMiddleShelf.setPixelColor(iminute - i, use_color); // to help identification, minute hand flshes between normal and half intensity
+        virtualStripMiddleShelf.setPixelColor(iminute + i, use_color); // to help identification, minute hand flshes between normal and half intensity
       }
     }
-    //second on top of both
+    //second on bottom shelf
     if (second_width[disp_ind] >= 0) {
-      strip.setPixelColor(ClockCorrect(isecond), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+      virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
       for (int i = 0; i <= second_width[disp_ind]; i++) {
-        strip.setPixelColor(ClockCorrect(isecond - i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
-        strip.setPixelColor(ClockCorrect(isecond + i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        virtualStripBottomShelf.setPixelColor(isecond - i, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        virtualStripBottomShelf.setPixelColor(isecond + i, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
       }
     }
   }
