@@ -208,6 +208,8 @@ void led_color_alarm();
 void rainbowCallback();
 //void rainbowOnDisable();
 bool rainbowOnEnable();
+void shelfLoop();
+bool shelfLoopOnEnable();
 
 // Tasks
 
@@ -221,6 +223,7 @@ Task  tLED        (TASK_IMMEDIATE, TASK_FOREVER, &ledCallback, &ts, false, &ledO
 Task  tplayMelody (TASK_IMMEDIATE, TASK_FOREVER, &playMelody, &ts, false, &playMelodyOnEnable, &playMelodyOnDisable);
 Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
 Task trainbow (TASK_IMMEDIATE, TASK_FOREVER, &rainbowCallback, &ts, false, &rainbowOnEnable);
+Task tshelfLoop (TASK_IMMEDIATE, TASK_FOREVER, &shelfLoop, &ts, false, &shelfLoopOnEnable);
 Task tLed_color_alarm (TASK_IMMEDIATE, TASK_ONCE, &led_color_alarm, &ts, false);
 Task tntpCheck ( TASK_SECOND, CONNECT_TIMEOUT, &ntpCheck, &ts, false );
 // Tasks running on events
@@ -311,17 +314,15 @@ VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs
 VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
 
 // Blinking variables
-const unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
+unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
 unsigned long previousBlinkTime = 0;
 bool blinkState = false;
-
 // Moving pixel variables
-const unsigned long moveInterval = 1000;  // Moving interval in milliseconds
+unsigned long moveInterval = 1000;  // Moving interval in milliseconds
 unsigned long previousMoveTime = 0;
 uint16_t pixelIndex = 0;
-
 // Rainbow cycling variables
-const unsigned long hueInterval = 200;  // Hue change interval in milliseconds
+unsigned long hueInterval = 200;  // Hue change interval in milliseconds
 unsigned long previousHueTime = 0;
 long hue = 0;
 
@@ -343,11 +344,9 @@ void setup() {
   stripblue.begin(); // This initializes the NeoPixel library.
   stripred.fill(0x100000);
   stripblue.fill(0x000010);
-
   virtualStripBottomShelf.begin();
   virtualStripMiddleShelf.begin();
   virtualStripTopShelf.begin();
-
   randomSeed(now());
 
   // Initialize alarmTime(s) to default (now)
@@ -383,55 +382,15 @@ void setup() {
       Serial.println(buf);
     }
   }
-
   //colorAll(strip.Color(127, 0, 0), 1000, now());
   //Draw_Clock(0, 3); // Add the quater hour indicators
   calcSun();
-
   // Must be here in startup
   trainbow.setLtsPointer (&rainbowParm);
 }
 
 void loop() {
   ts.execute();                   // Only Scheduler should be executed in the loop
-
-
-  // Alternate color of all LEDs on the first virtual strip every specified period
-  if (millis() - previousBlinkTime >= blinkInterval) {
-    previousBlinkTime = millis();
-    blinkState = !blinkState;
-    if (blinkState) {
-      virtualStripBottomShelf.fill(virtualStripTopShelf.getPixelColor(4));
-      //virtualStripBottomShelf.fill(strip.Color(0, 0, 255));  // Blue color
-    } else {
-      virtualStripBottomShelf.fill(virtualStripTopShelf.getPixelColor(24));
-      //virtualStripBottomShelf.fill(strip.Color(127, 0, 127));    // Magenta
-    }
-    virtualStripBottomShelf.show();
-  }
-
-  // Move a single white pixel along the second virtual strip every specified period
-  if (millis() - previousMoveTime >= moveInterval) {
-    previousMoveTime = millis();
-    //virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(0, 0, 0));  // blank
-    virtualStripMiddleShelf.setPixelColor(pixelIndex, virtualStripTopShelf.getPixelColor(14));
-    virtualStripMiddleShelf.show();
-    pixelIndex = (pixelIndex + 1) % virtualStripMiddleShelf.getNumPixels();
-    virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(255, 255, 255));        // white on next
-  }
-
-  // Cycle through a rainbow pattern on the third virtual strip every specified periiod
-  if (millis() - previousHueTime >= hueInterval) {
-    previousHueTime = millis();
-    uint16_t numPixels = virtualStripTopShelf.getNumPixels();
-    for (uint16_t i = 0; i < numPixels; ++i) {
-      int pixelHue = hue + i * 65536L / numPixels;
-      virtualStripTopShelf.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
-    }
-    virtualStripTopShelf.show();
-    hue += 256;
-  }
-
 }
 
 /**
@@ -546,7 +505,6 @@ void ntpUpdateInit() {
   tntpCheck.enableDelayed();
 }
 
-
 void serverRun () {
   server.handleClient();                      // run the server
 }
@@ -563,7 +521,6 @@ void MDNSRun () {
   MDNS.update();                              // check for MDNS
 }
 
-
 // Modified for Southern Hemisphere DST
 // NZ daylight savings ends first Sunday of April at 3AM
 // NZ daylight starts last Sunday of September at 2AM
@@ -575,8 +532,6 @@ bool IsDst()
   //Serial.println(previousSunday);
   if (month() < 4 || month() > 9)  return true;
   if (month() > 4 && month() < 9)  return false;
-
-
   if (month() == 4) return previousSunday < 1;
   if (month() == 9) return previousSunday > 23;
   return false; // this line never gonna happen
@@ -633,7 +588,8 @@ void ntpCheck() {
     //ledDelayRed = TASK_SECOND / 3; //1
     //ledDelayBlue = 2 * TASK_SECOND; //2
     tLED.disable();
-    tchangeClock.enable();
+    //tchangeClock.enable();
+    tshelfLoop.enable();
     tntpCheck.disable();
     tntpUpdate.restartDelayed(NTP_CHECK_SEC * TASK_SECOND);
     udp.stop();
@@ -718,7 +674,6 @@ void startSPIFFS() { // Start the SPIFFS and list all contents
   }
 }
 
-
 void startWebSocket() { // Start a WebSocket server
   webSocket.begin();                          // start the websocket server
   webSocket.onEvent(webSocketEvent);          // if there's an incomming websocket message, go to function 'webSocketEvent'
@@ -758,9 +713,7 @@ void startOTA() { // Start the OTA service
   Serial.println("OTA ready\r\n");
 }
 
-
 void startServer() { // Start a HTTP server with a file read handler and an upload handler
-
   //list directory
   server.on("/list", HTTP_GET, handleFileList);
   //load editor
@@ -779,17 +732,10 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     server.send(200, "text/plain", "");
   }, handleFileUpload);
 
-
   server.on("/restart", []() {
     server.send(200, "text/plain", "Restarting ...");
     ESP.restart();
   });
-
-  //Not needed, was just for testing time correction
-  //  server.on("/add124sec", []() {
-  //    server.send(200, "text/plain", "Adjust time by 124 sec");
-  //    adjustTime(124);
-  //  });
 
   server.on("/spiff", []() {
     Dir dir = SPIFFS.openDir("/");
@@ -809,7 +755,6 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     server.send(200, "text/plain", buf);
     //delay(1000);
   });
-
 
   server.onNotFound(handleNotFound);          // if someone requests any other file or page, go to function 'handleNotFound'
   // and check if the file exists
@@ -942,7 +887,6 @@ void handleFileList() {
     output += "\"}";
     entry.close();
   }
-
   output += "]";
   server.send(200, "application/json", output);
 }
@@ -1035,23 +979,17 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int alarmtype;
         int alarmrepeat;
         int alarmduration;
-
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
         sscanf((char *) payload, "A%d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
         //PREVENT bad input
         if (alarm_ind >= 5) alarm_ind = 0;
         if (alarm_ind < 0) alarm_ind = 0;
-
-
         Serial.printf("Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
-
         setalarm(alarm_ind, alarmtype, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
         alarmInfo[alarm_ind].alarmSet = true;
-
-
 
         sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec", alarm_ind,
                 hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)), second(makeTime(alarmInfo[alarm_ind].alarmTime)),
@@ -1078,7 +1016,6 @@ void setBright()
   server.send(200, "text/plain", rsp);
 }
 
-
 void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   Serial.printf("setalarmtime: %d %d %d %d %d %d %d %d %d\n", alarmtype, t, r, s, m, h, d, mth, y);
   alarmInfo[alarm_ind].alarmType = alarmtype;
@@ -1093,7 +1030,6 @@ void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, 
   alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
 }
 
-
 void calcSun()
 {
   double sunrise;
@@ -1104,7 +1040,6 @@ void calcSun()
   double astrosunset;
   double nauticalsunrise;
   double nauticalsunset;
-
   /* Get the current time, and set the Sunrise code to use the current date */
   currentTime = now();
 
@@ -1153,10 +1088,8 @@ void calcSun()
 
   WeekMorning = Sunrise;
   WeekNight = CivilSunset;
-
   WeekendNight = WeekNight;
   WeekendMorning = WeekMorning;
-
   nextCalcTime = currentTime;
   nextCalcTime += 24 * 3600;
   breakTime(nextCalcTime, calcTime);
@@ -1164,14 +1097,12 @@ void calcSun()
   calcTime.Minute = 0;
   calcTime.Second = 1;
 
-
   Serial.print("Sunrise is ");
   Serial.print(sunrise);
   Serial.println(" minutes past midnight.");
   Serial.print("Sunset is ");
   Serial.print(sunset);
   Serial.print(" minutes past midnight.");
-
 
   sprintf(buf, "Sunset at %d:%02d, Sunrise at %d:%02d", Sunset.Hour, Sunset.Minute, Sunrise.Hour, Sunrise.Minute);
   webSocket.sendTXT(websocketId_num, buf);
@@ -1307,10 +1238,71 @@ void playMelody() {
 //}
 
 void led_color_alarm() {
-  tchangeClock.enableDelayed(LED_SHOW_TIME);
+  //tchangeClock.enableDelayed(LED_SHOW_TIME);
+  tshelfLoop.enableDelayed(LED_SHOW_TIME);
   strip.fill(led_color_alarm_rgb);
   SetBrightness(now()); // Set the clock brightness dependant on the time
   strip.show(); // Update strip with new contents
+}
+
+bool shelfLoopOnEnable() {
+  // Blinking variables
+  blinkInterval = 5000;  // Blinking interval in milliseconds
+  previousBlinkTime = 0;
+  blinkState = false;
+  // Moving pixel variables
+  moveInterval = 1000;  // Moving interval in milliseconds
+  previousMoveTime = 0;
+  pixelIndex = 0;
+  // Rainbow cycling variables
+  hueInterval = 200;  // Hue change interval in milliseconds
+  previousHueTime = 0;
+  hue = 0;
+  return true;
+}
+
+void shelfLoop() {
+  switch (day_disp_ind) {
+    case 0:
+      // Alternate color of all LEDs on the first virtual strip every specified period
+      if (millis() - previousBlinkTime >= blinkInterval) {
+        previousBlinkTime = millis();
+        blinkState = !blinkState;
+        if (blinkState) {
+          virtualStripBottomShelf.fill(virtualStripTopShelf.getPixelColor(4));
+          //virtualStripBottomShelf.fill(strip.Color(0, 0, 255));  // Blue color
+        } else {
+          virtualStripBottomShelf.fill(virtualStripTopShelf.getPixelColor(24));
+          //virtualStripBottomShelf.fill(strip.Color(127, 0, 127));    // Magenta
+        }
+        virtualStripBottomShelf.show();
+      }
+
+      // Move a single white pixel along the second virtual strip every specified period
+      if (millis() - previousMoveTime >= moveInterval) {
+        previousMoveTime = millis();
+        //virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(0, 0, 0));  // blank
+        virtualStripMiddleShelf.setPixelColor(pixelIndex, virtualStripTopShelf.getPixelColor(14));
+        virtualStripMiddleShelf.show();
+        pixelIndex = (pixelIndex + 1) % virtualStripMiddleShelf.getNumPixels();
+        virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(255, 255, 255));        // white on next
+      }
+
+      // Cycle through a rainbow pattern on the third virtual strip every specified periiod
+      if (millis() - previousHueTime >= hueInterval) {
+        previousHueTime = millis();
+        uint16_t numPixels = virtualStripTopShelf.getNumPixels();
+        for (uint16_t i = 0; i < numPixels; ++i) {
+          int pixelHue = hue + i * 65536L / numPixels;
+          virtualStripTopShelf.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+        }
+        virtualStripTopShelf.show();
+        hue += 256;
+      }
+      break;
+    default:
+      changeClock();
+  }
 }
 
 bool rainbowOnEnable() {
@@ -1318,7 +1310,8 @@ bool rainbowOnEnable() {
   rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
   parm.firstPixelHue = parm.firsthue;
   parm.start = millis();
-  tchangeClock.disable();
+  //tchangeClock.disable();
+  tshelfLoop.disable();
   return true;
 }
 
@@ -1335,7 +1328,9 @@ void rainbowCallback() {
   parm.firstPixelHue += parm.hueinc;
   if ((millis() - parm.start) > parm.duration) {
     trainbow.disable();
-    tchangeClock.enable();
+    //tchangeClock.enable();
+    tshelfLoop.enable();
+    tshelfLoop.enable();
   } else {
     trainbow.delay(parm.wait);  // Pause for a moment
   }
@@ -1391,7 +1386,6 @@ void ledBlue() {
 
 
 void changeClock() {
-  return;
   //tLED.disable();
   //tLED.enableDelayed(500);
   time_t tnow = now(); // Get the current time seconds
