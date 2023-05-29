@@ -66,6 +66,9 @@ struct TIME {
 };
 
 //************* Editable Options ******************************
+//uint16_t HourHues[6] = {0, 65536/12, 65536/6, 65536/3, 65536 * 2 / 3, 65536 * 9/12};
+//                        R     O         Y        G          B            V
+uint16_t HourHues[6] = {0, 5461, 10922, 21845, 43690, 49152};
 #define NUM_DISP_OPTIONS 5
 RGB SliderColor;
 // 5 Options for display index 0 normal day, 4 night,
@@ -262,47 +265,38 @@ time_t nextCalcTime;
 time_t nextAlarmTime;
 
 // With assistance of ChatBot but buggy
-// Define the virtual LED strips
+// Define the virtual LED strips as substrip (note could wrap around NO checks)
 class VirtualLEDStrip {
   private:
     Adafruit_NeoPixel& strip;
     uint16_t startPixel;
     uint16_t lenPixels;
-
   public:
     VirtualLEDStrip(Adafruit_NeoPixel& strip, uint16_t startPixel, uint16_t lenPixels)
       : strip(strip), startPixel(startPixel), lenPixels(lenPixels) {
     }
-
     void begin() {
       strip.begin();
     }
-
     void show() {
       strip.show();
     }
-
     void setPixelColor(uint16_t n, uint32_t color) {
-      if (n < lenPixels) {
-        strip.setPixelColor(startPixel + (lenPixels + n) % lenPixels, color);
-      }
+      strip.setPixelColor(startPixel + (lenPixels + n) % lenPixels, color);
     }
-
     void fill(uint32_t color) {
       strip.fill(color, startPixel, lenPixels);
     }
-
+    void fill(uint32_t color, uint16_t stPix, uint16_t lenP) {
+      strip.fill(color, startPixel + stPix % lenPixels, 1 + (lenP - 1) % lenPixels);
+    }
     uint32_t getPixelColor(uint16_t n) const {
-      if (n < lenPixels) {
-        return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
-      }
-      return 0;
+      return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
     }
     //TODO BUG this affects whole strip
-    void setBrightness(uint8_t brightness) {
-      strip.setBrightness(brightness);
-    }
-
+//    void setBrightness(uint8_t brightness) {
+//      strip.setBrightness(brightness);
+//    }
     uint16_t getNumPixels() const {
       return lenPixels;
     }
@@ -310,7 +304,7 @@ class VirtualLEDStrip {
 
 // Create virtual LED strips
 VirtualLEDStrip virtualStripBottomShelf(strip, 0, 20);    // First 20 LEDs
-VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs
+VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs in reverse order
 VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
 
 unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
@@ -385,7 +379,7 @@ void setup() {
     }
   }
   //colorAll(strip.Color(127, 0, 0), 1000, now());
-  //Draw_Clock(0, 3); // Add the quater hour indicators
+  //Draw_Clock(0, 3); // Add the quarter hour indicators
   calcSun();
   // Must be here in startup
   trainbow.setLtsPointer (&rainbowParm);
@@ -1516,16 +1510,22 @@ void Draw_Clock(time_t t, byte Phase)
     //hour on Top Shelf
     // Make color for hour
     uint32_t hourcolor;
+    uint16_t hourhue;
+    uint8_t hoursat = 0;
     // Special case for disp_ind == 1
-    // Top shelf show hours 6, 7, ...     12,  1, 2,.. , 5
-    // Use colors           R  O Y G B V White V  B G Y  O
+    // Top shelf show hours 6, 7, 8, 9, 10, 11, 12,  1, 2, 3, 4, 5
+    // Use colors           R  O  Y  G  B   V White  V  B  G  Y  O
     if (disp_ind == 1) {
       int adjhour = (hour(t) + 6) % 12;
       adjhour = (adjhour < 7) ? adjhour : 12 - adjhour;
       if (adjhour == 6) {
         hourcolor = strip.Color(255, 255, 255);
+        hoursat = 0;
       } else {
-        hourcolor = strip.gamma32(strip.ColorHSV(adjhour * 65536 / 6));
+        hoursat = 255;
+        //hourhue = adjhour * 65536 / 6;
+        hourhue = HourHues[adjhour]; // index must be between 0 and 5 inc
+        hourcolor = strip.gamma32(strip.ColorHSV(hourhue));
       }
     } else {
       hourcolor = strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
@@ -1536,27 +1536,39 @@ void Draw_Clock(time_t t, byte Phase)
       virtualStripTopShelf.setPixelColor(ihour - i, hourcolor);
       virtualStripTopShelf.setPixelColor(ihour + i, hourcolor);
     }
-    //minute on middle shelf
+    //minute on middle shelf (this shelf is reversed)
     uint32_t use_color;
-    if (minute_width[disp_ind] >= 0) {
-      // optional to help identification, minute hand flshes between normal and half intensity
-      if ((second() % 2) | (not minute_blink[disp_ind])) {
-        use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
-      } else {
-        use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
-      }
-      virtualStripMiddleShelf.setPixelColor(iminute, use_color);
-      for (int i = 1; i <= minute_width[disp_ind]; i++) {
-        virtualStripMiddleShelf.setPixelColor(iminute - i, use_color); // to help identification, minute hand flshes between normal and half intensity
-        virtualStripMiddleShelf.setPixelColor(iminute + i, use_color); // to help identification, minute hand flshes between normal and half intensity
+
+    if (disp_ind == 1) {
+      // Special case
+      virtualStripMiddleShelf.fill(hourcolor, iminute, 20 - iminute);
+    } else {
+      if (minute_width[disp_ind] >= 0) {
+        // optional to help identification, minute hand flshes between normal and half intensity
+        if ((second() % 2) | (not minute_blink[disp_ind])) {
+          use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
+        } else {
+          use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
+        }
+        virtualStripMiddleShelf.setPixelColor(iminute, use_color);
+        for (int i = 1; i <= minute_width[disp_ind]; i++) {
+          virtualStripMiddleShelf.setPixelColor(iminute - i, use_color); // to help identification, minute hand flshes between normal and half intensity
+          virtualStripMiddleShelf.setPixelColor(iminute + i, use_color); // to help identification, minute hand flshes between normal and half intensity
+        }
       }
     }
+
     //second on bottom shelf
-    if (second_width[disp_ind] >= 0) {
-      virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
-      for (int i = 0; i <= second_width[disp_ind]; i++) {
-        virtualStripBottomShelf.setPixelColor(isecond - i, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
-        virtualStripBottomShelf.setPixelColor(isecond + i, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+    if (disp_ind == 1) {
+      // Special case
+      virtualStripBottomShelf.fill(strip.ColorHSV(hourhue, hoursat, second() * second() * 255 / 3600));
+    } else {
+      if (second_width[disp_ind] >= 0) {
+        virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        for (int i = 0; i <= second_width[disp_ind]; i++) {
+          virtualStripBottomShelf.setPixelColor(isecond - i, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+          virtualStripBottomShelf.setPixelColor(isecond + i, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        }
       }
     }
   }
