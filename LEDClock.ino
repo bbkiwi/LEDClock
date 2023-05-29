@@ -79,7 +79,7 @@ RGB Quarters[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60},
 //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
 RGB Divisions[NUM_DISP_OPTIONS] = {{ 0, 0, 6 }, { 0, 0, 0 }, { 0, 0, 6 }, { 0, 0, 6 }, { 0, 0, 0 } };
 //All the other pixels with no information
-RGB Background[NUM_DISP_OPTIONS] = {{ 0, 0, 0 }, {255, 0, 0}};
+RGB Background[NUM_DISP_OPTIONS] = {{ 0, 0, 0 }, {40, 40, 40}};
 
 //The Hour hand
 RGB Hour[NUM_DISP_OPTIONS] = {{ 0, 255, 0 }, { 0, 0, 255 }, { 0, 255, 0 }, { 0, 255, 0 }, {100, 0, 0}}; //green
@@ -93,7 +93,7 @@ bool ClockGoBackwards = false;
 int day_disp_ind = 0;
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
-int hour_width[NUM_DISP_OPTIONS] = {3, 5, 3, 3, 0};
+int hour_width[NUM_DISP_OPTIONS] = {3, 3, 3, 3, 0};
 int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 
 
@@ -294,9 +294,9 @@ class VirtualLEDStrip {
       return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
     }
     //TODO BUG this affects whole strip
-//    void setBrightness(uint8_t brightness) {
-//      strip.setBrightness(brightness);
-//    }
+    //    void setBrightness(uint8_t brightness) {
+    //      strip.setBrightness(brightness);
+    //    }
     uint16_t getNumPixels() const {
       return lenPixels;
     }
@@ -954,6 +954,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%2d", &light_alarm_num);
         Serial.printf("ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d\n", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
+        sprintf(buf, "ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
+        webSocket.sendTXT(num, buf);
         trainbow.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -1503,9 +1505,8 @@ void Draw_Clock(time_t t, byte Phase)
   if (Phase >= 4) { // Draw hands
     // find indices of nearest LED
     int isecond = second(t) * virtualStripBottomShelf.getNumPixels() / 60;
-    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(t) + second(t) + 30) * virtualStripMiddleShelf.getNumPixels() / 3600;
-    int ihour = ( 3600 * ((hour(t) + 6 ) % 12) + 60 * minute(t) + second(t) + 1800 ) * virtualStripTopShelf.getNumPixels() / 43020;
-
+    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(t) + second(t)) * virtualStripMiddleShelf.getNumPixels() / 3600;
+    int ihour = (( 3600 * (hour(t) + 6) + 60 * minute(t) + second(t)) * virtualStripTopShelf.getNumPixels() / 43200) % virtualStripTopShelf.getNumPixels();
 
     //hour on Top Shelf
     // Make color for hour
@@ -1561,7 +1562,7 @@ void Draw_Clock(time_t t, byte Phase)
     //second on bottom shelf
     if (disp_ind == 1) {
       // Special case
-      virtualStripBottomShelf.fill(strip.ColorHSV(hourhue, hoursat, second() * second() * 255 / 3600));
+      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second() * second() * 255 / 3600)));
     } else {
       if (second_width[disp_ind] >= 0) {
         virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
