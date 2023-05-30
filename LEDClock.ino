@@ -288,7 +288,9 @@ class VirtualLEDStrip {
       strip.fill(color, startPixel, lenPixels);
     }
     void fill(uint32_t color, uint16_t stPix, uint16_t lenP) {
-      strip.fill(color, startPixel + stPix % lenPixels, 1 + (lenP - 1) % lenPixels);
+      if (lenP > 0) {
+        strip.fill(color, startPixel + stPix % lenPixels, 1 + (lenP - 1) % lenPixels);
+      }
     }
     uint32_t getPixelColor(uint16_t n) const {
       return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
@@ -307,8 +309,8 @@ VirtualLEDStrip virtualStripBottomShelf(strip, 0, 20);    // First 20 LEDs
 VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs in reverse order
 VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
 
-unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
-unsigned long previousClockTime = 0;
+//unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
+uint8_t previousSecond = 0;
 // Blinking variables
 unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
 unsigned long previousBlinkTime = 0;
@@ -1245,8 +1247,8 @@ void led_color_alarm() {
 
 bool shelfLoopOnEnable() {
   // Clock variables
-  clockInterval = 1000;
-  previousClockTime = 0;
+  //clockInterval = 1000;
+  previousSecond = 0;
   // Blinking variables
   blinkInterval = 5000;  // Blinking interval in milliseconds
   previousBlinkTime = 0;
@@ -1306,8 +1308,9 @@ void shelfLoop() {
     default:
       // NOTE needed to use timer, without it was calling Serial output
       //   in the changeClock() routine so much kept getting WDT resets
-      if (millis() - previousClockTime >= clockInterval) {
-        previousClockTime = millis();
+      //   using change of second() so will change clock as close to true time as pos
+      if (second() != previousSecond) {
+        previousSecond = second();
         changeClock();
       }
   }
@@ -1392,14 +1395,14 @@ void ledBlue() {
 }
 
 
-// This should only be run once a second
+// This is run when second() changes (tested in shelfLoop())
 void changeClock() {
   time_t tnow = now(); // Get the current time seconds
+  Draw_Clock(tnow, 4); // Draw the whole clock face with hours minutes and seconds
   if (second() == 0)
     digitalClockDisplay();
   else
     Serial.print('-');
-  Draw_Clock(tnow, 4); // Draw the whole clock face with hours minutes and seconds
   //TODO could make daily task here
   // Check if new day and recalculate sunSet etc.
   if (tnow >= makeTime(calcTime))
@@ -1479,8 +1482,19 @@ void printDigits(int digits)
 }
 
 //************* Functions to draw the clock ******************************
-void Draw_Clock(time_t t, byte Phase)
+//TODO check, tried to make change exactly on change of second by showing
+// pre calculated strip then calculating display for coming time. but
+//   seems to be worse.
+void Draw_Clock(time_t tnow, byte Phase)
 {
+  time_t t = tnow + 1; // coming time
+
+  // show previous set up LED for time
+  SetBrightness(t); // Set the clock brightness dependant on the time
+  strip.show(); // show all the pixels
+
+  // Now calculate display for next time
+
   if (Phase <= 0) // Set all pixels black
     for (int i = 0; i < NUM_LEDS; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
@@ -1574,8 +1588,8 @@ void Draw_Clock(time_t t, byte Phase)
     }
   }
 
-  SetBrightness(t); // Set the clock brightness dependant on the time
-  strip.show(); // show all the pixels
+  //SetBrightness(t); // Set the clock brightness dependant on the time
+  //strip.show(); // show all the pixels
 }
 
 bool IsDay(time_t t)
