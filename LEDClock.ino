@@ -1487,10 +1487,12 @@ void printDigits(int digits)
 //   seems to be worse.
 void Draw_Clock(time_t tnow, byte Phase)
 {
-  time_t t = tnow + 1; // coming time
+  //TODO Adding 2 to make adjusted coming time makes clockdisplay in sync with iphone time second hand
+  //   thought it should have been 1 but 2 is better :-O
+  time_t tadjusted = tnow + 2; // coming time
 
   // show previous set up LED for time
-  SetBrightness(t); // Set the clock brightness dependant on the time
+  SetBrightness(tadjusted); // Set the clock brightness dependant on the time
   strip.show(); // show all the pixels
 
   // Now calculate display for next time
@@ -1500,7 +1502,7 @@ void Draw_Clock(time_t tnow, byte Phase)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
   int disp_ind;
-  //disp_ind = IsDay(t) ?  day_disp_ind : 4;
+  //disp_ind = IsDay(tadjusted) ?  day_disp_ind : 4;
   disp_ind = day_disp_ind;
 
   if (Phase >= 1) // Draw all pixels background color
@@ -1518,9 +1520,9 @@ void Draw_Clock(time_t tnow, byte Phase)
 
   if (Phase >= 4) { // Draw hands
     // find indices of nearest LED
-    int isecond = second(t) * virtualStripBottomShelf.getNumPixels() / 60;
-    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(t) + second(t)) * virtualStripMiddleShelf.getNumPixels() / 3600;
-    int ihour = (( 3600 * (hour(t) + 6) + 60 * minute(t) + second(t)) * virtualStripTopShelf.getNumPixels() / 43200) % virtualStripTopShelf.getNumPixels();
+    int isecond = second(tadjusted) * virtualStripBottomShelf.getNumPixels() / 60;
+    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(tadjusted) + second(tadjusted)) * virtualStripMiddleShelf.getNumPixels() / 3600;
+    int ihour = (( 3600 * (hour(tadjusted) + 6) + 60 * minute(tadjusted) + second(tadjusted)) * virtualStripTopShelf.getNumPixels() / 43200) % virtualStripTopShelf.getNumPixels();
 
     //hour on Top Shelf
     // Make color for hour
@@ -1531,7 +1533,7 @@ void Draw_Clock(time_t tnow, byte Phase)
     // Top shelf show hours 6, 7, 8, 9, 10, 11, 12,  1, 2, 3, 4, 5
     // Use colors           R  O  Y  G  B   V White  V  B  G  Y  O
     if (disp_ind == 1) {
-      int adjhour = (hour(t) + 6) % 12;
+      int adjhour = (hour(tadjusted) + 6) % 12;
       adjhour = (adjhour < 7) ? adjhour : 12 - adjhour;
       if (adjhour == 6) {
         hourcolor = strip.Color(255, 255, 255);
@@ -1560,7 +1562,7 @@ void Draw_Clock(time_t tnow, byte Phase)
     } else {
       if (minute_width[disp_ind] >= 0) {
         // optional to help identification, minute hand flshes between normal and half intensity
-        if ((second() % 2) | (not minute_blink[disp_ind])) {
+        if ((second(tadjusted) % 2) | (not minute_blink[disp_ind])) {
           use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
         } else {
           use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
@@ -1576,7 +1578,7 @@ void Draw_Clock(time_t tnow, byte Phase)
     //second on bottom shelf
     if (disp_ind == 1) {
       // Special case
-      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second() * second() * 255 / 3600)));
+      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second(tadjusted) * second(tadjusted) * 255 / 3600)));
     } else {
       if (second_width[disp_ind] >= 0) {
         virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
@@ -1588,7 +1590,7 @@ void Draw_Clock(time_t tnow, byte Phase)
     }
   }
 
-  //SetBrightness(t); // Set the clock brightness dependant on the time
+  //SetBrightness(tadjusted); // Set the clock brightness dependant on the time
   //strip.show(); // show all the pixels
 }
 
