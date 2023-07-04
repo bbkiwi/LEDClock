@@ -226,7 +226,8 @@ Task  tLED        (TASK_IMMEDIATE, TASK_FOREVER, &ledCallback, &ts, false, &ledO
 Task  tplayMelody (TASK_IMMEDIATE, TASK_FOREVER, &playMelody, &ts, false, &playMelodyOnEnable, &playMelodyOnDisable);
 //Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
 Task trainbow (TASK_IMMEDIATE, TASK_FOREVER, &rainbowCallback, &ts, false, &rainbowOnEnable);
-Task tshelfLoop (TASK_IMMEDIATE, TASK_FOREVER, &shelfLoop, &ts, false, &shelfLoopOnEnable);
+// changed from TASK_IMMEDIATE to every 100 ms to see if prevents clock from freezing
+Task tshelfLoop (100 * TASK_MILLISECOND, TASK_FOREVER, &shelfLoop, &ts, false, &shelfLoopOnEnable);
 Task tLed_color_alarm (TASK_IMMEDIATE, TASK_ONCE, &led_color_alarm, &ts, false);
 Task tntpCheck ( TASK_SECOND, CONNECT_TIMEOUT, &ntpCheck, &ts, false );
 // Tasks running on events
@@ -283,6 +284,9 @@ class VirtualLEDStrip {
     }
     void setPixelColor(uint16_t n, uint32_t color) {
       strip.setPixelColor(startPixel + (lenPixels + n) % lenPixels, color);
+    }
+    void clear() {
+      strip.fill(0, startPixel, lenPixels);
     }
     void fill(uint32_t color) {
       strip.fill(color, startPixel, lenPixels);
@@ -956,7 +960,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%2d", &light_alarm_num);
         Serial.printf("ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d\n", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
-        sprintf(buf, "ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
+        sprintf(buf, "ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d, %d ", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num, 100000L*rainbowParm.hueinc/rainbowParm.wait/65536L);
         webSocket.sendTXT(num, buf);
         trainbow.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
@@ -1578,7 +1582,8 @@ void Draw_Clock(time_t tnow, byte Phase)
     //second on bottom shelf
     if (disp_ind == 1) {
       // Special case
-      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second(tadjusted) * second(tadjusted) * 255 / 3600)));
+      virtualStripBottomShelf.clear();
+      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second(tadjusted) * second(tadjusted) * 255 / 3600)), 0, isecond);
     } else {
       if (second_width[disp_ind] >= 0) {
         virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
