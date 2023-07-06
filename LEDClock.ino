@@ -282,7 +282,7 @@ class VirtualLEDStrip {
     void show() {
       strip.show();
     }
-    void setPixelColor(uint16_t n, uint32_t color) {
+    void setPixelColor(int16_t n, uint32_t color) {
       strip.setPixelColor(startPixel + (lenPixels + n) % lenPixels, color);
     }
     void clear() {
@@ -291,12 +291,12 @@ class VirtualLEDStrip {
     void fill(uint32_t color) {
       strip.fill(color, startPixel, lenPixels);
     }
-    void fill(uint32_t color, uint16_t stPix, uint16_t lenP) {
+    void fill(uint32_t color, int16_t stPix, uint16_t lenP) {
       if (lenP > 0) {
         strip.fill(color, startPixel + stPix % lenPixels, 1 + (lenP - 1) % lenPixels);
       }
     }
-    uint32_t getPixelColor(uint16_t n) const {
+    uint32_t getPixelColor(int16_t n) const {
       return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
     }
     //TODO BUG this affects whole strip
