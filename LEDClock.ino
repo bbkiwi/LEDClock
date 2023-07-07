@@ -265,6 +265,18 @@ time_t currentTime;
 time_t nextCalcTime;
 time_t nextAlarmTime;
 
+template <typename T, typename U>
+T nonNegMod(T n, U d ) {
+  // computes non-negative n % d
+  // result always >= 0 and < d
+  n %= d;
+  if (n >= 0) {
+    return n;
+  }
+  return n + d;
+}
+
+
 // With assistance of ChatBot but buggy
 // Define the virtual LED strips as substrip (note could wrap around NO checks)
 class VirtualLEDStrip {
@@ -283,7 +295,7 @@ class VirtualLEDStrip {
       strip.show();
     }
     void setPixelColor(int16_t n, uint32_t color) {
-      strip.setPixelColor(startPixel + (lenPixels + n) % lenPixels, color);
+      strip.setPixelColor(startPixel + nonNegMod(n, lenPixels), color);
     }
     void clear() {
       strip.fill(0, startPixel, lenPixels);
@@ -293,11 +305,11 @@ class VirtualLEDStrip {
     }
     void fill(uint32_t color, int16_t stPix, uint16_t lenP) {
       if (lenP > 0) {
-        strip.fill(color, startPixel + stPix % lenPixels, 1 + (lenP - 1) % lenPixels);
+        strip.fill(color, startPixel + nonNegMod(stPix, lenPixels), 1 + nonNegMod((lenP - 1), lenPixels));
       }
     }
     uint32_t getPixelColor(int16_t n) const {
-      return strip.getPixelColor(startPixel + (lenPixels + n) % lenPixels);
+      return strip.getPixelColor(startPixel + nonNegMod(n, lenPixels));
     }
     //TODO BUG this affects whole strip
     //    void setBrightness(uint8_t brightness) {
