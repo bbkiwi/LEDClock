@@ -278,15 +278,18 @@ T nonNegMod(T n, U d ) {
 
 
 // With assistance of ChatBot but buggy
-// Define the virtual LED strips as substrip (note could wrap around NO checks)
+// Define the virtual LED strips as substrip
+// (NO checks that startPixel ... startPixel + lenPixels -1 is contained in strip, it will be clipped to strip)
+// have option of wrap (default=true) on virtualLED Strip, otherwise clipping
 class VirtualLEDStrip {
   private:
     Adafruit_NeoPixel& strip;
     uint16_t startPixel;
     uint16_t lenPixels;
+    bool wrap;
   public:
-    VirtualLEDStrip(Adafruit_NeoPixel& strip, uint16_t startPixel, uint16_t lenPixels)
-      : strip(strip), startPixel(startPixel), lenPixels(lenPixels) {
+    VirtualLEDStrip(Adafruit_NeoPixel& strip, uint16_t startPixel, uint16_t lenPixels, bool wrap = true)
+      : strip(strip), startPixel(startPixel), lenPixels(lenPixels), wrap(wrap) {
     }
     void begin() {
       strip.begin();
@@ -295,8 +298,11 @@ class VirtualLEDStrip {
       strip.show();
     }
     void setPixelColor(int16_t n, uint32_t color) {
-      strip.setPixelColor(startPixel + nonNegMod(n, lenPixels), color);
+      if (wrap | (n >= 0 & n < lenPixels)) {
+        strip.setPixelColor(startPixel + nonNegMod(n, lenPixels), color);
+      }
     }
+
     void clear() {
       strip.fill(0, startPixel, lenPixels);
     }
@@ -309,7 +315,11 @@ class VirtualLEDStrip {
       }
     }
     uint32_t getPixelColor(int16_t n) const {
-      return strip.getPixelColor(startPixel + nonNegMod(n, lenPixels));
+      if (wrap | (n >= 0 & n < lenPixels)) {
+        return strip.getPixelColor(startPixel + nonNegMod(n, lenPixels));
+      } else {
+        return 0;
+      }
     }
     //TODO BUG this affects whole strip
     //    void setBrightness(uint8_t brightness) {
@@ -972,7 +982,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%2d", &light_alarm_num);
         Serial.printf("ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d\n", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
-        sprintf(buf, "ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d, %d ", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num, 100000L*rainbowParm.hueinc/rainbowParm.wait/65536L);
+        sprintf(buf, "ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d, %d ", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num, 100000L * rainbowParm.hueinc / rainbowParm.wait / 65536L);
         webSocket.sendTXT(num, buf);
         trainbow.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
