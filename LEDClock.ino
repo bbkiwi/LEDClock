@@ -24,7 +24,6 @@
 #include <Adafruit_NeoPixel.h>
 #include <TimeLib.h>
 #include <FS.h>
-#include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <string.h>
 #include "pitches.h"
