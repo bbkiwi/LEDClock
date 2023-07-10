@@ -246,7 +246,7 @@ WiFiUDP udp;                      // A UDP instance to let us send and receive p
 #define LOCAL_NTP_PORT  2390      // Local UDP port for NTP update
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
-#define NEOPIXEL_PIN 3      // This is the D9 pin
+#define NEOPIXEL_PIN 4      // This is the D2 pin
 #define PIEZO_PIN 5         // This is D1
 #define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
 
@@ -1583,7 +1583,7 @@ void Draw_Clock(time_t tnow, byte Phase)
 
     if (disp_ind == 1) {
       // Special case
-      virtualStripMiddleShelf.fill(hourcolor, iminute, 20 - iminute);
+      virtualStripMiddleShelf.fill(hourcolor, iminute, virtualStripMiddleShelf.getNumPixels() - iminute);
     } else {
       if (minute_width[disp_ind] >= 0) {
         // optional to help identification, minute hand flshes between normal and half intensity
