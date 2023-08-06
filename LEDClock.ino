@@ -89,7 +89,7 @@ RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 
 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = false;
-int day_disp_ind = 0;
+int day_disp_ind = 1;
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
 int hour_width[NUM_DISP_OPTIONS] = {3, 3, 3, 3, 0};
@@ -184,7 +184,7 @@ bool IsDay();
 #define CONNECT_TIMEOUT   30      // Seconds
 #define CONNECT_OK        0       // Status of successful connection to WiFi
 #define CONNECT_FAILED    (-99)   // Status of failed connection to WiFi
-#define NTP_CHECK_SEC  36001       // NTP server called every interval
+#define NTP_CHECK_SEC  3601       //36001       // NTP server called every interval
 // NTP Related Definitions
 #define NTP_PACKET_SIZE  48       // NTP time stamp is in the first 48 bytes of the message
 
@@ -580,6 +580,7 @@ void ntpCheck() {
     tntpUpdate.restartDelayed(NTP_CHECK_SEC * TASK_SECOND);
     //tLED.disable();
     udp.stop();
+    tshelfLoop.enable();
     return;
   }
 
@@ -610,12 +611,12 @@ void ntpCheck() {
     ClockInitialized = true;
     //ledDelayRed = TASK_SECOND / 3; //1
     //ledDelayBlue = 2 * TASK_SECOND; //2
+    udp.stop();
     tLED.disable();
     //tchangeClock.enable();
     tshelfLoop.enable();
     tntpCheck.disable();
     tntpUpdate.restartDelayed(NTP_CHECK_SEC * TASK_SECOND);
-    udp.stop();
   }
 }
 
