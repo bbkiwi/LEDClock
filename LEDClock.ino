@@ -217,10 +217,10 @@ bool shelfLoopOnEnable();
 
 //TODO should tConnect be started in setup?
 Task  tConnect    (TASK_SECOND, TASK_FOREVER, &connectInit, &ts, true);
-Task  tRunServer  (TASK_SECOND / 16, TASK_FOREVER, &serverRun, &ts, false);
-Task  tRunWebSocket  (TASK_SECOND / 16, TASK_FOREVER, &webSocketRun, &ts, false);
-Task  tOTARun  (TASK_SECOND / 16, TASK_FOREVER, &OTARun, &ts, false);
-Task  tMDNSRun  (TASK_SECOND / 16, TASK_FOREVER, &MDNSRun, &ts, false);
+Task  tRunServer  (TASK_IMMEDIATE, TASK_FOREVER, &serverRun, &ts, false);
+Task  tRunWebSocket  (TASK_IMMEDIATE, TASK_FOREVER, &webSocketRun, &ts, false);
+Task  tOTARun  (TASK_IMMEDIATE, TASK_FOREVER, &OTARun, &ts, false);
+Task  tMDNSRun  (TASK_IMMEDIATE, TASK_FOREVER, &MDNSRun, &ts, false);
 Task  tLED        (TASK_IMMEDIATE, TASK_FOREVER, &ledCallback, &ts, false, &ledOnEnable, &ledOnDisable);
 Task  tplayMelody (TASK_IMMEDIATE, TASK_FOREVER, &playMelody, &ts, false, &playMelodyOnEnable, &playMelodyOnDisable);
 //Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
