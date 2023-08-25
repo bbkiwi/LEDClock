@@ -47,6 +47,7 @@ uint8_t websocketId_num = 0;
 File fsUploadFile;                                    // a File variable to temporarily store the received file
 
 // OTA and mDns must have same name
+//const char *OTAandMdnsName = "ShelvesOld";           // A name and a password for the OTA and mDns service
 const char *OTAandMdnsName = "Shelves";           // A name and a password for the OTA and mDns service
 const char *OTAPassword = "pass";
 
@@ -185,6 +186,7 @@ bool IsDay();
 #define CONNECT_OK        0       // Status of successful connection to WiFi
 #define CONNECT_FAILED    (-99)   // Status of failed connection to WiFi
 #define NTP_CHECK_SEC  3601       //36001       // NTP server called every interval
+#define NTP_RE_CHECK_SEC  600     // if NTP server failed try again after this interval
 // NTP Related Definitions
 #define NTP_PACKET_SIZE  48       // NTP time stamp is in the first 48 bytes of the message
 
@@ -255,8 +257,10 @@ WiFiUDP udp;                      // A UDP instance to let us send and receive p
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
 #define NUM_LEDS 112
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel stripred = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+//Adafruit_NeoPixel stripred = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+//Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel stripred = Adafruit_NeoPixel(20, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(20, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 bool ClockInitialized = false;
 
@@ -352,6 +356,7 @@ long hue = 0;
 void setup() {
   Serial.begin(115200);
   delay(10); // Needed???
+  // NOTE F(string)  forces to be in flash memory
   Serial.println(F("LED CLOCK with modified TaskScheduler test #14 - Yield and internal StatusRequests"));
   Serial.println(F("=========================================================="));
   Serial.println();
@@ -367,9 +372,9 @@ void setup() {
   stripblue.begin(); // This initializes the NeoPixel library.
   stripred.fill(0x100000);
   stripblue.fill(0x000010);
-  virtualStripBottomShelf.begin();
-  virtualStripMiddleShelf.begin();
-  virtualStripTopShelf.begin();
+  //virtualStripBottomShelf.begin(); // not needed as strip.begin(); starts all virtualStrips on it
+  //virtualStripMiddleShelf.begin();
+  //virtualStripTopShelf.begin();
   randomSeed(now());
 
   // Initialize alarmTime(s) to default (now)
@@ -525,7 +530,9 @@ void ntpUpdateInit() {
   tLED.enable();
 
   // check NTP server response
-  tntpCheck.enableDelayed();
+  //tntpCheck.enableDelayed(); // did not work if NTP update failed previously
+  tntpCheck.restartDelayed();
+  //Serial.print(F(": 534"));
 }
 
 void serverRun () {
@@ -573,14 +580,17 @@ void ntpCheck() {
   // The last iteration will only occur if fails to update
   if ( tntpCheck.isLastIteration() ) {
     Serial.print(millis());
-    Serial.println(F(": NTP Update failed"));
-    ledDelayRed = TASK_SECOND / 2;
-    ledDelayBlue = TASK_SECOND / 16;
-    //TODO could reschedual in shorter time than usual
-    tntpUpdate.restartDelayed(NTP_CHECK_SEC * TASK_SECOND);
-    //tLED.disable();
+    Serial.println(F(": NTP Update failed, try again in 10 minutes"));
+    currentTime = now();
+    sprintf(buf, "NTP Update failed at %d:%02d:%02d retry in 10 minutes", hour(currentTime), minute(currentTime),
+          second(currentTime));
+    webSocket.sendTXT(websocketId_num, buf);
     udp.stop();
+    tLED.disable();
     tshelfLoop.enable();
+    tntpCheck.disable(); // not sure neccessary as only get here is last interation
+    //reschedual in shorter time than usual
+    tntpUpdate.restartDelayed(NTP_RE_CHECK_SEC * TASK_SECOND);
     return;
   }
 
@@ -600,6 +610,11 @@ void ntpCheck() {
   if ( doNtpUpdateCheck()) {
     Serial.print(millis());
     Serial.println(F(": NTP Update successful"));
+    currentTime = now();
+    sprintf(buf, "NTP Update at %d:%02d:%02d", hour(currentTime), minute(currentTime),
+          second(currentTime));
+    webSocket.sendTXT(websocketId_num, buf);
+
     Serial.printf("now %d\n", now());
     Serial.print(millis());
     Serial.print(F(": Unix time = "));
@@ -645,9 +660,13 @@ void sendNTPpacket(IPAddress & address)
   // all NTP fields have been given values, now
   // you can send a packet requesting a timestamp:
   udp.beginPacket(address, 123); //NTP requests are to port 123
+  //Serial.println(F(": 661"));
   udp.write(packetBuffer, NTP_PACKET_SIZE);
+  //Serial.println(F(": 663"));
   udp.endPacket();
+  //Serial.println(F(": 665"));
   yield();
+  //Serial.println(F(": 667"));
 }
 
 /**
