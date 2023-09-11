@@ -13,7 +13,7 @@
   Test on Esp8266 Node bread board attached to 4MB 2 MB FS
 */
 
-//#define TEST_CLOCK
+#define TEST_CLOCK
 //#define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STATUS_REQUEST
 #define _TASK_LTS_POINTER       // Compile with support for Local Task Storage pointer
@@ -32,6 +32,7 @@
 #include <ArduinoOTA.h>
 #include <ESP8266mDNS.h>
 
+#define TIME_CORRECTION 1 // emprical so in sync with iphone
 /* Cass Bay */
 #define LATITUDE        -43.601131
 #define LONGITUDE       172.689831
@@ -95,7 +96,12 @@ RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = false;
 int day_disp_ind = 1;
+#ifdef TEST_CLOCK
 bool auto_night_disp = true;
+#else
+bool auto_night_disp = false;
+#endif
+
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
 int hour_width[NUM_DISP_OPTIONS] = {3, 3, 3, 3, 0};
@@ -647,6 +653,7 @@ void ntpCheck() {
     Serial.print(F(": Unix time = "));
     Serial.println(epoch);
     setTime(epoch);
+    adjustTime(TIME_CORRECTION);
     adjustTime(hours_Offset_From_GMT * 3600);
     if (IsDst()) adjustTime(3600); // offset the system time by an hour for Daylight Savings
     Serial.printf("now fixed %d\n", now());
@@ -1024,6 +1031,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%d %d %d", &rainbowParm.percentWheelPerSec, &rainbowParm.percentWheelPerStrip, &rainbowParm.firsthue);
         rainbowParm.firsthue *= 256;
+        rainbowParm.duration = 10000;
         Serial.printf("percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d\n", rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, rainbowParm.firsthue, light_alarm_num);
         sprintf(buf, "percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d", rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, rainbowParm.firsthue, light_alarm_num);
         webSocket.sendTXT(num, buf);
@@ -1390,7 +1398,8 @@ void shelfLoop() {
   // Note if multiple alarms scheduled for same time only highest alarm_ind will display
   //
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    if (alarmInfo[alarm_ind].alarmSet && prevDisplay >= makeTime(alarmInfo[alarm_ind].alarmTime))
+    // NO use prevDisplay + 2 since time is adusted by 2 seconds to improve sync
+    if (alarmInfo[alarm_ind].alarmSet && prevDisplay  >= makeTime(alarmInfo[alarm_ind].alarmTime))
     {
       if (prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime)) {
         // only show the alarm if close to set time
@@ -1604,12 +1613,11 @@ void printDigits(int digits)
 //   seems to be worse.
 void Draw_Clock(time_t tnow, byte Phase)
 {
-  //TODO Adding 2 to make adjusted coming time makes clockdisplay in sync with iphone time second hand
+  //NOTE time as been adjusted coming time makes clockdisplay in sync with iphone time second hand
   //   thought it should have been 1 but 2 is better :-O
-  time_t tadjusted = tnow + 2; // coming time
 
   // show previous set up LED for time
-  SetBrightness(tadjusted); // Set the clock brightness dependant on the time
+  SetBrightness(tnow); // Set the clock brightness dependant on the time
   strip.show(); // show all the pixels
 
   // Now calculate display for next time
@@ -1620,7 +1628,7 @@ void Draw_Clock(time_t tnow, byte Phase)
 
   int disp_ind;
   if (auto_night_disp) {
-    disp_ind = IsDay(tadjusted) ?  day_disp_ind : 4;
+    disp_ind = IsDay(tnow) ?  day_disp_ind : 4;
   } else {
     disp_ind = day_disp_ind;
   }
@@ -1640,9 +1648,9 @@ void Draw_Clock(time_t tnow, byte Phase)
 
   if (Phase >= 4) { // Draw hands
     // find indices of nearest LED
-    int isecond = second(tadjusted) * virtualStripBottomShelf.getNumPixels() / 60;
-    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(tadjusted) + second(tadjusted)) * virtualStripMiddleShelf.getNumPixels() / 3600;
-    int ihour = (( 3600 * (hour(tadjusted) + 6) + 60 * minute(tadjusted) + second(tadjusted)) * virtualStripTopShelf.getNumPixels() / 43200) % virtualStripTopShelf.getNumPixels();
+    int isecond = second(tnow) * virtualStripBottomShelf.getNumPixels() / 60;
+    int iminute = virtualStripMiddleShelf.getNumPixels() - (60 * minute(tnow) + second(tnow)) * virtualStripMiddleShelf.getNumPixels() / 3600;
+    int ihour = (( 3600 * (hour(tnow) + 6) + 60 * minute(tnow) + second(tnow)) * virtualStripTopShelf.getNumPixels() / 43200) % virtualStripTopShelf.getNumPixels();
 
     //hour on Top Shelf
     // Make color for hour
@@ -1653,7 +1661,7 @@ void Draw_Clock(time_t tnow, byte Phase)
     // Top shelf show hours 6, 7, 8, 9, 10, 11, 12,  1, 2, 3, 4, 5
     // Use colors           R  O  Y  G  B   V White  V  B  G  Y  O
     if (disp_ind == 1) {
-      int adjhour = (hour(tadjusted) + 6) % 12;
+      int adjhour = (hour(tnow) + 6) % 12;
       adjhour = (adjhour < 7) ? adjhour : 12 - adjhour;
       if (adjhour == 6) {
         hourcolor = strip.Color(255, 255, 255);
@@ -1683,7 +1691,7 @@ void Draw_Clock(time_t tnow, byte Phase)
       // other case used selected color, width and flashing mode
       if (minute_width[disp_ind] >= 0) {
         // optional to help identification, minute hand flshes between normal and half intensity
-        if ((second(tadjusted) % 2) | (not minute_blink[disp_ind])) {
+        if ((second(tnow) % 2) | (not minute_blink[disp_ind])) {
           use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
         } else {
           use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
@@ -1699,9 +1707,9 @@ void Draw_Clock(time_t tnow, byte Phase)
     //second on bottom shelf
     if (disp_ind == 1) {
       // Special case fill with hourcolor from left to proportion of minute eg 30 sec is filled 1/2 of lower shelf
-      //         and brightness is proportional to square of this fraction eg 1/4 for above example
+      //         and brightness starts at and rest proportional to square of this fraction eg 64 + 1/4 * 191 for above example
       virtualStripBottomShelf.clear();
-      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second(tadjusted) * second(tadjusted) * 255 / 3600)), 0, isecond);
+      virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, 64 + second(tnow) * second(tnow) * 191 / 3600)), 0, isecond);
     } else {
       // other case used selected color and width
       if (second_width[disp_ind] >= 0) {
