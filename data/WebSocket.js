@@ -95,8 +95,10 @@ function setalarm() {
 
 
 function rainbowEffect(){
-  var num = document.getElementById('numpattern').value;
-  connection.send("R" + num);
+  var pwps = document.getElementById('pcntwheelpersec').value;
+  var pwpstr = document.getElementById('pcntwheelperstrip').value;
+  var firstcol = document.getElementById('firstcolor').value;
+  connection.send("R" + pwps + " " + pwpstr + " " + firstcol);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
 

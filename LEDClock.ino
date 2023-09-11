@@ -13,6 +13,7 @@
   Test on Esp8266 Node bread board attached to 4MB 2 MB FS
 */
 
+//#define TEST_CLOCK
 //#define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STATUS_REQUEST
 #define _TASK_LTS_POINTER       // Compile with support for Local Task Storage pointer
@@ -47,8 +48,11 @@ uint8_t websocketId_num = 0;
 File fsUploadFile;                                    // a File variable to temporarily store the received file
 
 // OTA and mDns must have same name
-//const char *OTAandMdnsName = "ShelvesOld";           // A name and a password for the OTA and mDns service
+#ifdef TEST_CLOCK
+const char *OTAandMdnsName = "ShelvesOld";           // A name and a password for the OTA and mDns service
+#else
 const char *OTAandMdnsName = "Shelves";           // A name and a password for the OTA and mDns service
+#endif
 const char *OTAPassword = "pass";
 
 // must be longer than longest message
@@ -91,6 +95,7 @@ RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 
 // Make clock go forwards or backwards (dependant on hardware)
 bool ClockGoBackwards = false;
 int day_disp_ind = 1;
+bool auto_night_disp = true;
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
 int hour_width[NUM_DISP_OPTIONS] = {3, 3, 3, 3, 0};
@@ -112,7 +117,7 @@ TIME AstroSunrise;
 TIME AstroSunset;
 
 byte day_brightness = 255;
-byte night_brightness = 64; //16;
+byte night_brightness = 32; //64; //16;
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
@@ -129,7 +134,7 @@ tmElements_t calcTime = {0};
 
 struct ALARM {
   bool alarmSet = false;
-  uint8_t alarmType;
+  uint16_t alarmType;
   uint16_t duration;
   uint32_t repeat;
   tmElements_t alarmTime;
@@ -142,22 +147,28 @@ uint16_t time_elapsed = 0;
 int TopOfClock = 0; // to make given pixel the top
 
 // notes in the melody for the sound alarm:
-int melody[] = { // Shave and a hair cut (3x) two bits terminate with -1 = STOP
+int melody1[] = { // Shave and a hair cut (3x) two bits terminate with -1 = STOP
   NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST,
   NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST,
   NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST, NOTE_B4, NOTE_C5, STOP
 };
-int whole_note_duration = 1000; // milliseconds
+
 // note durations: 4 = quarter note, 8 = eighth note, etc.:
-int noteDurations[] = {
+int noteDurations1[] = {
   4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 4
 };
+
+int whole_note_duration = 1000; // milliseconds
+int * melody = melody1;
+int * noteDurations = noteDurations1;
 int melodyNoteIndex;
 
 // for trainbow parms for call back
 typedef struct {
   long firstPixelHue;
   long start;
+  int percentWheelPerSec;
+  int percentWheelPerStrip;
   int wait = 5;
   int ex = 1;
   long firsthue;
@@ -172,7 +183,6 @@ rainbow_parm rainbowParm;
 
 #include "localwificonfig.h"
 Scheduler ts;
-
 
 //************* Declare user functions ******************************
 void Draw_Clock(time_t t, byte Phase);
@@ -255,7 +265,11 @@ WiFiUDP udp;                      // A UDP instance to let us send and receive p
 //************* Declare NeoPixel ******************************
 //Using WS2812B 5050 RGB
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
+#ifdef TEST_CLOCK
+#define NUM_LEDS 60
+#else
 #define NUM_LEDS 112
+#endif
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 //Adafruit_NeoPixel stripred = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 //Adafruit_NeoPixel stripblue = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -267,6 +281,7 @@ bool ClockInitialized = false;
 time_t currentTime;
 time_t nextCalcTime;
 time_t nextAlarmTime;
+time_t prevDisplay = 0;
 
 template <typename T, typename U>
 T nonNegMod(T n, U d ) {
@@ -334,9 +349,15 @@ class VirtualLEDStrip {
 };
 
 // Create virtual LED strips
+#ifdef TEST_CLOCK
+VirtualLEDStrip virtualStripBottomShelf(strip, 0, 10);
+VirtualLEDStrip virtualStripMiddleShelf(strip, 10, 10);
+VirtualLEDStrip virtualStripTopShelf(strip, 20, 40);
+#else
 VirtualLEDStrip virtualStripBottomShelf(strip, 0, 20);    // First 20 LEDs
 VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs in reverse order
 VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
+#endif
 
 //unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
 uint8_t previousSecond = 0;
@@ -356,8 +377,14 @@ long hue = 0;
 void setup() {
   Serial.begin(115200);
   delay(10); // Needed???
+  Serial.println();
   // NOTE F(string)  forces to be in flash memory
+#ifdef TEST_CLOCK
+  Serial.println(F("TEST LED CLOCK with modified TaskScheduler test #14 - Yield and internal StatusRequests"));
+#else
   Serial.println(F("LED CLOCK with modified TaskScheduler test #14 - Yield and internal StatusRequests"));
+#endif
+
   Serial.println(F("=========================================================="));
   Serial.println();
   tntpUpdate.waitFor( tConnect.getInternalStatusRequest() );  // NTP Task will start only after connection is made
@@ -402,7 +429,7 @@ void setup() {
     // will have loaded the saved parameters
     Serial.println("Config loaded");
     for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-      sprintf(buf, "alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+      sprintf(buf, "alarmInfo[%d] set=%d, type=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
               hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
               second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
               monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -583,7 +610,7 @@ void ntpCheck() {
     Serial.println(F(": NTP Update failed, try again in 10 minutes"));
     currentTime = now();
     sprintf(buf, "NTP Update failed at %d:%02d:%02d retry in 10 minutes", hour(currentTime), minute(currentTime),
-          second(currentTime));
+            second(currentTime));
     webSocket.sendTXT(websocketId_num, buf);
     udp.stop();
     tLED.disable();
@@ -612,7 +639,7 @@ void ntpCheck() {
     Serial.println(F(": NTP Update successful"));
     currentTime = now();
     sprintf(buf, "NTP Update at %d:%02d:%02d", hour(currentTime), minute(currentTime),
-          second(currentTime));
+            second(currentTime));
     webSocket.sendTXT(websocketId_num, buf);
 
     Serial.printf("now %d\n", now());
@@ -685,7 +712,7 @@ bool doNtpUpdateCheck() {
     udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
 
     //the timestamp starts at byte 40 of the received packet and is four bytes,
-    // or two words, long. First, esxtract the two words:
+    // or two words, long. First, extract the two words:
 
     unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
     unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
@@ -994,14 +1021,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         day_disp_ind = payload[2] - '0';
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
         light_alarm_flag = true;
-        rainbowParm.ncolorloop = random(4);
-        rainbowParm.ncolorfrac = random(1, 5);
-        rainbowParm.hueinc = random(255);
-        rainbowParm.wait = random(20);
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "R%2d", &light_alarm_num);
-        Serial.printf("ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d\n", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num);
-        sprintf(buf, "ncolorloop = %d, ncolorfrac = %d, hueinc = %d, wait = %d, light_alarm_num = %d, %d ", rainbowParm.ncolorloop, rainbowParm.ncolorfrac, rainbowParm.hueinc, rainbowParm.wait, light_alarm_num, 100000L * rainbowParm.hueinc / rainbowParm.wait / 65536L);
+        sscanf((char *) payload, "R%d %d %d", &rainbowParm.percentWheelPerSec, &rainbowParm.percentWheelPerStrip, &rainbowParm.firsthue);
+        rainbowParm.firsthue *= 256;
+        Serial.printf("percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d\n", rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, rainbowParm.firsthue, light_alarm_num);
+        sprintf(buf, "percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d", rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, rainbowParm.firsthue, light_alarm_num);
         webSocket.sendTXT(num, buf);
         trainbow.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
@@ -1331,6 +1355,7 @@ void shelfLoop() {
       // Move a single white pixel along the second virtual strip every specified period
       if (millis() - previousMoveTime >= moveInterval) {
         previousMoveTime = millis();
+        prevDisplay = now();
         //virtualStripMiddleShelf.setPixelColor(pixelIndex, strip.Color(0, 0, 0));  // blank
         virtualStripMiddleShelf.setPixelColor(pixelIndex, virtualStripTopShelf.getPixelColor(14));
         virtualStripMiddleShelf.show();
@@ -1355,9 +1380,54 @@ void shelfLoop() {
       //   in the changeClock() routine so much kept getting WDT resets
       //   using change of second() so will change clock as close to true time as pos
       if (second() != previousSecond) {
+        prevDisplay = now();
         previousSecond = second();
         changeClock();
       }
+  }
+
+  // Check for alarms
+  // Note if multiple alarms scheduled for same time only highest alarm_ind will display
+  //
+  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
+    if (alarmInfo[alarm_ind].alarmSet && prevDisplay >= makeTime(alarmInfo[alarm_ind].alarmTime))
+    {
+      if (prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime)) {
+        // only show the alarm if close to set time
+        // this prevents alarm from going off on a restart where configured alarm is in past
+        currentTime = now();
+        //HACK alarmType XXYY gives percentWheelPerSec XX0, percentWheelPerStrip YY0
+        rainbowParm.percentWheelPerSec = (alarmInfo[alarm_ind].alarmType / 100) * 10;
+        rainbowParm.percentWheelPerStrip = (alarmInfo[alarm_ind].alarmType % 100) * 10;
+        rainbowParm.duration = alarmInfo[alarm_ind].duration;
+        trainbow.enable();
+        //show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
+        // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
+        //Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
+        sprintf(buf, "%d %d %d Alarm [%d] at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType, rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, alarm_ind, hour(currentTime), minute(currentTime),
+                second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
+                monthNames[month(currentTime)].c_str(), year(currentTime));
+        Serial.println();
+        Serial.println(buf);
+        webSocket.sendTXT(websocketId_num, buf);
+      }
+
+      if (alarmInfo[alarm_ind].repeat <= 0)
+      {
+        alarmInfo[alarm_ind].alarmSet = false;
+      } else { // update next repeat
+        nextAlarmTime = makeTime(alarmInfo[alarm_ind].alarmTime);
+        currentTime = now();
+        while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo[alarm_ind].repeat;
+        breakTime(nextAlarmTime, alarmInfo[alarm_ind].alarmTime);
+        sprintf(buf, "Next Alarm [%d] %d:%02d:%02d %s %d %s %d", alarm_ind, hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+        Serial.println();
+        Serial.println(buf);
+        webSocket.sendTXT(websocketId_num, buf);
+      }
+    }
   }
 }
 
@@ -1365,6 +1435,7 @@ bool rainbowOnEnable() {
   Task& T = ts.currentTask();
   rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
   parm.firstPixelHue = parm.firsthue;
+  parm.hueinc = parm.wait * parm.percentWheelPerSec * 65536L / 100000;
   parm.start = millis();
   //tchangeClock.disable();
   tshelfLoop.disable();
@@ -1376,7 +1447,8 @@ void rainbowCallback() {
   rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
 
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-    int pixelHue = parm.firstPixelHue + (i * parm.ncolorloop *  65536L / strip.numPixels() / parm.ncolorfrac);
+    //int pixelHue = parm.firstPixelHue + (i * parm.ncolorloop *  65536L / strip.numPixels() / parm.ncolorfrac);
+    int pixelHue = parm.firstPixelHue + (i * 65536L  * parm.percentWheelPerStrip / 100  / strip.numPixels() );
     strip.setPixelColor(ClockCorrect(i + parm.nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
   }
   SetBrightness(now()); // Set the clock brightness dependant on the time
@@ -1384,7 +1456,7 @@ void rainbowCallback() {
   parm.firstPixelHue += parm.hueinc;
   if ((millis() - parm.start) > parm.duration) {
     trainbow.disable();
-    //tchangeClock.enable();
+    Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds so rainbow stops immediately
     tshelfLoop.enable();
   } else {
     trainbow.delay(parm.wait);  // Pause for a moment
@@ -1547,8 +1619,11 @@ void Draw_Clock(time_t tnow, byte Phase)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
   int disp_ind;
-  //disp_ind = IsDay(tadjusted) ?  day_disp_ind : 4;
-  disp_ind = day_disp_ind;
+  if (auto_night_disp) {
+    disp_ind = IsDay(tadjusted) ?  day_disp_ind : 4;
+  } else {
+    disp_ind = day_disp_ind;
+  }
 
   if (Phase >= 1) // Draw all pixels background color
     for (int i = 0; i < NUM_LEDS; i++)
@@ -1589,7 +1664,7 @@ void Draw_Clock(time_t tnow, byte Phase)
         hourhue = HourHues[adjhour]; // index must be between 0 and 5 inc
         hourcolor = strip.gamma32(strip.ColorHSV(hourhue));
       }
-    } else {
+    } else { // other cases use stored selected colors
       hourcolor = strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
     }
 
@@ -1602,9 +1677,10 @@ void Draw_Clock(time_t tnow, byte Phase)
     uint32_t use_color;
 
     if (disp_ind == 1) {
-      // Special case
+      // Special case fill with hourcolor from left to proportion of hour eg 15 min is filled 1/4 of middle shelf
       virtualStripMiddleShelf.fill(hourcolor, iminute, virtualStripMiddleShelf.getNumPixels() - iminute);
     } else {
+      // other case used selected color, width and flashing mode
       if (minute_width[disp_ind] >= 0) {
         // optional to help identification, minute hand flshes between normal and half intensity
         if ((second(tadjusted) % 2) | (not minute_blink[disp_ind])) {
@@ -1614,18 +1690,20 @@ void Draw_Clock(time_t tnow, byte Phase)
         }
         virtualStripMiddleShelf.setPixelColor(iminute, use_color);
         for (int i = 1; i <= minute_width[disp_ind]; i++) {
-          virtualStripMiddleShelf.setPixelColor(iminute - i, use_color); // to help identification, minute hand flshes between normal and half intensity
-          virtualStripMiddleShelf.setPixelColor(iminute + i, use_color); // to help identification, minute hand flshes between normal and half intensity
+          virtualStripMiddleShelf.setPixelColor(iminute - i, use_color); // to help identification, minute hand flashes between normal and half intensity
+          virtualStripMiddleShelf.setPixelColor(iminute + i, use_color); // to help identification, minute hand flashes between normal and half intensity
         }
       }
     }
 
     //second on bottom shelf
     if (disp_ind == 1) {
-      // Special case
+      // Special case fill with hourcolor from left to proportion of minute eg 30 sec is filled 1/2 of lower shelf
+      //         and brightness is proportional to square of this fraction eg 1/4 for above example
       virtualStripBottomShelf.clear();
       virtualStripBottomShelf.fill(strip.gamma32(strip.ColorHSV(hourhue, hoursat, second(tadjusted) * second(tadjusted) * 255 / 3600)), 0, isecond);
     } else {
+      // other case used selected color and width
       if (second_width[disp_ind] >= 0) {
         virtualStripBottomShelf.setPixelColor(isecond, strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
         for (int i = 0; i <= second_width[disp_ind]; i++) {
@@ -1635,9 +1713,6 @@ void Draw_Clock(time_t tnow, byte Phase)
       }
     }
   }
-
-  //SetBrightness(tadjusted); // Set the clock brightness dependant on the time
-  //strip.show(); // show all the pixels
 }
 
 bool IsDay(time_t t)
