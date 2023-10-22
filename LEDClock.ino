@@ -169,7 +169,7 @@ int * melody = melody1;
 int * noteDurations = noteDurations1;
 int melodyNoteIndex;
 
-// for trainbow parms for call back
+// for tvisual_alarm parms for call back
 typedef struct {
   long firstPixelHue;
   long start;
@@ -183,9 +183,11 @@ typedef struct {
   int ncolorfrac = 1;
   int nodepix = 0;
   uint16_t duration = 10000;
-} rainbow_parm;
+  void (*frame)();
+} visual_alarm_parm;
 
-rainbow_parm rainbowParm;
+visual_alarm_parm alarmParm;
+
 
 #include "localwificonfig.h"
 Scheduler ts;
@@ -197,6 +199,10 @@ void SetBrightness(time_t t);
 bool SetClockFromNTP();
 bool IsDst();
 bool IsDay();
+void rainbowFrame();
+void color_wipe_frame();
+// An array of function pointers for making frame of animations
+void (*alarm_frame[])() = {rainbowFrame, color_wipe_frame};
 
 #define CONNECT_TIMEOUT   30      // Seconds
 #define CONNECT_OK        0       // Status of successful connection to WiFi
@@ -225,9 +231,9 @@ void playMelodyOnDisable();
 void changeClock();
 void led_color_alarm();
 //bool led_color_alarmOnEnable();
-void rainbowCallback();
+void visual_alarmCallback();
 //void rainbowOnDisable();
-bool rainbowOnEnable();
+bool visual_alarmOnEnable();
 void shelfLoop();
 bool shelfLoopOnEnable();
 
@@ -242,7 +248,7 @@ Task  tMDNSRun  (TASK_IMMEDIATE, TASK_FOREVER, &MDNSRun, &ts, false);
 Task  tLED        (TASK_IMMEDIATE, TASK_FOREVER, &ledCallback, &ts, false, &ledOnEnable, &ledOnDisable);
 Task  tplayMelody (TASK_IMMEDIATE, TASK_FOREVER, &playMelody, &ts, false, &playMelodyOnEnable, &playMelodyOnDisable);
 //Task tchangeClock (TASK_SECOND, TASK_FOREVER, &changeClock, &ts, false);
-Task trainbow (TASK_IMMEDIATE, TASK_FOREVER, &rainbowCallback, &ts, false, &rainbowOnEnable);
+Task tvisual_alarm (TASK_IMMEDIATE, TASK_FOREVER, &visual_alarmCallback, &ts, false, &visual_alarmOnEnable);
 // changed from TASK_IMMEDIATE to every 100 ms to see if prevents clock from freezing
 Task tshelfLoop (100 * TASK_MILLISECOND, TASK_FOREVER, &shelfLoop, &ts, false, &shelfLoopOnEnable);
 Task tLed_color_alarm (TASK_IMMEDIATE, TASK_ONCE, &led_color_alarm, &ts, false);
@@ -447,7 +453,7 @@ void setup() {
   //Draw_Clock(0, 3); // Add the quarter hour indicators
   calcSun();
   // Must be here in startup
-  trainbow.setLtsPointer (&rainbowParm);
+  tvisual_alarm.setLtsPointer (&alarmParm);
 }
 
 void loop() {
@@ -1029,13 +1035,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
         light_alarm_flag = true;
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "R%d %d %d", &rainbowParm.percentWheelPerSec, &rainbowParm.percentWheelPerStrip, &rainbowParm.firsthue);
-        rainbowParm.firsthue *= 256;
-        rainbowParm.duration = 10000;
-        Serial.printf("percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d\n", rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, rainbowParm.firsthue, light_alarm_num);
-        sprintf(buf, "percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d", rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, rainbowParm.firsthue, light_alarm_num);
+        sscanf((char *) payload, "R%d %d %d", &alarmParm.percentWheelPerSec, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue);
+        alarmParm.firsthue *= 256;
+        alarmParm.duration = 10000;
+        alarmParm.frame = alarm_frame[1]; //&color_wipe_frame;
+        Serial.printf("percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d\n", alarmParm.percentWheelPerSec, alarmParm.percentWheelPerStrip, alarmParm.firsthue, light_alarm_num);
+        sprintf(buf, "percentWheelPerSec = %d, percentWheelPerStrip = %d, firsthue = %d, light_alarm_num = %d", alarmParm.percentWheelPerSec, alarmParm.percentWheelPerStrip, alarmParm.firsthue, light_alarm_num);
         webSocket.sendTXT(num, buf);
-        trainbow.enable();
+        tvisual_alarm.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
         tplayMelody.enable();
@@ -1406,14 +1413,15 @@ void shelfLoop() {
         // this prevents alarm from going off on a restart where configured alarm is in past
         currentTime = now();
         //HACK alarmType XXYY gives percentWheelPerSec XX0, percentWheelPerStrip YY0
-        rainbowParm.percentWheelPerSec = (alarmInfo[alarm_ind].alarmType / 100) * 10;
-        rainbowParm.percentWheelPerStrip = (alarmInfo[alarm_ind].alarmType % 100) * 10;
-        rainbowParm.duration = alarmInfo[alarm_ind].duration;
-        trainbow.enable();
+        alarmParm.percentWheelPerSec = (alarmInfo[alarm_ind].alarmType / 100) * 10;
+        alarmParm.percentWheelPerStrip = (alarmInfo[alarm_ind].alarmType % 100) * 10;
+        alarmParm.duration = alarmInfo[alarm_ind].duration;
+        alarmParm.frame = &rainbowFrame;
+        tvisual_alarm.enable();
         //show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
         // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
         //Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
-        sprintf(buf, "%d %d %d Alarm [%d] at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType, rainbowParm.percentWheelPerSec, rainbowParm.percentWheelPerStrip, alarm_ind, hour(currentTime), minute(currentTime),
+        sprintf(buf, "%d %d %d Alarm [%d] at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType, alarmParm.percentWheelPerSec, alarmParm.percentWheelPerStrip, alarm_ind, hour(currentTime), minute(currentTime),
                 second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
                 monthNames[month(currentTime)].c_str(), year(currentTime));
         Serial.println();
@@ -1439,40 +1447,60 @@ void shelfLoop() {
     }
   }
 }
-
-bool rainbowOnEnable() {
+//void rainbowFrame(long firstPixelHue, int percentWheelPerStrip, int nodepix){
+void rainbowFrame() {
   Task& T = ts.currentTask();
-  rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
-  parm.firstPixelHue = parm.firsthue;
-  parm.hueinc = parm.wait * parm.percentWheelPerSec * 65536L / 100000;
-  parm.start = millis();
-  //tchangeClock.disable();
-  tshelfLoop.disable();
-  return true;
-}
-
-void rainbowCallback() {
-  Task& T = ts.currentTask();
-  rainbow_parm& parm = *((rainbow_parm*) T.getLtsPointer());
-
+  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
     //int pixelHue = parm.firstPixelHue + (i * parm.ncolorloop *  65536L / strip.numPixels() / parm.ncolorfrac);
     int pixelHue = parm.firstPixelHue + (i * 65536L  * parm.percentWheelPerStrip / 100  / strip.numPixels() );
     strip.setPixelColor(ClockCorrect(i + parm.nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
   }
+}
+
+void color_wipe_frame() {
+  Task& T = ts.currentTask();
+  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  int pixelHue = parm.firstPixelHue + (parm.nodepix * 65536L  * parm.percentWheelPerStrip / 100  / strip.numPixels() );
+  strip.setPixelColor(ClockCorrect(parm.nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
+  parm.nodepix ++;
+  if (parm.nodepix > strip.numPixels()) {
+    parm.nodepix = 0;
+    parm.firstPixelHue += 1000 * parm.hueinc;
+  }
+}
+
+bool visual_alarmOnEnable() {
+  Task& T = ts.currentTask();
+  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  parm.firstPixelHue = parm.firsthue;
+  parm.hueinc = parm.wait * parm.percentWheelPerSec * 65536L / 100000;
+  parm.start = millis();
+  //parm.frame = &rainbowFrame;
+  //parm.frame = &color_wipe_frame;
+  //parm.nodepix = 0; // for hack below
+  //tchangeClock.disable();
+  tshelfLoop.disable();
+  return true;
+}
+
+void visual_alarmCallback() {
+  Task& T = ts.currentTask();
+  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  //  rainbowFrame(parm.firstPixelHue, parm.percentWheelPerStrip, parm.nodepix);
+  //rainbowFrame();
+  parm.frame();
   SetBrightness(now()); // Set the clock brightness dependant on the time
   strip.show(); // Update strip with new contents
   parm.firstPixelHue += parm.hueinc;
   if ((millis() - parm.start) > parm.duration) {
-    trainbow.disable();
+    tvisual_alarm.disable();
     Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds so rainbow stops immediately
     tshelfLoop.enable();
   } else {
-    trainbow.delay(parm.wait);  // Pause for a moment
+    tvisual_alarm.delay(parm.wait);  // Pause for a moment
   }
 }
-
-
 
 /*
    Flip the LED state based on the current state
