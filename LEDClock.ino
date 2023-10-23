@@ -463,8 +463,6 @@ void setup() {
       Serial.println(buf);
     }
   }
-  //colorAll(strip.Color(127, 0, 0), 1000, now());
-  //Draw_Clock(0, 3); // Add the quarter hour indicators
   calcSun();
   // Must be here in startup
   tvisual_alarm.setLtsPointer (&alarmParm);
@@ -1046,7 +1044,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Second[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
-      } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
+      } else if (payload[0] == 'R') {                      // the browser sends an R when the visual_alarm effect is enabled
         light_alarm_flag = true;
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "R%d %d %d %d %d", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &frames_per_sec, &light_alarm_num);
@@ -1057,15 +1055,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         } else {
           alarmParm.wait = 1000 / frames_per_sec;
         }
-        alarmParm.wait_delta = alarmParm.wait / 2;
+        alarmParm.wait_delta = 0;
         if (light_alarm_num < 0) {
-          light_alarm_num = 0;
-        } else if (light_alarm_num >= num_animations) {
-          light_alarm_num = num_animations - 1;
+          alarmParm.wait_delta = alarmParm.wait / 2;
         }
-        alarmParm.frame = alarm_frame[light_alarm_num];
-        Serial.printf("percentWheelPerFrame = %d, percentWheelPerStrip = %d, firsthue = %d, fps = %d, light_alarm_num = %d\n", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue, frames_per_sec, light_alarm_num);
-        sprintf(buf, "percentWheelPerFrame = %d, percentWheelPerStrip = %d, firsthue = %d, fps = %d, light_alarm_num = %d", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue, frames_per_sec, light_alarm_num);
+        alarmParm.ex = abs(light_alarm_num) / num_animations;
+        alarmParm.frame = alarm_frame[abs(light_alarm_num) % num_animations];
+        Serial.printf("Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d\n", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta);
+        sprintf(buf, "Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta);
         webSocket.sendTXT(num, buf);
         tvisual_alarm.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
@@ -1443,6 +1440,8 @@ void shelfLoop() {
         alarmParm.duration = alarmInfo[alarm_ind].duration;
         alarmParm.frame = &rainbowFrame;
         alarmParm.wait = 50;
+        alarmParm.wait_delta = 0;
+        alarmParm.ex = 1;
         tvisual_alarm.enable();
         //show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
         // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
@@ -1552,6 +1551,9 @@ bool visual_alarmOnEnable() {
   parm.wait_adj = 0;
   parm.wait_use = parm.wait;
   strip.fill(); // clear
+  for (int i = 0;  i < parm.numpixeltouse; i++) {
+    parm.pixelHSV[i] = 0;
+  }
   return true;
 }
 
@@ -1561,20 +1563,20 @@ void visual_alarmCallback() {
   Task& T = ts.currentTask();
   visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
   switch (parm.ex) {
-    case 1:
-      points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS}};
+    case 0:
+      points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS - 1}};
       break;
-    case 2:
+    case 1:
       points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
       break;
-    case 3:
-      points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS}, {NUM_LEDS - 1, 0}};
+    case 2:
+      points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS - 1}, {NUM_LEDS - 1, 0}};
       break;
-    case 4:
+    case 3:
       points = {{0, 0}, {NUM_LEDS / 3, NUM_LEDS / 3 - 1}, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS / 3}};
       break;
     default:
-      points = {{0, 0}, {NUM_LEDS / 4, NUM_LEDS}, {NUM_LEDS / 2, 0}, {3 * NUM_LEDS / 4, NUM_LEDS}, {NUM_LEDS - 1, 0}};
+      points = {{0, 0}, {NUM_LEDS / 4, NUM_LEDS - 1}, {NUM_LEDS / 2, 0}, {3 * NUM_LEDS / 4, NUM_LEDS - 1}, {NUM_LEDS - 1, 0}};
   }
 
   // parm.frame() setup for specific animation giving next frame
@@ -1584,13 +1586,16 @@ void visual_alarmCallback() {
   for (int i = 0; i < parm.numpixeltouse; i++) {
     j = piecewise_linear(i, points);
     strip.setPixelColor(ClockCorrect(i + parm.nodepix), parm.pixelHSV[j]);
+    //Serial.printf("(%d, %d)-", i, j);
+    //strip.setPixelColor(i + parm.nodepix, parm.pixelHSV[j]);
   }
+  //Serial.printf("\n");
   SetBrightness(now()); // Set the clock brightness dependant on the time
   strip.show(); // Update strip with new contents
   parm.firstPixelHue += parm.hueinc;
   if ((millis() - parm.start) > parm.duration) {
     tvisual_alarm.disable();
-    Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds so rainbow stops immediately
+    Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds so visual alarm stops immediately
     tshelfLoop.enable();
   } else {
     //TODO parm.nodepix_ind can not vary, vary randomly, vary periodically sine, sawtooth, triangle
@@ -1889,28 +1894,6 @@ int ClockCorrect(int Pixel)
 }
 
 
-void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w6, int w7, int w8, time_t t)
-{
-  time_elapsed = 0;
-  uint16_t time_start = millis();
-  sprintf(buf, "showlights called with %d %d %d %d %d %d %d %d %d %d\n ", duration, w1, w2, w3, w4, w5, w6, w7, w8, t);
-  Serial.println(buf);
-  while (time_elapsed < duration)
-  {
-    // Fill along the length of the strip in various colors...
-    if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1, t); // Red
-    if (w2 >= 0) colorWipe(strip.Color(  0, 255,   0), w2, t); // Green
-    if (w3 >= 0) colorWipe(strip.Color(  0,   0, 255), w3, t); // Blue
-    // Do a theater marquee effect in various colors...
-    if (w4 >= 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
-    if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
-    if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
-    if (w7 >= 0) rainbow2(w7, 1, 0, 256, 4, 1, 15, t, duration);            // Flowing rainbow cycle along the whole strip
-    if (w8 >= 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
-    time_elapsed = millis() - time_start;
-  }
-}
-
 //********* Bills NeoPixel Routines
 
 
@@ -1930,18 +1913,9 @@ int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points)
   }
   return static_cast<int8_t>(points.back().second);
 }
-
-
-// Set All Leds to given color for wait seconds
-void colorAll(uint32_t color, int duration, time_t t) {
-  strip.fill(color);
-  SetBrightness(t); // Set the clock brightness dependant on the time
-  strip.show();                          //  Update strip to match
-  delay(duration);                           //  Pause for a moment
-}
-
-// Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
+/*
+  // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
+  void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
@@ -1988,10 +1962,12 @@ void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int 
     delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
-}
+  }
+*/
 
-class Worm
-{
+/*
+  class Worm
+  {
     // colors, a list of worm segment (starting with head) hues
     // path a list of the LED indices over which the worm will travel (from 0 to 59 for clock)
     // cyclelen controls speed, worm movement only when LED upload cycles == 0 mod cyclelen
@@ -2063,9 +2039,9 @@ class Worm
       this->activecount++;
       this->activecount %= this->cyclelen;
     };
-};
+  };
 
-void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
+  void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
   std::vector < int >colors = {100, 101, 102, 103, 104, 105};
@@ -2088,39 +2064,8 @@ void moveworms(int wait, int ex, int ncolorloop, time_t t, uint16_t duration) {
     delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
-}
-
-void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uint8_t minSat, uint8_t maxSat, uint16_t minVal, uint16_t maxVal, time_t t, uint16_t duration) {
-  time_elapsed = 0;
-  uint8_t pixel;
-  long pixelHue;
-  uint8_t Sat;
-  uint8_t Val;
-  uint16_t time_start = millis();
-  pixelHue = minHue;
-  while (time_elapsed < duration) {
-    strip.fill(); // clear
-    for (int i = 0; i < numff; i++) {
-      pixel = random(NUM_LEDS);
-      if (hueInc == 0) {
-        // Choose random color
-        pixelHue = random(minHue, maxHue);
-      } else { // inc
-        pixelHue += hueInc;
-        if (pixelHue > maxHue) {
-          pixelHue = minHue;
-        }
-      }
-      Sat = random(minSat, maxSat);
-      Val = random(minVal, maxVal);
-      strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
-    }
-    SetBrightness(t); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
-    time_elapsed = millis() - time_start;
   }
-}
+*/
 
 
 /**
@@ -2129,23 +2074,6 @@ void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uin
     Copyright (C) 2015 Robert Ulbricht
     https://www.arduinoslovakia.eu
 */
-
-//uint32_t Blend(uint32_t color1, uint32_t color2)
-//{
-//  uint8_t r1, g1, b1;
-//  uint8_t r2, g2, b2;
-//  uint8_t r3, g3, b3;
-//
-//  r1 = (uint8_t)(color1 >> 16),
-//  g1 = (uint8_t)(color1 >>  8),
-//  b1 = (uint8_t)(color1 >>  0);
-//
-//  r2 = (uint8_t)(color2 >> 16),
-//  g2 = (uint8_t)(color2 >>  8),
-//  b2 = (uint8_t)(color2 >>  0);
-//
-//  return strip.Color(constrain(r1 + r2, 0, 255), constrain(g1 + g2, 0, 255), constrain(b1 + b2, 0, 255));
-//}
 
 uint32_t Subtract(uint32_t color1, uint32_t color2)
 {
@@ -2171,42 +2099,9 @@ uint32_t Subtract(uint32_t color1, uint32_t color2)
 
   return strip.Color(r, g, b);
 }
-
-
-//void AddColor(uint8_t position, uint32_t color)
-//{
-//  uint32_t blended_color = Blend(strip.getPixelColor(position), color);
-//  strip.setPixelColor(position, blended_color);
-//}
-
-void SubtractColor(uint8_t position, uint32_t color)
-{
-  uint32_t blended_color = Subtract(strip.getPixelColor(position), color);
-  strip.setPixelColor(position, blended_color);
-}
-
-void fire(time_t t, uint16_t duration) {
-  time_elapsed = 0;
-  uint32_t fire_color   = strip.Color ( 255,  127,  00);
-  uint16_t time_start = millis();
-  while (time_elapsed < duration) {
-    //strip.fill(); // clear
-    strip.fill(fire_color);
-    for (int i = 0; i < NUM_LEDS; i++) {
-      //AddColor(i, fire_color);
-      int r = random(255);
-      uint32_t diff_color = strip.Color ( r, r , r / 2);
-      SubtractColor(i, diff_color);
-    }
-    SetBrightness(t); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
-    delay(random(50, 150)); // Pause for a random moment
-    time_elapsed = millis() - time_start;
-  }
-}
-
-//https://en.wikipedia.org/wiki/Elementary_cellular_automaton#
-void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t duration) {
+/*
+  //https://en.wikipedia.org/wiki/Elementary_cellular_automaton#
+  void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t duration) {
   time_elapsed = 0;
   std::vector < int >next(NUM_LEDS);
   uint16_t time_start = millis();
@@ -2233,10 +2128,10 @@ void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t 
     delay(wait); // wait
     time_elapsed = millis() - time_start;
   }
-}
+  }
 
 
-void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, long pixelHue, time_t t, uint16_t duration) {
+  void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, long pixelHue, time_t t, uint16_t duration) {
   time_elapsed = 0;
   std::vector < int >nextR(NUM_LEDS);
   std::vector < int >nextG(NUM_LEDS);
@@ -2266,30 +2161,31 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, lon
     delay(wait); // wait
     time_elapsed = millis() - time_start;
   }
-}
+  }
+*/
 
+/*
+  //********* Adafruit NeoPIxel Routines
+  // Some functions of our own for creating animated effects -----------------
 
-//********* Adafruit NeoPIxel Routines
-// Some functions of our own for creating animated effects -----------------
-
-// Fill strip pixels one after another with a color. Strip is NOT cleared
-// first; anything there will be covered pixel by pixel. Pass in color
-// (as a single 'packed' 32-bit value, which you can get by calling
-// strip.Color(red, green, blue) as shown in the loop() function above),
-// and a delay time (in milliseconds) between pixels.
-void colorWipe(uint32_t color, int wait, time_t t) {
+  // Fill strip pixels one after another with a color. Strip is NOT cleared
+  // first; anything there will be covered pixel by pixel. Pass in color
+  // (as a single 'packed' 32-bit value, which you can get by calling
+  // strip.Color(red, green, blue) as shown in the loop() function above),
+  // and a delay time (in milliseconds) between pixels.
+  void colorWipe(uint32_t color, int wait, time_t t) {
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
     strip.setPixelColor(ClockCorrect(i), color);         //  Set pixel's color (in RAM)
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show();                          //  Update strip to match
     delay(wait);                           //  Pause for a moment
   }
-}
+  }
 
-// Theater-marquee-style chasing lights. Pass in a color (32-bit value,
-// a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
-// between frames.
-void theaterChase(uint32_t color, int wait, time_t t) {
+  // Theater-marquee-style chasing lights. Pass in a color (32-bit value,
+  // a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
+  // between frames.
+  void theaterChase(uint32_t color, int wait, time_t t) {
   for (int a = 0; a < 10; a++) { // Repeat 10 times...
     for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
       strip.clear();         //   Set all pixels in RAM to 0 (off)
@@ -2302,10 +2198,10 @@ void theaterChase(uint32_t color, int wait, time_t t) {
       delay(wait);  // Pause for a moment
     }
   }
-}
+  }
 
-// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait, int ncolorloop, time_t t) {
+  // Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
+  void rainbow(int wait, int ncolorloop, time_t t) {
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
@@ -2327,10 +2223,10 @@ void rainbow(int wait, int ncolorloop, time_t t) {
     strip.show(); // Update strip with new contents
     delay(wait);  // Pause for a moment
   }
-}
+  }
 
-// Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
-void theaterChaseRainbow(int wait, time_t t) {
+  // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
+  void theaterChaseRainbow(int wait, time_t t) {
   int firstPixelHue = 0;     // First pixel starts at red (hue 0)
   for (int a = 0; a < 10; a++) { // Repeat 10 times...
     for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
@@ -2350,4 +2246,5 @@ void theaterChaseRainbow(int wait, time_t t) {
       firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
     }
   }
-}
+  }
+*/
