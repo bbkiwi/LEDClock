@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>LED Control</title>
     <link href='main.css' rel='stylesheet' type='text/css'>
-	<link rel="stylesheet" href="dist/simplepicker.css">
+	  <link rel="stylesheet" href="dist/simplepicker.css">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
     <link rel="icon" type="image/png" sizes="144x144"  href="/favicon-144x144.png">
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon.ico">
@@ -26,13 +26,38 @@
 		  color: #4c4c4c;
 		  white-space: pre;
 		}
+        .btn-group button {
+            background-color: #04AA6D; /* Green background */
+            border: 1px solid green; /* Green border */
+            color: white; /* White text */
+            padding: 10px 24px; /* Some padding */
+            cursor: pointer; /* Pointer/hand icon */
+            float: center; /* Float the buttons side by side */
+        }
+
+        /* Clear floats (clearfix hack) */
+        .btn-group:after {
+          content: "";
+          clear: both;
+          display: table;
+        }
+
+        .btn-group button:not(:last-child) {
+          border-right: none; /* Prevent double borders */
+        }
+
+        /* Add a background color on hover */
+        .btn-group button:hover {
+          background-color: #3e8e41;
+        }
   </style>
 </head>
 
 <body>
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
-<button onclick="toggleShowHide('Led-Control')">LED Control</button>
-<button class="simplepicker-btn">Show Picker</button>
+<button onclick="toggleShowHide('Display-Control')">Display Control</button>
+<button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
+<button onclick="toggleShowHide('Alarm-Control2')">Alarm Control2</button>
 <div id="Clock-Control" style="display: none;">
     <center>
         <header>
@@ -40,16 +65,22 @@
         </header>
         <div>
              <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
-             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button></p>
+             <p style="margin:8px 0px"><button id="animation" class="button" style="background-color:#999" onclick="lightEffect();">Light Effect</button>
+             <input type="text" size = "4" id="pcntwheelpersec" value=0>
+             <input type="text" size="4" id="pcntwheelperstrip" value=0>
+             <input type="text" size="4" id="firstcolor" value=0>
+             <input type="text" size="4" id="framerate" value=0>
+             <input type="text" size="4" id="lightalarmnum" value=0></p>
+             <p style="margin:8px 0px"><button id="melody" class="button" style="background-color:#999" onclick="melodyEffect();">Melody</button></p>
              <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
              <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
        </div>
     </center>
 </div>
-<div id="Led-Control" style="display: none;">
+<div id="Display-Control" style="display: none;">
     <center>
         <header>
-            <h1>LED Control</h1>
+            <h1>Display Control</h1>
         </header>
         <div>
             <table>
@@ -66,12 +97,211 @@
                     <td><input class="enabled" id="b" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
                 </tr>
             </table>
-             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setbackground();">Set Background</button></p>
-             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="sethour();">Set Hour</button></p>
-             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setminute();">Set Minute</button></p>
+       </div>
+
+
+       <div class="btn-group">
+             <button id="setbackground" class="button"  onclick="setbackground();">Back</button>
+             <button id="set12" class="button"  onclick="set12();">12</button>
+             <button id="setquarter" class="button"  onclick="setquarter();">Quad</button>
+             <button id="setdivision" class="button"  onclick="setdivision();">Div</button>
+       </div>
+       <div>
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: right"><button id="sethour" class="button"  onclick="sethour();">Hour</button> </td>
+                     <td style="width:14.4px; text-align: right"> <button id="setminute" class="button"  onclick="setminute();">Min</button></td>
+                     <td style="width:14.4px; text-align: right"> <button id="setsecond" class="button"  onclick="setsecond();">Sec</button></td>
+                     <td style="width:14.4px; text-align: right"> <button id="setdispind" class="button"  onclick="setdispind();">Disp#</button></td>
+                </tr>
+                <tr>
+                    <td style="width:14.4px; text-align: right">
+                      <select id="widthhour">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                      </select></td>
+                     <td style="width:14.4px; text-align: right">
+                       <select id="widthminute">
+                        <option value="-1">Hide</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                      </select> </td>
+                     <td style="width:14.4px; text-align: right">
+                        <select id="widthsecond">
+                        <option value="-1">Hide</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        </select>
+                     </td>
+                     <td style="width:14.4px; text-align: right">
+                        <select id="dispind">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">night</option>
+                        </select>
+                     </td>
+                 </tr>
+                 <tr>
+                    <td style="width:14.4px; text-align: right"> </td>
+                    <td style="width:14.4px; text-align: right"><input id="blinkminute" type="checkbox" checked="true">blink </td>
+                    <td style="width:14.4px; text-align: right"> </td>
+                    <td style="width:14.4px; text-align: right"> </td>
+                </tr>
+            </table>
        </div>
     </center>
-	</div>
+</div>
+
+<div id="Alarm-Control" style="display: none;">
+    <center>
+        <header>
+            <h1>Alarm Control</h1>
+        </header>
+        <div>
+          <button class="simplepicker-btn">Choose Date and Time</button>
+          <p style="margin:8px 0px"><button id="saveddatetime" class="button" style="background-color:#999">Save Date Time</button></p>
+          <p style="margin:8px 0px"><button id="type" class="button" style="background-color:#999" onclick="savetype();">Type</button>
+          <input type="text" id="alarmtype" value=1></p>
+             <p style="margin:8px 0px"><button id="repeat" class="button" style="background-color:#999" onclick="saverepeat();">Repeat</button>
+             <input type="text" id="alarmrepeat" value=86400></p>
+             <p style="margin:8px 0px"><button id="duration" class="button" style="background-color:#999" onclick="saveduration();">Duration</button>
+             <input type="text" id="alarmduration" value=10000></p>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" style="background-color:#999" onclick="setalarm();">Set Alarm</button>
+             <input type="text" id="alarmnum" value=1></p>
+        </div>
+    </center>
+</div>
+
+<div id="Alarm-Control2" style="display: none;">
+    <center>
+        <header>
+            <h1>Alarm Control 2</h1>
+        </header>
+        <div>
+          <table>
+            <tr>
+              <td>
+                <button class="simplepicker-btnx">Picker</button>
+              </td>
+            </tr>
+
+            <tr>
+              <td>
+                <button id="saveddatetime1" class="button" style="background-color:#999">When</button>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+            </tr>
+
+            <tr>
+              <td>
+          <button id="type1" class="button" style="background-color:#999" onclick="savetype();">Type</button>
+          </td>
+                       <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+
+          </tr>
+
+          <tr>
+            <td>
+            <button id="repeat1" class="button" style="background-color:#999" onclick="saverepeat();">Repeat</button>
+            </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+
+             </tr>
+
+             <tr>
+            <td>
+            <button id="duration1" class="button" style="background-color:#999" onclick="saverepeat();">Duration</button>
+            </td>
+              <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+
+             </tr>
+          </table>
+        </div>
+    </center>
+</div>
+
   <div class="picker-area">
   <h2>Event logs:</h2>
   <div class="event-log"></div>

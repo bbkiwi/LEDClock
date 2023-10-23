@@ -1,6 +1,7 @@
 var rainbowEnable = false;
 var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
 //var connection = new WebSocket('wss://echo.websocket.org/');
+var savedate;
 
 connection.onopen = function () {
     connection.send('Connect ' + new Date());
@@ -34,11 +35,32 @@ function setbackground() {
 }
 
 function sethour() {
-    connection.send("H");
+    connection.send("H" + document.getElementById('widthhour').value);
 }
 
 function setminute() {
-    connection.send("M");
+    var blink = (document.getElementById('blinkminute').checked) ? 1: 0
+    connection.send("M" + blink + " " + document.getElementById('widthminute').value);
+}
+
+function setsecond() {
+    connection.send("s" + " " + document.getElementById('widthsecond').value);
+}
+
+function setdispind() {
+      connection.send("D" + " " + document.getElementById('dispind').value);
+}
+
+function set12() {
+    connection.send("t");
+}
+
+function setquarter() {
+    connection.send("q");
+}
+
+function setdivision() {
+    connection.send("d");
 }
 
 function requestSaveConfig() {
@@ -54,14 +76,37 @@ function calcSunsets() {
 }
 
 function pickerTimeDate(date) {
-	console.log(date.getDay(), date.getHours(), date);
-	document.getElementById('whattime').innerHTML = date;
-	connection.send("A" + date.getMonth() +" " + date);
+  var alarmnum = document.getElementById('alarmnum').value;
+  savedate = date;
+	console.log(date.getDay(), date.getHours(), date, alarmnum);
+	document.getElementById('saveddatetime').innerHTML = date;
+	//connection.send("A" + alarmnum + " " + date.getMonth() +" " + date);
 }
 
-function rainbowEffect(){
-    connection.send("R");
+function setalarm() {
+  var alarmnum = document.getElementById('alarmnum').value;
+  var alarmtype = document.getElementById('alarmtype').value;
+  var alarmrepeat = document.getElementById('alarmrepeat').value;
+  var alarmduration = document.getElementById('alarmduration').value;
+	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
+	//document.getElementById('whattime').innerHTML = savedate;
+	connection.send("A" + alarmnum + " " + alarmtype + " " + alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+}
+
+
+function lightEffect(){
+  var pwps = document.getElementById('pcntwheelpersec').value;
+  var pwpstr = document.getElementById('pcntwheelperstrip').value;
+  var firstcol = document.getElementById('firstcolor').value;
+  var framerate = document.getElementById('framerate').value;
+  var lightalarmnum = document.getElementById('lightalarmnum').value;
+  connection.send("R" + pwps + " " + pwpstr + " " + firstcol + " " + framerate + " " + lightalarmnum);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
+}
+
+function melodyEffect(){
+    connection.send("L");
+    //document.getElementById('melody').style.backgroundColor = '#00878F';
 }
 
 
