@@ -98,9 +98,18 @@ function lightEffect(){
   var pwps = document.getElementById('pcntwheelpersec').value;
   var pwpstr = document.getElementById('pcntwheelperstrip').value;
   var firstcol = document.getElementById('firstcolor').value;
+  var nodec2 = document.getElementById('nodec2').value;
+  var nodec1 = document.getElementById('nodec1').value;
+  var nodec0 = document.getElementById('nodec0').value;
   var framerate = document.getElementById('framerate').value;
   var lightalarmnum = document.getElementById('lightalarmnum').value;
-  connection.send("R" + pwps + " " + pwpstr + " " + firstcol + " " + framerate + " " + lightalarmnum);
+  var lightalarmex = document.getElementById('lightalarmex').value;
+  var duration = document.getElementById('duration').value;
+  var funcptstr = " " + points.length;
+  for (let i = 0; i < points.length; i++) {
+    funcptstr += " " + points[i].x + " " + points[i].y;
+  }
+  connection.send("R" + pwps + " " + pwpstr + " " + firstcol + " " + nodec2 + " "  + nodec1 + " " + nodec0 + " " + framerate + " " + lightalarmnum + " " + lightalarmex + " " + duration + funcptstr);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
 

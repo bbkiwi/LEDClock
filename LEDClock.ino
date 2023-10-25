@@ -13,7 +13,8 @@
   Test on Esp8266 Node bread board attached to 4MB 2 MB FS
 */
 
-
+//TODO allow more general light animations for alarms
+// need to add parameters and fix configuration json for this
 #define TEST_CLOCK
 #ifdef TEST_CLOCK
 #define NUM_LEDS 60
@@ -37,7 +38,6 @@
 #include "sunset.h"
 #include <ArduinoOTA.h>
 #include <ESP8266mDNS.h>
-
 #define TIME_CORRECTION 1 // emprical so in sync with iphone
 /* Cass Bay */
 #define LATITUDE        -43.601131
@@ -211,8 +211,13 @@ typedef struct {
   int hueinc = 256;
   int ncolorloop = 1;
   int ncolorfrac = 1;
-  int nodepix = 0;
+  int nodepix = 0; // hundreths of pixel
+  int nodepix_diff = 0; // hundreths of pixel
   int nodepix_ind = 0;
+  // starting node index of animation a quadratic fcn of frame
+  int nodepix_coef0 = 0; // constant coef
+  int nodepix_coef1 = 0; // linear coef
+  int nodepix_coef2 = 0; // quadratic coef
   uint16_t duration = 10000;
   int numpixeltouse = NUM_LEDS;
   uint32_t pixelHSV[NUM_LEDS] = {0};
@@ -220,6 +225,7 @@ typedef struct {
 } visual_alarm_parm;
 
 visual_alarm_parm alarmParm;
+std::vector<std::pair<int8_t, int8_t>> points_input;
 
 #define CONNECT_TIMEOUT   30      // Seconds
 #define CONNECT_OK        0       // Status of successful connection to WiFi
@@ -1047,9 +1053,24 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'R') {                      // the browser sends an R when the visual_alarm effect is enabled
         light_alarm_flag = true;
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "R%d %d %d %d %d", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &frames_per_sec, &light_alarm_num);
+        int num_points;
+        int num_bytes;
+        int num_b;
+        // %n format is number of bytes scanned at this point
+        sscanf((char *) payload, "R%d %d %d %d %d %d %d %d %d %d %d %n", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &alarmParm.nodepix_coef2, &alarmParm.nodepix_coef1, &alarmParm.nodepix_coef0, &frames_per_sec, &light_alarm_num, &alarmParm.ex, &alarmParm.duration, &num_points, &num_bytes);
+        // extract points from above and use push_back to insert into
+        //points_input
+        int xpt;
+        int ypt;
+        points_input.clear();
+        for (int i = 0; i < num_points; i++) {
+          sscanf((char *)payload + num_bytes, "%d %d%n", &xpt, &ypt, &num_b);
+          points_input.push_back({xpt * NUM_LEDS / 300, ypt* NUM_LEDS / 300});
+          num_bytes += num_b;
+        }
+
+        alarmParm.duration *= 1000;
         alarmParm.firsthue *= 256;
-        alarmParm.duration = 10000;
         if (frames_per_sec < 1) {
           alarmParm.wait = 1000;
         } else {
@@ -1059,11 +1080,18 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         if (light_alarm_num < 0) {
           alarmParm.wait_delta = alarmParm.wait / 2;
         }
-        alarmParm.ex = abs(light_alarm_num) / num_animations;
         alarmParm.frame = alarm_frame[abs(light_alarm_num) % num_animations];
-        Serial.printf("Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d\n", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta);
-        sprintf(buf, "Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta);
-        webSocket.sendTXT(num, buf);
+        Serial.printf("Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, nodeC2 = %d,  nodeC1 = %d,  nodeC0 = %d,  fps = %d, anim# = %d, ex = %d, dt = %d, dur = %d\n", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, alarmParm.nodepix_coef2, alarmParm.nodepix_coef1, alarmParm.nodepix_coef0, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta, alarmParm.duration / 1000);
+        //Serial.printf("%d\n", num_bytes);
+        //sprintf(buf, "Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta);
+        //webSocket.sendTXT(num, buf);
+        if (alarmParm.ex == 6) {
+          Serial.printf("Graph has %d points\n", num_points);
+          for (int i = 0; i < num_points; i++) {
+            Serial.printf("(%d, %d) ", points_input[i].first, points_input[i].second);
+          }
+          Serial.printf("\n");
+        }
         tvisual_alarm.enable();
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -1487,14 +1515,23 @@ void rainbowFrame() {
 void color_wipe_frame() {
   Task& T = ts.currentTask();
   visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  if (parm.percentWheelPerFrame >= 0) {
+    parm.nodepix_ind ++;
+    if (parm.nodepix_ind  >= parm.numpixeltouse) {
+      parm.nodepix_ind = 0;
+      parm.firsthue += parm.hueinc;
+    }
+  } else {
+    parm.nodepix_ind --;
+    if (parm.nodepix_ind  < 0) {
+      parm.nodepix_ind =  parm.numpixeltouse - 1;
+      parm.firsthue += parm.hueinc;
+    }
+  }
   int pixelHue = parm.firsthue + (parm.nodepix_ind * 65536L  * parm.percentWheelPerStrip / 100  / parm.numpixeltouse );
   parm.pixelHSV[parm.nodepix_ind] = strip.gamma32(strip.ColorHSV(pixelHue));
   //strip.setPixelColor(ClockCorrect(parm.nodepix_ind), strip.gamma32(strip.ColorHSV(pixelHue)));
-  parm.nodepix_ind ++;
-  if (parm.nodepix_ind  >= parm.numpixeltouse) {
-    parm.nodepix_ind = 0;
-    parm.firsthue += parm.hueinc;
-  }
+
 }
 
 void fire_fly_frame() {
@@ -1546,6 +1583,8 @@ bool visual_alarmOnEnable() {
   parm.firstPixelHue = parm.firsthue;
   parm.hueinc = parm.percentWheelPerFrame * 65536L / 100;
   parm.nodepix_ind = 0;
+  parm.nodepix = parm.nodepix_coef0;
+  parm.nodepix_diff = parm.nodepix_coef1 + parm.nodepix_coef2;
   parm.start = millis();
   tshelfLoop.disable();
   parm.wait_adj = 0;
@@ -1562,21 +1601,28 @@ void visual_alarmCallback() {
   int j;
   Task& T = ts.currentTask();
   visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  //TODO assuming NUM_LEDS is even so there are two middle point
   switch (parm.ex) {
     case 0:
       points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS - 1}};
       break;
     case 1:
-      points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
+      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS - 1}, {NUM_LEDS / 2, NUM_LEDS - 1},  {NUM_LEDS - 1, 0}};
       break;
     case 2:
-      points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS - 1}, {NUM_LEDS - 1, 0}};
+      points = {{0, 0}, {NUM_LEDS / 3, 2 * NUM_LEDS / 3 - 1}, {2 * NUM_LEDS / 3, NUM_LEDS / 3 - 1}, {NUM_LEDS - 1, NUM_LEDS - 1}};
       break;
     case 3:
-      points = {{0, 0}, {NUM_LEDS / 3, NUM_LEDS / 3 - 1}, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS / 3}};
+      points = {{0, 0}, {NUM_LEDS / 3, NUM_LEDS / 2}, {2 * NUM_LEDS / 3, NUM_LEDS / 2 }, {NUM_LEDS - 1, NUM_LEDS - 1}};
+      break;
+    case 4:
+      points = {{0, 0}, {NUM_LEDS / 3, NUM_LEDS - 1}, {2 * NUM_LEDS / 3, NUM_LEDS - 1 }, {NUM_LEDS - 1, 0}};
+      break;
+    case 5:
+      points = {{0, 0}, {NUM_LEDS / 4, NUM_LEDS - 1}, {NUM_LEDS / 2, NUM_LEDS / 2}, {3 * NUM_LEDS / 4, NUM_LEDS - 1}, {NUM_LEDS - 1, 0}};
       break;
     default:
-      points = {{0, 0}, {NUM_LEDS / 4, NUM_LEDS - 1}, {NUM_LEDS / 2, 0}, {3 * NUM_LEDS / 4, NUM_LEDS - 1}, {NUM_LEDS - 1, 0}};
+      points = points_input;
   }
 
   // parm.frame() setup for specific animation giving next frame
@@ -1585,19 +1631,22 @@ void visual_alarmCallback() {
   // Embed parm.pixelHSV into strip
   for (int i = 0; i < parm.numpixeltouse; i++) {
     j = piecewise_linear(i, points);
-    strip.setPixelColor(ClockCorrect(i + parm.nodepix), parm.pixelHSV[j]);
-    //Serial.printf("(%d, %d)-", i, j);
+    strip.setPixelColor(ClockCorrect(i + parm.nodepix / 100), parm.pixelHSV[j]);
+    //if (parm.pixelHSV[j] != 0) Serial.printf("(%d, %d)-", i, j);
     //strip.setPixelColor(i + parm.nodepix, parm.pixelHSV[j]);
   }
   //Serial.printf("\n");
   SetBrightness(now()); // Set the clock brightness dependant on the time
   strip.show(); // Update strip with new contents
-  parm.firstPixelHue += parm.hueinc;
   if ((millis() - parm.start) > parm.duration) {
     tvisual_alarm.disable();
     Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds so visual alarm stops immediately
     tshelfLoop.enable();
   } else {
+    parm.firstPixelHue += parm.hueinc;
+    parm.nodepix += parm.nodepix_diff;
+    parm.nodepix_diff += 2 * parm.nodepix_coef2;
+    //Serial.printf(" n = %d, d = %d\n", parm.nodepix, parm.nodepix_diff);
     //TODO parm.nodepix_ind can not vary, vary randomly, vary periodically sine, sawtooth, triangle
     //TODO parm.wait can not vary, vary randomly, vary periodically sine, sawtooth, triangle
     if (parm.wait_delta > 0) {
@@ -1886,9 +1935,9 @@ void SetBrightness(time_t t)
 //              and ajusts top of clock
 int ClockCorrect(int Pixel)
 {
-  Pixel = (Pixel + TopOfClock) % NUM_LEDS;
+  Pixel = nonNegMod(Pixel + TopOfClock, NUM_LEDS);
   if (ClockGoBackwards)
-    return ((NUM_LEDS - Pixel + NUM_LEDS / 2) % NUM_LEDS); // my first attempt at clock driving had it going backwards :)
+    return nonNegMod((NUM_LEDS - Pixel + NUM_LEDS / 2), NUM_LEDS); // my first attempt at clock driving had it going backwards :)
   else
     return (Pixel);
 }
@@ -1902,12 +1951,19 @@ int ClockCorrect(int Pixel)
 
 //using namespace std;
 int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points) {
+  if (points.size() == 0) {
+    return 0;
+  }
+  if (x < points[0].first) {
+    return static_cast<int8_t>(points[0].second);
+  }
   for (int i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
       int x1 = points[i].first;
       int y1 = points[i].second;
       int x2 = points[i + 1].first;
       int y2 = points[i + 1].second;
+      //NOTE can never get (x2 == x1) since points[i+1] is first point above x
       return y1 + (y2 - y1) * (x - x1) / static_cast<double>(x2 - x1);
     }
   }
