@@ -218,7 +218,7 @@ typedef struct {
   int nodepix_coef0 = 0; // constant coef
   int nodepix_coef1 = 0; // linear coef
   int nodepix_coef2 = 0; // quadratic coef
-  uint16_t duration = 10000;
+  uint32_t duration = 10000;
   int numpixeltouse = NUM_LEDS;
   uint32_t pixelHSV[NUM_LEDS] = {0};
   void (*frame)() = rainbowFrame;
@@ -327,7 +327,7 @@ T nonNegMod(T n, U d ) {
 }
 
 
-// With assistance of ChatBot but buggy
+// With assistance of ChatBot but buggy required fixing
 // Define the virtual LED strips as substrip
 // (NO checks that startPixel ... startPixel + lenPixels -1 is contained in strip, it will be clipped to strip)
 // have option of wrap (default=true) on virtualLED Strip, otherwise clipping
@@ -393,7 +393,7 @@ VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
 
 //unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
 uint8_t previousSecond = 0;
-// Blinking variables
+// Blinking variables for special display 0
 unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
 unsigned long previousBlinkTime = 0;
 bool blinkState = false;
@@ -1583,6 +1583,16 @@ bool visual_alarmOnEnable() {
   parm.firstPixelHue = parm.firsthue;
   parm.hueinc = parm.percentWheelPerFrame * 65536L / 100;
   parm.nodepix_ind = 0;
+#ifdef TEST_CLOCK
+  // if round space make constant node pixel be a hour hand so alarm patterns
+  //   will eminate or absorb there
+  int isecond = second(now());
+  int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
+  int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
+  //Serial.printf("ihour = %d, coef0 = %d ", ihour, parm.nodepix_coef0);
+  parm.nodepix_coef0 = 100 * ClockCorrect(ihour);
+  Serial.printf("after coef0 = %d\n ", parm.nodepix_coef0);
+#endif
   parm.nodepix = parm.nodepix_coef0;
   parm.nodepix_diff = parm.nodepix_coef1 + parm.nodepix_coef2;
   parm.start = millis();
@@ -1644,8 +1654,8 @@ void visual_alarmCallback() {
     tshelfLoop.enable();
   } else {
     parm.firstPixelHue += parm.hueinc;
-    parm.nodepix += parm.nodepix_diff;
-    parm.nodepix_diff += 2 * parm.nodepix_coef2;
+    parm.nodepix += nonNegMod(parm.nodepix_diff, 100 * NUM_LEDS) ;
+    parm.nodepix_diff += nonNegMod(2 * parm.nodepix_coef2, 100 * NUM_LEDS);
     //Serial.printf(" n = %d, d = %d\n", parm.nodepix, parm.nodepix_diff);
     //TODO parm.nodepix_ind can not vary, vary randomly, vary periodically sine, sawtooth, triangle
     //TODO parm.wait can not vary, vary randomly, vary periodically sine, sawtooth, triangle
@@ -1803,18 +1813,27 @@ void Draw_Clock(time_t tnow, byte Phase)
   SetBrightness(tnow); // Set the clock brightness dependant on the time
   strip.show(); // show all the pixels
 
-  // Now calculate display for next time
-
-  if (Phase <= 0) // Set all pixels black
-    for (int i = 0; i < NUM_LEDS; i++)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
-
   int disp_ind;
   if (auto_night_disp) {
     disp_ind = IsDay(tnow) ?  day_disp_ind : 4;
   } else {
     disp_ind = day_disp_ind;
   }
+
+#ifdef TEST_CLOCK
+  Draw_Clock_Round(tnow, Phase, disp_ind);
+#else
+  Draw_Clock_Shelves(tnow, Phase, disp_ind);
+#endif
+}
+
+void Draw_Clock_Shelves(time_t tnow, byte Phase, int disp_ind) {
+  // Now calculate display for next time
+
+  if (Phase <= 0) // Set all pixels black
+    for (int i = 0; i < NUM_LEDS; i++)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
+
 
   if (Phase >= 1) // Draw all pixels background color
     for (int i = 0; i < NUM_LEDS; i++)
@@ -1905,6 +1924,64 @@ void Draw_Clock(time_t tnow, byte Phase)
     }
   }
 }
+
+//************* Function to draw a round clock ******************************
+void Draw_Clock_Round(time_t t, byte Phase, int disp_ind)
+{
+  if (Phase <= 0) // Set all pixels black
+    for (int i = 0; i < NUM_LEDS; i++)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
+
+  if (Phase >= 1) // Draw all pixels background color
+    for (int i = 0; i < NUM_LEDS; i++)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b));
+
+  if (Phase >= 2) // Draw 5 min divisions
+    for (int i = 0; i < NUM_LEDS; i = i + 5)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
+
+  if (Phase >= 3) { // Draw 15 min markers
+    for (int i = 0; i < NUM_LEDS; i = i + 15)
+      strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
+    strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b));
+  }
+
+  if (Phase >= 4) { // Draw hands
+    int isecond = second(t);
+    int iminute = (60 * minute(t) + isecond + 30) / 60; // round to nearest minute
+    int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
+    //hour
+    strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+    for (int i = 0; i <= hour_width[disp_ind]; i++) {
+      strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+      strip.setPixelColor(ClockCorrect(ihour + i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+    }
+    //minute on top of hour
+    uint32_t use_color;
+    if (minute_width[disp_ind] >= 0) {
+      // optional to help identification, minute hand flshes between normal and half intensity
+      if ((second() % 2) | (not minute_blink[disp_ind])) {
+        use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
+      } else {
+        use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
+      }
+      strip.setPixelColor(ClockCorrect(iminute), use_color);
+      for (int i = 1; i <= minute_width[disp_ind]; i++) {
+        strip.setPixelColor(ClockCorrect(iminute - i), use_color); // to help identification, minute hand flshes between normal and half intensity
+        strip.setPixelColor(ClockCorrect(iminute + i), use_color); // to help identification, minute hand flshes between normal and half intensity
+      }
+    }
+    //second on top of both
+    if (second_width[disp_ind] >= 0) {
+      strip.setPixelColor(ClockCorrect(isecond), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+      for (int i = 0; i <= second_width[disp_ind]; i++) {
+        strip.setPixelColor(ClockCorrect(isecond - i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        strip.setPixelColor(ClockCorrect(isecond + i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+      }
+    }
+  }
+}
+
 
 bool IsDay(time_t t)
 {
