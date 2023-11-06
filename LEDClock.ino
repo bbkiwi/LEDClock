@@ -23,7 +23,7 @@
 #endif
 //#define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STATUS_REQUEST
-#define _TASK_LTS_POINTER       // Compile with support for Local Task Storage pointer
+//#define _TASK_LTS_POINTER       // Compile with support for Local Task Storage pointer
 #include <TaskScheduler.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -77,9 +77,7 @@ struct TIME {
 };
 
 //************* Editable Options ******************************
-//uint16_t HourHues[6] = {0, 65536/12, 65536/6, 65536/3, 65536 * 2 / 3, 65536 * 9/12};
-//                        R     O         Y        G          B            V
-uint16_t HourHues[6] = {0, 5461, 10922, 21845, 43690, 49152};
+//  Saved in config file
 #define NUM_DISP_OPTIONS 5
 RGB SliderColor;
 // 5 Options for display index 0 normal day, 4 night,
@@ -114,6 +112,45 @@ int hour_width[NUM_DISP_OPTIONS] = {3, 3, 3, 3, 0};
 int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 
 
+struct ALARM {
+  bool alarmSet = false;
+  uint16_t alarmType;
+  uint16_t duration;
+  uint32_t repeat;
+  tmElements_t alarmTime;
+};
+
+#define NUM_ALARMS 5
+ALARM alarmInfo[NUM_ALARMS];
+
+/* TODO need
+  struct LIGHT_ANIMATION {
+    int percentWheelPerFrame;
+  int percentWheelPerStrip;
+  long firsthue;
+  // starting node index of animation a quadratic fcn of frame
+  int nodepix_coef0 = 0; // constant coef
+  int nodepix_coef1 = 0; // linear coef
+  int nodepix_coef2 = 0; // quadratic coef
+  int wait = 50; // base ms between frames
+  int wait_delta = 0; // random variation of wait
+  int alarm_frame_ind = 0; // index of alarm_frame
+  int ex = 0; // index of embedding
+  uint32_t duration = 10000;
+  ??? embedding description string of N a b c d ...
+  };
+
+  #define NUM_PATTERNS 5
+  LIGHT_ANIMATION animationInfo[NUM_PATTERNS};
+*/
+
+
+//  end of those saved in config file
+
+//uint16_t HourHues[6] = {0, 65536/12, 65536/6, 65536/3, 65536 * 2 / 3, 65536 * 9/12};
+//                        R     O         Y        G          B            V
+uint16_t HourHues[6] = {0, 5461, 10922, 21845, 43690, 49152};
+
 //Set brightness by time for night and day mode
 TIME WeekNight = {18, 00}; // Night time to go dim
 TIME WeekMorning = {7, 15}; //Morning time to go bright
@@ -138,23 +175,11 @@ String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Th
 String monthNames[13] = {"dummy", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 
 bool sound_alarm_flag = false;
-int light_alarm_num = 0;
 int frames_per_sec = 10;
 bool light_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
 #define LED_SHOW_TIME 2*TASK_SECOND
 tmElements_t calcTime = {0};
-
-struct ALARM {
-  bool alarmSet = false;
-  uint16_t alarmType;
-  uint16_t duration;
-  uint32_t repeat;
-  tmElements_t alarmTime;
-};
-
-#define NUM_ALARMS 5
-ALARM alarmInfo[NUM_ALARMS];
 
 uint16_t time_elapsed = 0;
 int TopOfClock = 0; // to make given pixel the top
@@ -191,6 +216,7 @@ void color_wipe_frame();
 void fire_fly_frame();
 void flicker_frame();
 int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points);
+
 // An array of function pointers for making frame of animations
 void (*alarm_frame[])() = {rainbowFrame, color_wipe_frame, fire_fly_frame, flicker_frame};
 #define array_size(arr) *(&arr + 1) - arr //(sizeof(arr) / sizeof(*(arr)))
@@ -198,32 +224,37 @@ int num_animations = array_size(alarm_frame);
 
 // for tvisual_alarm parms for call back
 typedef struct {
-  long firstPixelHue;
-  long start;
+  // input parameters
   int percentWheelPerFrame;
   int percentWheelPerStrip;
+  long firsthue;
+  // starting node index of animation a quadratic fcn of frame
+  int nodepix_coef0 = 0; // constant coef
+  int nodepix_coef1 = 0; // linear coef
+  int nodepix_coef2 = 0; // quadratic coef
   int wait = 50; // base ms between frames
   int wait_delta = 0; // random variation of wait
+  int alarm_frame_ind = 0; // index of alarm_frame
+  int ex = 0; // index of embedding
+  uint32_t duration = 10000;
+  // common vars used by visual alarm callback and helpfcns
+  long firstPixelHue;
+  long start;
   int wait_use = 50; // ms to use between frames
   int wait_adj = 0;
-  int ex = 4;
-  long firsthue;
   int hueinc = 256;
   int ncolorloop = 1;
   int ncolorfrac = 1;
   int nodepix = 0; // hundreths of pixel
   int nodepix_diff = 0; // hundreths of pixel
   int nodepix_ind = 0;
-  // starting node index of animation a quadratic fcn of frame
-  int nodepix_coef0 = 0; // constant coef
-  int nodepix_coef1 = 0; // linear coef
-  int nodepix_coef2 = 0; // quadratic coef
-  uint32_t duration = 10000;
   int numpixeltouse = NUM_LEDS;
   uint32_t pixelHSV[NUM_LEDS] = {0};
   void (*frame)() = rainbowFrame;
 } visual_alarm_parm;
 
+// Global and used to provide parms for visual alarm callback and its
+//   called routines
 visual_alarm_parm alarmParm;
 std::vector<std::pair<int8_t, int8_t>> points_input;
 
@@ -279,9 +310,6 @@ Task tLed_color_alarm (TASK_IMMEDIATE, TASK_ONCE, &led_color_alarm, &ts, false);
 Task tntpCheck ( TASK_SECOND, CONNECT_TIMEOUT, &ntpCheck, &ts, false );
 // Tasks running on events
 Task  tntpUpdate  (&ntpUpdateInit, &ts);
-
-
-
 long  ledDelayRed, ledDelayBlue;
 
 IPAddress     timeServerIP;       // time.nist.gov NTP server address
@@ -391,20 +419,7 @@ VirtualLEDStrip virtualStripMiddleShelf(strip, 20, 20);   // Next 20 LEDs in rev
 VirtualLEDStrip virtualStripTopShelf(strip, 40, 72);   // Last 72 LEDs
 #endif
 
-//unsigned long clockInterval = 1000;  // show clock every 1000 milliseconds
-uint8_t previousSecond = 0;
-// Blinking variables for special display 0
-unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
-unsigned long previousBlinkTime = 0;
-bool blinkState = false;
-// Moving pixel variables
-unsigned long moveInterval = 1000;  // Moving interval in milliseconds
-unsigned long previousMoveTime = 0;
-uint16_t pixelIndex = 0;
-// Rainbow cycling variables
-unsigned long hueInterval = 200;  // Hue change interval in milliseconds
-unsigned long previousHueTime = 0;
-long hue = 0;
+
 
 void setup() {
   Serial.begin(115200);
@@ -470,8 +485,8 @@ void setup() {
     }
   }
   calcSun();
-  // Must be here in startup
-  tvisual_alarm.setLtsPointer (&alarmParm);
+  // Must be here in startup if want to use setLtsPointer
+  //tvisual_alarm.setLtsPointer (&alarmParm);
 }
 
 void loop() {
@@ -1052,12 +1067,12 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         day_disp_ind = payload[2] - '0';
       } else if (payload[0] == 'R') {                      // the browser sends an R when the visual_alarm effect is enabled
         light_alarm_flag = true;
-        //TODO why if light_alarm_num was declared byte did this blow up had to make int
+        //TODO why if alarm_frame_ind was declared byte did this blow up had to make int
         int num_points;
         int num_bytes;
         int num_b;
         // %n format is number of bytes scanned at this point
-        sscanf((char *) payload, "R%d %d %d %d %d %d %d %d %d %d %d %n", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &alarmParm.nodepix_coef2, &alarmParm.nodepix_coef1, &alarmParm.nodepix_coef0, &frames_per_sec, &light_alarm_num, &alarmParm.ex, &alarmParm.duration, &num_points, &num_bytes);
+        sscanf((char *) payload, "R%d %d %d %d %d %d %d %d %d %d %d %n", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &alarmParm.nodepix_coef2, &alarmParm.nodepix_coef1, &alarmParm.nodepix_coef0, &frames_per_sec, &alarmParm.alarm_frame_ind, &alarmParm.ex, &alarmParm.duration, &num_points, &num_bytes);
         // extract points from above and use push_back to insert into
         //points_input
         int xpt;
@@ -1068,7 +1083,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           points_input.push_back({xpt * NUM_LEDS / 300, ypt* NUM_LEDS / 300});
           num_bytes += num_b;
         }
-
         alarmParm.duration *= 1000;
         alarmParm.firsthue *= 256;
         if (frames_per_sec < 1) {
@@ -1077,13 +1091,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           alarmParm.wait = 1000 / frames_per_sec;
         }
         alarmParm.wait_delta = 0;
-        if (light_alarm_num < 0) {
+        if (alarmParm.alarm_frame_ind < 0) {
           alarmParm.wait_delta = alarmParm.wait / 2;
         }
-        alarmParm.frame = alarm_frame[abs(light_alarm_num) % num_animations];
-        Serial.printf("Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, nodeC2 = %d,  nodeC1 = %d,  nodeC0 = %d,  fps = %d, anim# = %d, ex = %d, dt = %d, dur = %d\n", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, alarmParm.nodepix_coef2, alarmParm.nodepix_coef1, alarmParm.nodepix_coef0, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta, alarmParm.duration / 1000);
+        alarmParm.frame = alarm_frame[abs(alarmParm.alarm_frame_ind) % num_animations];
+        Serial.printf("Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, nodeC2 = %d,  nodeC1 = %d,  nodeC0 = %d,  fps = %d, anim# = %d, ex = %d, dt = %d, dur = %d\n", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, alarmParm.nodepix_coef2, alarmParm.nodepix_coef1, alarmParm.nodepix_coef0, frames_per_sec, abs(alarmParm.alarm_frame_ind) % num_animations, alarmParm.ex, alarmParm.wait_delta, alarmParm.duration / 1000);
         //Serial.printf("%d\n", num_bytes);
-        //sprintf(buf, "Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(light_alarm_num) % num_animations, alarmParm.ex, alarmParm.wait_delta);
+        //sprintf(buf, "Wh/Fr = %d, Wh/Str = %d, 1stHue = %d, fps = %d, anim# = %d, ex = %d, dt = %d", alarmParm.percentWheelPerFrame, alarmParm.percentWheelPerStrip, alarmParm.firsthue / 256, frames_per_sec, abs(alarmParm.alarm_frame_ind) % num_animations, alarmParm.ex, alarmParm.wait_delta);
         //webSocket.sendTXT(num, buf);
         if (alarmParm.ex == 6) {
           Serial.printf("Graph has %d points\n", num_points);
@@ -1379,9 +1393,22 @@ void led_color_alarm() {
   strip.show(); // Update strip with new contents
 }
 
+// Used in shelfLoopOnEnable and shelfLoop
+uint8_t previousSecond = 0;
+// Blinking variables for special display 0
+unsigned long blinkInterval = 5000;  // Blinking interval in milliseconds
+unsigned long previousBlinkTime = 0;
+bool blinkState = false;
+// Moving pixel variables
+unsigned long moveInterval = 1000;  // Moving interval in milliseconds
+unsigned long previousMoveTime = 0;
+uint16_t pixelIndex = 0;
+// Rainbow cycling variables
+unsigned long hueInterval = 200;  // Hue change interval in milliseconds
+unsigned long previousHueTime = 0;
+long hue = 0;
+
 bool shelfLoopOnEnable() {
-  // Clock variables
-  //clockInterval = 1000;
   previousSecond = 0;
   // Blinking variables
   blinkInterval = 5000;  // Blinking interval in milliseconds
@@ -1470,6 +1497,9 @@ void shelfLoop() {
         alarmParm.wait = 50;
         alarmParm.wait_delta = 0;
         alarmParm.ex = 1;
+        alarmParm.nodepix_coef0 = 0; // constant coef
+        alarmParm.nodepix_coef1 = 0; // linear coef
+        alarmParm.nodepix_coef2 = 0; // quadratic coef
         tvisual_alarm.enable();
         //show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
         // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
@@ -1502,41 +1532,42 @@ void shelfLoop() {
 }
 //void rainbowFrame(long firstPixelHue, int percentWheelPerStrip, int nodepix){
 void rainbowFrame() {
-  Task& T = ts.currentTask();
-  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
-  for (int i = 0; i < parm.numpixeltouse; i++) { // For each pixel to use ...
-    //int pixelHue = parm.firstPixelHue + (i * parm.ncolorloop *  65536L / strip.numPixels() / parm.ncolorfrac);
-    int pixelHue = parm.firstPixelHue + (i * 65536L  * parm.percentWheelPerStrip / 100  / parm.numpixeltouse );
-    //strip.setPixelColor(ClockCorrect(i + parm.nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
-    parm.pixelHSV[i] = strip.gamma32(strip.ColorHSV(pixelHue));
+  //Task& T = ts.currentTask();
+  //visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  // rather than use pointed parm no use alarmParm directly
+  for (int i = 0; i < alarmParm.numpixeltouse; i++) { // For each pixel to use ...
+    //int pixelHue = alarmParm.firstPixelHue + (i * alarmParm.ncolorloop *  65536L / strip.numPixels() / alarmParm.ncolorfrac);
+    int pixelHue = alarmParm.firstPixelHue + (i * 65536L  * alarmParm.percentWheelPerStrip / 100  / alarmParm.numpixeltouse );
+    //strip.setPixelColor(ClockCorrect(i + alarmParm.nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
+    alarmParm.pixelHSV[i] = strip.gamma32(strip.ColorHSV(pixelHue));
   }
 }
 
 void color_wipe_frame() {
-  Task& T = ts.currentTask();
-  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
-  if (parm.percentWheelPerFrame >= 0) {
-    parm.nodepix_ind ++;
-    if (parm.nodepix_ind  >= parm.numpixeltouse) {
-      parm.nodepix_ind = 0;
-      parm.firsthue += parm.hueinc;
+  //Task& T = ts.currentTask();
+  //visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  if (alarmParm.percentWheelPerFrame >= 0) {
+    alarmParm.nodepix_ind ++;
+    if (alarmParm.nodepix_ind  >= alarmParm.numpixeltouse) {
+      alarmParm.nodepix_ind = 0;
+      alarmParm.firsthue += alarmParm.hueinc;
     }
   } else {
-    parm.nodepix_ind --;
-    if (parm.nodepix_ind  < 0) {
-      parm.nodepix_ind =  parm.numpixeltouse - 1;
-      parm.firsthue += parm.hueinc;
+    alarmParm.nodepix_ind --;
+    if (alarmParm.nodepix_ind  < 0) {
+      alarmParm.nodepix_ind =  alarmParm.numpixeltouse - 1;
+      alarmParm.firsthue += alarmParm.hueinc;
     }
   }
-  int pixelHue = parm.firsthue + (parm.nodepix_ind * 65536L  * parm.percentWheelPerStrip / 100  / parm.numpixeltouse );
-  parm.pixelHSV[parm.nodepix_ind] = strip.gamma32(strip.ColorHSV(pixelHue));
-  //strip.setPixelColor(ClockCorrect(parm.nodepix_ind), strip.gamma32(strip.ColorHSV(pixelHue)));
+  int pixelHue = alarmParm.firsthue + (alarmParm.nodepix_ind * 65536L  * alarmParm.percentWheelPerStrip / 100  / alarmParm.numpixeltouse );
+  alarmParm.pixelHSV[alarmParm.nodepix_ind] = strip.gamma32(strip.ColorHSV(pixelHue));
+  //strip.setPixelColor(ClockCorrect(alarmParm.nodepix_ind), strip.gamma32(strip.ColorHSV(pixelHue)));
 
 }
 
 void fire_fly_frame() {
-  Task& T = ts.currentTask();
-  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  //Task& T = ts.currentTask();
+  //visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
   uint8_t pixel;
   long pixelHue;
   int numff = 5;
@@ -1544,11 +1575,11 @@ void fire_fly_frame() {
   long maxHue = 64000;
   uint16_t hueInc = 200;
   //strip.fill(); // clear
-  for (int i = 0;  i < parm.numpixeltouse; i++) {
-    parm.pixelHSV[i] = 0;
+  for (int i = 0;  i < alarmParm.numpixeltouse; i++) {
+    alarmParm.pixelHSV[i] = 0;
   }
   for (int i = 0; i < numff; i++) {
-    pixel = random(parm.numpixeltouse);
+    pixel = random(alarmParm.numpixeltouse);
     if (hueInc == 0) {
       // Choose random color
       pixelHue = random(minHue, maxHue);
@@ -1561,47 +1592,47 @@ void fire_fly_frame() {
     //Sat = random(minSat, maxSat);
     //Val = random(minVal, maxVal);
     //strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
-    parm.pixelHSV[pixel] = strip.gamma32(strip.ColorHSV(pixelHue));
+    alarmParm.pixelHSV[pixel] = strip.gamma32(strip.ColorHSV(pixelHue));
 
     //strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue)));
   }
 }
 
 void flicker_frame() {
-  Task& T = ts.currentTask();
-  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  //Task& T = ts.currentTask();
+  //visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
   uint32_t fire_color   = strip.Color ( 255,  127,  00);
-  for (int i = 0; i < parm.numpixeltouse; i++) {
+  for (int i = 0; i < alarmParm.numpixeltouse; i++) {
     int r = random(255);
-    parm.pixelHSV[i] = Subtract(fire_color, strip.Color ( r, r , r / 2));
+    alarmParm.pixelHSV[i] = Subtract(fire_color, strip.Color ( r, r , r / 2));
   }
 }
 
 bool visual_alarmOnEnable() {
-  Task& T = ts.currentTask();
-  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
-  parm.firstPixelHue = parm.firsthue;
-  parm.hueinc = parm.percentWheelPerFrame * 65536L / 100;
-  parm.nodepix_ind = 0;
+  //Task& T = ts.currentTask();
+  //visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  alarmParm.firstPixelHue = alarmParm.firsthue;
+  alarmParm.hueinc = alarmParm.percentWheelPerFrame * 65536L / 100;
+  alarmParm.nodepix_ind = 0;
 #ifdef TEST_CLOCK
   // if round space make constant node pixel be a hour hand so alarm patterns
   //   will eminate or absorb there
   int isecond = second(now());
   int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
-  //Serial.printf("ihour = %d, coef0 = %d ", ihour, parm.nodepix_coef0);
-  parm.nodepix_coef0 = 100 * ClockCorrect(ihour);
-  Serial.printf("after coef0 = %d\n ", parm.nodepix_coef0);
+  //Serial.printf("ihour = %d, coef0 = %d ", ihour, alarmParm.nodepix_coef0);
+  alarmParm.nodepix_coef0 = 100 * ClockCorrect(ihour);
+  Serial.printf("to correspond to the hour set coef0 = %d\n ", alarmParm.nodepix_coef0);
 #endif
-  parm.nodepix = parm.nodepix_coef0;
-  parm.nodepix_diff = parm.nodepix_coef1 + parm.nodepix_coef2;
-  parm.start = millis();
+  alarmParm.nodepix = alarmParm.nodepix_coef0;
+  alarmParm.nodepix_diff = alarmParm.nodepix_coef1 + alarmParm.nodepix_coef2;
+  alarmParm.start = millis();
   tshelfLoop.disable();
-  parm.wait_adj = 0;
-  parm.wait_use = parm.wait;
+  alarmParm.wait_adj = 0;
+  alarmParm.wait_use = alarmParm.wait;
   strip.fill(); // clear
-  for (int i = 0;  i < parm.numpixeltouse; i++) {
-    parm.pixelHSV[i] = 0;
+  for (int i = 0;  i < alarmParm.numpixeltouse; i++) {
+    alarmParm.pixelHSV[i] = 0;
   }
   return true;
 }
@@ -1609,10 +1640,10 @@ bool visual_alarmOnEnable() {
 void visual_alarmCallback() {
   std::vector<std::pair<int8_t, int8_t>> points;
   int j;
-  Task& T = ts.currentTask();
-  visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
+  //Task& T = ts.currentTask();
+  //visual_alarm_parm& parm = *((visual_alarm_parm*) T.getLtsPointer());
   //TODO assuming NUM_LEDS is even so there are two middle point
-  switch (parm.ex) {
+  switch (alarmParm.ex) {
     case 0:
       points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS - 1}};
       break;
@@ -1635,35 +1666,35 @@ void visual_alarmCallback() {
       points = points_input;
   }
 
-  // parm.frame() setup for specific animation giving next frame
-  // parm.frame() returns parm.pixelHSB[i] for i = 0 to parm.numpixeltouse
-  parm.frame();
-  // Embed parm.pixelHSV into strip
-  for (int i = 0; i < parm.numpixeltouse; i++) {
+  // alarmParm.frame() setup for specific animation giving next frame
+  // alarmParm.frame() returns alarmParm.pixelHSB[i] for i = 0 to alarmParm.numpixeltouse
+  alarmParm.frame();
+  // Embed alarmParm.pixelHSV into strip
+  for (int i = 0; i < alarmParm.numpixeltouse; i++) {
     j = piecewise_linear(i, points);
-    strip.setPixelColor(ClockCorrect(i + parm.nodepix / 100), parm.pixelHSV[j]);
-    //if (parm.pixelHSV[j] != 0) Serial.printf("(%d, %d)-", i, j);
-    //strip.setPixelColor(i + parm.nodepix, parm.pixelHSV[j]);
+    strip.setPixelColor(ClockCorrect(i + alarmParm.nodepix / 100), alarmParm.pixelHSV[j]);
+    //if (alarmParm.pixelHSV[j] != 0) Serial.printf("(%d, %d)-", i, j);
+    //strip.setPixelColor(i + alarmParm.nodepix, alarmParm.pixelHSV[j]);
   }
   //Serial.printf("\n");
   SetBrightness(now()); // Set the clock brightness dependant on the time
   strip.show(); // Update strip with new contents
-  if ((millis() - parm.start) > parm.duration) {
+  if ((millis() - alarmParm.start) > alarmParm.duration) {
     tvisual_alarm.disable();
     Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds so visual alarm stops immediately
     tshelfLoop.enable();
   } else {
-    parm.firstPixelHue += parm.hueinc;
-    parm.nodepix += nonNegMod(parm.nodepix_diff, 100 * NUM_LEDS) ;
-    parm.nodepix_diff += nonNegMod(2 * parm.nodepix_coef2, 100 * NUM_LEDS);
-    //Serial.printf(" n = %d, d = %d\n", parm.nodepix, parm.nodepix_diff);
-    //TODO parm.nodepix_ind can not vary, vary randomly, vary periodically sine, sawtooth, triangle
-    //TODO parm.wait can not vary, vary randomly, vary periodically sine, sawtooth, triangle
-    if (parm.wait_delta > 0) {
-      parm.wait_adj = random(-parm.wait_delta, parm.wait_delta);
-      parm.wait_use = parm.wait + parm.wait_adj;
+    alarmParm.firstPixelHue += alarmParm.hueinc;
+    alarmParm.nodepix += nonNegMod(alarmParm.nodepix_diff, 100 * NUM_LEDS) ;
+    alarmParm.nodepix_diff += nonNegMod(2 * alarmParm.nodepix_coef2, 100 * NUM_LEDS);
+    //Serial.printf(" n = %d, d = %d\n", alarmParm.nodepix, alarmParm.nodepix_diff);
+    //TODO alarmParm.nodepix_ind can not vary, vary randomly, vary periodically sine, sawtooth, triangle
+    //TODO alarmParm.wait can not vary, vary randomly, vary periodically sine, sawtooth, triangle
+    if (alarmParm.wait_delta > 0) {
+      alarmParm.wait_adj = random(-alarmParm.wait_delta, alarmParm.wait_delta);
+      alarmParm.wait_use = alarmParm.wait + alarmParm.wait_adj;
     }
-    tvisual_alarm.delay(parm.wait_use);  // Pause for a moment
+    tvisual_alarm.delay(alarmParm.wait_use);  // Pause for a moment
   }
 }
 
