@@ -144,6 +144,7 @@ ALARM alarmInfo[NUM_ALARMS];
   LIGHT_ANIMATION animationInfo[NUM_PATTERNS};
 */
 
+bool check_mic = true;
 
 //  end of those saved in config file
 
@@ -1527,6 +1528,14 @@ void shelfLoop() {
         Serial.println(buf);
         webSocket.sendTXT(websocketId_num, buf);
       }
+    }
+  }
+  if (check_mic) {
+    // read the analog in value coming from microphone
+    int sensorValue = analogRead(analogInPin);
+    if (sensorValue > 100               ) {
+      Serial.printf("Mic gives: %d\n", sensorValue);
+      tvisual_alarm.enable();
     }
   }
 }
