@@ -1065,14 +1065,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Second[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
-      } else if (payload[0] == 'R') {                      // the browser sends an R when the visual_alarm effect is enabled
+      } else if (payload[0] == 'L') {                      // the browser sends an L when the visual_alarm light effect is enabled
         light_alarm_flag = true;
         //TODO why if alarm_frame_ind was declared byte did this blow up had to make int
         int num_points;
         int num_bytes;
         int num_b;
         // %n format is number of bytes scanned at this point
-        sscanf((char *) payload, "R%d %d %d %d %d %d %d %d %d %d %d %n", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &alarmParm.nodepix_coef2, &alarmParm.nodepix_coef1, &alarmParm.nodepix_coef0, &frames_per_sec, &alarmParm.alarm_frame_ind, &alarmParm.ex, &alarmParm.duration, &num_points, &num_bytes);
+        sscanf((char *) payload, "L%d %d %d %d %d %d %d %d %d %d %d %n", &alarmParm.percentWheelPerFrame, &alarmParm.percentWheelPerStrip, &alarmParm.firsthue, &alarmParm.nodepix_coef2, &alarmParm.nodepix_coef1, &alarmParm.nodepix_coef0, &frames_per_sec, &alarmParm.alarm_frame_ind, &alarmParm.ex, &alarmParm.duration, &num_points, &num_bytes);
         // extract points from above and use push_back to insert into
         //points_input
         int xpt;
@@ -1107,7 +1107,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           Serial.printf("\n");
         }
         tvisual_alarm.enable();
-      } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
+      } else if (payload[0] == 'T') {                      // the browser sends an T for a tune when the meLody effect is enabled
         sound_alarm_flag = true;
         tplayMelody.enable();
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED

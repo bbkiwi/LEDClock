@@ -19,6 +19,18 @@ connection.onclose = function(){
     console.log('WebSocket connection closed');
 };
 
+function clean_value(x) {
+  if (isNaN(x.value)){
+    x.value = 0;
+    return 0;
+  }
+  else
+  {
+    x.value = Math.round(+x.value);
+    return Math.round(+x.value);
+  }
+}
+
 function sendRGB() {
     var r = document.getElementById('r').value**2/1023; // non linear
     var g = document.getElementById('g').value**2/1023;
@@ -84,10 +96,10 @@ function pickerTimeDate(date) {
 }
 
 function setalarm() {
-  var alarmnum = document.getElementById('alarmnum').value;
-  var alarmtype = document.getElementById('alarmtype').value;
-  var alarmrepeat = document.getElementById('alarmrepeat').value;
-  var alarmduration = document.getElementById('alarmduration').value;
+  var alarmnum = clean_value(document.getElementById('alarmnum'));
+  var alarmtype = clean_value(document.getElementById('alarmtype'));
+  var alarmrepeat = clean_value(document.getElementById('alarmrepeat'));
+  var alarmduration = clean_value(document.getElementById('alarmduration'));
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
 	connection.send("A" + alarmnum + " " + alarmtype + " " + alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
@@ -95,26 +107,26 @@ function setalarm() {
 
 
 function lightEffect(){
-  var pwps = document.getElementById('pcntwheelpersec').value;
-  var pwpstr = document.getElementById('pcntwheelperstrip').value;
-  var firstcol = document.getElementById('firstcolor').value;
-  var nodec2 = document.getElementById('nodec2').value;
-  var nodec1 = document.getElementById('nodec1').value;
-  var nodec0 = document.getElementById('nodec0').value;
-  var framerate = document.getElementById('framerate').value;
-  var lightalarmnum = document.getElementById('lightalarmnum').value;
-  var lightalarmex = document.getElementById('lightalarmex').value;
-  var duration = document.getElementById('duration').value;
+  var pwps = clean_value(document.getElementById('pcntwheelpersec'));
+  var pwpstr = clean_value(document.getElementById('pcntwheelperstrip'));
+  var firstcol = clean_value(document.getElementById('firstcolor'));
+  var nodec2 = clean_value(document.getElementById('nodec2'));
+  var nodec1 = clean_value(document.getElementById('nodec1'));
+  var nodec0 = clean_value(document.getElementById('nodec0'));
+  var framerate = clean_value(document.getElementById('framerate'));
+  var lightalarmnum = clean_value(document.getElementById('lightalarmnum'));
+  var lightalarmex = clean_value(document.getElementById('lightalarmex'));
+  var duration = clean_value(document.getElementById('duration'));
   var funcptstr = " " + points.length;
   for (let i = 0; i < points.length; i++) {
     funcptstr += " " + points[i].x + " " + points[i].y;
   }
-  connection.send("R" + pwps + " " + pwpstr + " " + firstcol + " " + nodec2 + " "  + nodec1 + " " + nodec0 + " " + framerate + " " + lightalarmnum + " " + lightalarmex + " " + duration + funcptstr);
+  connection.send("L" + pwps + " " + pwpstr + " " + firstcol + " " + nodec2 + " "  + nodec1 + " " + nodec0 + " " + framerate + " " + lightalarmnum + " " + lightalarmex + " " + duration + funcptstr);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
 
 function melodyEffect(){
-    connection.send("L");
+    connection.send("T");
     //document.getElementById('melody').style.backgroundColor = '#00878F';
 }
 
