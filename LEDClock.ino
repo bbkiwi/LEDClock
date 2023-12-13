@@ -1,4 +1,5 @@
 /*********
+   Using for Bedroom clock Dec 2023
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
 
@@ -144,7 +145,7 @@ tmElements_t calcTime = {0};
 
 struct ALARM {
   bool alarmSet = false;
-  uint8_t alarmType;
+  int alarmType; // if neg only display during daylight mode
   uint16_t duration;
   uint32_t repeat;
   tmElements_t alarmTime;
@@ -179,7 +180,8 @@ unsigned long int update_interval_secs = 3601;
 NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
-#define NEOPIXEL_PIN 3      // This is the D9 pin
+#define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin
+//#define NEOPIXEL_PIN 4      // For test clock This is the D2 pin
 #define PIEZO_PIN 5         // This is D1
 #define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
 
@@ -301,10 +303,17 @@ void loop() {
         // only show the alarm if close to set time
         // this prevents alarm from going off on a restart where configured alarm is in past
         currentTime = now();
-        show_alarm_pattern(alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].duration);
-        // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
-        Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
-        sprintf(buf, "Alarm at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
+        if (IsDay(currentTime) || alarmInfo[alarm_ind].alarmType > 0) {
+          show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration);
+          // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
+          Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
+        } else {
+          sprintf(buf, "Display supressed at night");
+          Serial.println();
+          Serial.println(buf);
+          webSocket.sendTXT(websocketId_num, buf);
+        }
+        sprintf(buf, "Alarm type %d at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType,  hour(currentTime), minute(currentTime),
                 second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
                 monthNames[month(currentTime)].c_str(), year(currentTime));
         Serial.println();
@@ -480,6 +489,15 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
       break;
     case 39:
       rainbow2(0, 5, 0, 256, 1, 1, 15, now(), duration);
+      break;
+    case 40:
+      showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1, now());
+      break;
+    case 41:
+      showlights(duration, 2, 2, 2, -1, -1, -1, -1, -1, now());
+      break;
+    case 42:
+      showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
       break;
     default:
       rainbow2(0, 5, 0, 256, 4, 1, 15, now(), duration);
@@ -731,7 +749,7 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     light_alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 1;
     server.send(200, "text/plain", "Light alarm Starting ...");
     delay(1000);
-    //light_alarm_num = random(1, 40);
+    //light_alarm_num = random(1, 43);
     time_elapsed = 0;
   });
 
@@ -1315,6 +1333,7 @@ void Draw_Clock(time_t t, byte Phase)
 
 bool IsDay(time_t t)
 {
+  // return false; // for debug if want to test night behaviour
   int NowHour = hour(t);
   int NowMinute = minute(t);
   if ((weekday() >= 2) && (weekday() <= 6))
