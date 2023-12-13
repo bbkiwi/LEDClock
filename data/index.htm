@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>LED Control</title>
     <link href='main.css' rel='stylesheet' type='text/css'>
-	<link rel="stylesheet" href="dist/simplepicker.css">
+	  <link rel="stylesheet" href="dist/simplepicker.css">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
     <link rel="icon" type="image/png" sizes="144x144"  href="/favicon-144x144.png">
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon.ico">
@@ -14,6 +14,37 @@
     <script src="WebSocket.js" type="text/javascript"></script>
 
 	<style>
+	        #function-points {
+            width: 300px;
+            height: 300px;
+            border: 1px solid #000;
+            position: relative;
+        }
+
+        .point {
+            width: 10px; /* must save half width in pt_half+width in script section */
+            height: 10px;
+            background-color: red;
+            border-radius: 50%;
+            position: absolute;
+        }
+
+        .point-marker {
+            width: 10px;
+            height: 10px;
+            background-color: black;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+        }
+        .point-small {
+            width: 2px;
+            height: 2px;
+            background-color: black;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+        }
 	  body { font-family: 'Roboto'; }
 		.event-log {
 		  font-family: consolas, Monaco, monospace;
@@ -57,6 +88,7 @@
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
 <button onclick="toggleShowHide('Display-Control')">Display Control</button>
 <button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
+<button onclick="toggleShowHide('Alarm-Control2')">Alarm Control2</button>
 <div id="Clock-Control" style="display: none;">
     <center>
         <header>
@@ -64,11 +96,45 @@
         </header>
         <div>
              <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
-             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button>
-             <input type="text" size = "4" id="pcntwheelpersec" value=0>
-             <input type="text" size="4" id="pcntwheelperstrip" value=0>
-             <input type="text" size="4" id="firstcolor" value=0></p>
-             <p style="margin:8px 0px"><button id="melody" class="button" style="background-color:#999" onclick="melodyEffect();">Melody</button></p>
+             <p style="margin:8px 0px"><button id="animation" class="button" style="background-color:#999" onclick="lightEffect();">Light FX</button></p>
+             <input type="text" size = "3" disabled value='W/F'>
+             <input type="text" size = "3" disabled value='W/S'>
+             <input type="text" size = "3" disabled value='1stH'>
+             <input type="text" size = "3" disabled value='Ncf2'>
+             <input type="text" size = "3" disabled value='Ncf1'>
+             <input type="text" size = "3" disabled value='Ncf0'>
+             <input type="text" size = "3" disabled value='fps'>
+             <input type="text" size = "3" disabled value='ani#'>
+             <input type="text" size = "3" disabled value='ebd#'>
+             <input type="text" size = "3" disabled value='dura'><br>
+             <input type="text" size = "3" id="pcntwheelpersec" value=0>
+             <input type="text" size = "3" id="pcntwheelperstrip" value=0>
+             <input type="text" size = "3" id="firstcolor" value=0>
+             <input type="text" size = "3" id="nodec2" value=0>
+             <input type="text" size = "3" id="nodec1" value=0>
+             <input type="text" size = "3" id="nodec0" value=0>
+             <input type="text" size = "3" id="framerate" value=0>
+             <input type="text" size = "3" id="lightalarmnum" value=0>
+             <input type="text" size = "3" id="lightalarmex" value=0>
+             <input type="text" size = "3" id="duration" value=10>
+
+            <div id="function-points"></div>
+<div>
+<button type="button" onclick=
+"generateFunction()">Generate Function</button>
+<button type="button" onclick=
+"clearPoints()">Clear Points</button>
+<button type="button" onclick=
+"addPointHelper(0,0)">Add (0,0)</button>
+<button type="button" onclick=
+"addPointHelper(300,300)">Add (300,300)</button>
+</div>
+<div id="function-output">
+<!-- The generated piecewise linear function will be displayed here --></div>
+
+
+
+             <p style="margin:8px 0px"><button id="melody" class="button" style="background-color:#999" onclick="melodyEffect();">Tune</button></p>
              <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
              <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
        </div>
@@ -195,11 +261,216 @@
     </center>
 </div>
 
+<div id="Alarm-Control2" style="display: none;">
+    <center>
+        <header>
+            <h1>Alarm Control 2</h1>
+        </header>
+        <div>
+          <table>
+            <tr>
+              <td>
+                <button class="simplepicker-btnx">Picker</button>
+              </td>
+            </tr>
+
+            <tr>
+              <td>
+                <button id="saveddatetime1" class="button" style="background-color:#999">When</button>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+            </tr>
+
+            <tr>
+              <td>
+          <button id="type1" class="button" style="background-color:#999" onclick="savetype();">Type</button>
+          </td>
+                       <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+
+          </tr>
+
+          <tr>
+            <td>
+            <button id="repeat1" class="button" style="background-color:#999" onclick="saverepeat();">Repeat</button>
+            </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+
+             </tr>
+
+             <tr>
+            <td>
+            <button id="duration1" class="button" style="background-color:#999" onclick="saverepeat();">Duration</button>
+            </td>
+              <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+             <td>
+                <input style="width:50px" type="text" id="x" value=0>
+             </td>
+
+             </tr>
+          </table>
+        </div>
+    </center>
+</div>
+
   <div class="picker-area">
   <h2>Event logs:</h2>
   <div class="event-log"></div>
   <script src="dist/simplepicker.js"></script>
   <script>
+
+        const pt_half_width = 5; // must take from css above
+        let points = [];
+        const functionPlot = document.getElementById("function-points");
+        const plot_ht = 300; //functionPlot.clientHeight;
+        console.log('plot_ht = ', plot_ht, functionPlot);
+        // will use to adjust so math coor origin is bottom left, not top left
+        // Function to add a point centered at the mouse cursor
+        function addPoint(event) {
+            const x = event.clientX - event.target.getBoundingClientRect().left;
+            const y = event.clientY - event.target.getBoundingClientRect().top ;
+            addPointHelper(Math.round(x), Math.round(plot_ht - y))
+            }
+
+        function addPointHelper(x,y) {
+            const point = document.createElement('div');
+            point.id = 'point';
+            point.className = 'point';
+            point.style.left = x - pt_half_width + 'px';
+            point.style.top = plot_ht - y - pt_half_width  + 'px';
+            points.push({x:x,y:y});
+            updatePlot();
+            // Double-click event listener to remove the point
+            point.addEventListener('dblclick', () => {
+               console.log(+point.style.left.slice(0,-2)+pt_half_width, plot_ht - point.style.top.slice(0,-2) - pt_half_width , 'point removed')
+               let pt_obj = {x:+point.style.left.slice(0,-2)+pt_half_width, y:plot_ht - point.style.top.slice(0,-2) - pt_half_width}
+               let ind_to_remove = points.findIndex((el) => el.x == pt_obj.x && el.y == pt_obj.y);
+               points.splice(ind_to_remove,1);
+               point.remove();
+               console.log('points ', points)
+               updatePlot();
+            });
+
+            document.getElementById('function-points').appendChild(point);
+            console.log('Added point at x = ',x, ' y = ', y, 'points ', points)
+        }
+
+        // Event listener to add a point when the mouse is clicked within the function-points
+        document.getElementById('function-points').addEventListener('click', (e) => {
+            if (e.target.id === 'function-points') {
+                addPoint(e);
+            }
+        });
+
+        // Prevent the default context menu on right-click to allow for drawing
+        document.getElementById('function-points').addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+
+      function generateFunction() {
+        const xInputs = document.querySelectorAll(".x-value");
+        // Sort points by x-coordinate
+        points.sort((a, b) => a.x - b.x);
+        // Generate the piecewise linear function
+        const piecewiseLinearFunction = (inputX) => {
+            if (points.length == 0) {return null}
+            if (inputX < points[0].x) {
+                return points[0].y;
+            }
+            for (let i = 0; i < points.length - 1; i++) {
+                if (inputX >= points[i].x && inputX < points[i + 1].x) {
+                    const slope = (points[i + 1].y - points[i].y) / (points[i + 1].x - points[i].x);
+                    return points[i].y + slope * (inputX - points[i].x);
+                }
+            }
+            return points[points.length - 1].y;
+            };
+
+        // Display the generated function
+            const functionOutput = document.getElementById("function-output");
+            <!-- functionOutput.textContent = `Generated Function: f(x) = ${piecewiseLinearFunction}`; -->
+            return piecewiseLinearFunction;
+        }
+
+        function clearPoints() {
+            functionPlot.innerHTML = "";
+            points = [];
+        }
+
+        function updatePlot() {
+            // Update the graphical display of the input
+             // Clear the previous points
+            const graphpts = document.querySelectorAll('.point-small');
+            graphpts.forEach(pt => { pt.remove(); });
+            let piecewiseLinearFunction = generateFunction();
+
+            for (let xx = 0; xx < 300; xx++) {
+                const marker = document.createElement("div");
+                marker.className = "point-small";
+                marker.style.left = xx +'px';
+                marker.style.top = plot_ht - piecewiseLinearFunction(xx)+ 'px';
+                // insert markers before any plotted points so don't draw over them
+                let plotted_point = document.getElementById("point");
+                functionPlot.insertBefore(marker, plotted_point);
+            }
+        }
+
+
+
+
     let simplepicker = new SimplePicker(
 	'.picker-area',
 	{
