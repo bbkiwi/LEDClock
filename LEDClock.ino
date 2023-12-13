@@ -144,7 +144,7 @@ ALARM alarmInfo[NUM_ALARMS];
   LIGHT_ANIMATION animationInfo[NUM_PATTERNS};
 */
 
-bool check_mic = true;
+bool check_mic = false;
 
 //  end of those saved in config file
 
