@@ -370,6 +370,10 @@ void loop() {
 
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
   Serial.println(light_alarm_num);
+  int isecond = second(now());
+  int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
+  int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
+
   switch (light_alarm_num) {
     case 1:
       showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1, now());
@@ -446,49 +450,49 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
       firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), duration);
       break;
     case 25:
-      rainbow2(0, 1, 0, 256, 1, 1, 15, now(), duration); // full rainbow ring rotating
+      rainbow2(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
     case 26:
-      rainbow2(0, 1, 0, 32, 1, 1, 15, now(), duration);  // full rainbox ring rotating 8 times slower
+      rainbow2(0, 1, 0, 32, 1, 1, ihour, now(), duration);  // full rainbox ring rotating 8 times slower
       break;
     case 27:
-      rainbow2(0, 1, 0, 256, 4, 1, 15, now(), duration); // 4 full rainbows in ring rotating
+      rainbow2(0, 1, 0, 256, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating
       break;
     case 28:
-      rainbow2(0, 1, 0, 32, 4, 1, 15, now(), duration); // 4 full rainbows in ring rotating 8 times slower
+      rainbow2(0, 1, 0, 32, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating 8 times slower
       break;
     case 29:
-      rainbow2(0, 1, 32000, 32, 4, 1, 15, now(), duration); // 4 full rainbows as above starting different place
+      rainbow2(0, 1, 32000, 32, 4, 1, ihour, now(), duration); // 4 full rainbows as above starting different place
       break;
     case 30:
-      rainbow2(0, 2, 0, 256, 4, 1, 15, now(), duration); //  4 full and 4 reverse flowing from 15 min
+      rainbow2(0, 2, 0, 256, 4, 1, ihour, now(), duration); //  4 full and 4 reverse flowing from ihour led
       break;
     case 31:
-      rainbow2(0, 2, 0, 256, 1, 4, 15, now(), duration); //  1/4 rainbox and its reverse flowing from 15 min
+      rainbow2(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
       break;
     case 32:
-      rainbow2(0, 2, 0, 256, 1, 4, 30, now(), duration); //  1/4 rainbox and its reverse flowing from 30 min
+      rainbow2(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
       break;
     case 33:
-      rainbow2(0, 2, 0, 16, 1, 4, 30, now(), duration); //   1/64 rainbox and its reverse flowing from 30 min
+      rainbow2(0, 2, 0, 16, 1, 4, ihour, now(), duration); //   1/64 rainbox and its reverse flowing from ihour led
       break;
     case 34:
-      rainbow2(0, 2, 32000, 16, 1, 4, 30, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from 30 min
+      rainbow2(0, 2, 32000, 16, 1, 4, ihour, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from ihour led
       break;
     case 35:
-      rainbow2(0, 3, 0, 256, 1, 1, 15, now(), duration);
+      rainbow2(0, 3, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 36:
-      rainbow2(0, 3, 0, 256, 4, 1, 15, now(), duration);
+      rainbow2(0, 3, 0, 256, 4, 1, ihour, now(), duration);
       break;
     case 37:
-      rainbow2(0, 4, 0, 256, 1, 1, 15, now(), duration);
+      rainbow2(0, 4, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 38:
-      rainbow2(0, 4, 0, 256, 4, 1, 15, now(), duration);
+      rainbow2(0, 4, 0, 256, 4, 1, ihour, now(), duration);
       break;
     case 39:
-      rainbow2(0, 5, 0, 256, 1, 1, 15, now(), duration);
+      rainbow2(0, 5, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 40:
       showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1, now());
@@ -500,7 +504,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
       showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
       break;
     default:
-      rainbow2(0, 5, 0, 256, 4, 1, 15, now(), duration);
+      rainbow2(0, 5, 0, 256, 4, 1, ihour, now(), duration);
   }
 }
 
