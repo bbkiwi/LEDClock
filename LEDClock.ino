@@ -1,5 +1,5 @@
 /*********
-   Using for Bedroom clock Dec 2023
+   Using for Bedroom, Iris, and GBT clocks Feb 2024
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
 
@@ -38,6 +38,11 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
+//#define BEDROOM_CLOCK
+//#define IRIS_CLOCK
+#define TEST_CLOCK
+//#define GBT_CLOCK
+
 /* Cass Bay */
 #define LATITUDE        -43.601131
 #define LONGITUDE       172.689831
@@ -57,8 +62,20 @@ const char *ssid = "LED Clock Access Point"; // The name of the Wi-Fi network th
 const char *password = "ledclock";   // The password required to connect to it, leave blank for an open network
 
 // OTA and mDns must have same name
-//TODO ??? PseudoSW ???
+
+#ifdef BEDROOM_CLOCK
 const char *OTAandMdnsName = "LEDClock";           // A name and a password for the OTA and mDns service
+#endif
+#ifdef IRIS_CLOCK
+const char *OTAandMdnsName = "IrisLEDClock";           // A name and a password for the OTA and mDns service
+#endif
+#ifdef TEST_CLOCK
+const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
+#endif
+#ifdef GBT_CLOCK
+const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
+#endif
+
 const char *OTAPassword = "ledclock";
 
 // must be longer than longest message
@@ -98,7 +115,14 @@ RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 },
 RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 // Make clock go forwards or backwards (dependant on hardware)
+#ifdef BEDROOM_CLOCK
 bool ClockGoBackwards = true;
+#endif
+#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK
+bool ClockGoBackwards = false;
+#endif
+
+
 int day_disp_ind = 0;
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
@@ -122,6 +146,7 @@ TIME AstroSunset;
 
 byte day_brightness = 127;
 byte night_brightness = 16;
+bool auto_night_disp = false;
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
@@ -132,6 +157,9 @@ String monthNames[13] = {"dummy", "January", "February", "March", "April", "May"
 bool ota_flag = true;
 bool sound_alarm_flag = false;
 int light_alarm_num = 0;
+int light_alarm_parm1 = 0;
+int light_alarm_parm2 = 0;
+int light_alarm_parm3 = 0;
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
 //tmElements_t alarmTime;
@@ -146,6 +174,9 @@ tmElements_t calcTime = {0};
 struct ALARM {
   bool alarmSet = false;
   int alarmType; // if neg only display during daylight mode
+  int parm1;
+  int parm2;
+  int parm3;
   uint16_t duration;
   uint32_t repeat;
   tmElements_t alarmTime;
@@ -159,7 +190,14 @@ ALARM alarmInfo[NUM_ALARMS];
 //bool alarmSet = false;
 
 uint16_t time_elapsed = 0;
+
+#ifdef TEST_CLOCK
+int TopOfClock = 0; // to make given pixel the top
+#else
 int TopOfClock = 15; // to make given pixel the top
+#endif
+
+
 
 // notes in the melody for the sound alarm:
 int melody[] = { // Shave and a hair cut (3x) two bits terminate with -1 = STOP
@@ -180,8 +218,13 @@ unsigned long int update_interval_secs = 3601;
 NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
+#ifdef BEDROOM_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin
-//#define NEOPIXEL_PIN 4      // For test clock This is the D2 pin
+#endif
+#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK
+#define NEOPIXEL_PIN 4      // This is the D2 pin
+#endif
+
 #define PIEZO_PIN 5         // This is D1
 #define analogInPin  A0     // ESP8266 Analog Pin ADC0 = A0
 
@@ -217,7 +260,8 @@ void setup() {
   // Initialize alarmTime(s) to default (now)
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
     breakTime(now(), alarmInfo[alarm_ind].alarmTime);
-    sprintf(buf, "Default alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+    sprintf(buf, "Default alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+            alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
             hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
             second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
             monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -238,7 +282,8 @@ void setup() {
     // will have loaded the saved parameters
     Serial.println("Config loaded");
     for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-      sprintf(buf, "alarmInfo[%d] set=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+      sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
               hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
               second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
               monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -268,7 +313,7 @@ void loop() {
   MDNS.update();                              // must have above as well
 
   if (light_alarm_num)  {
-    show_alarm_pattern(light_alarm_num, 10000);
+    show_alarm_pattern(light_alarm_num, 10000, light_alarm_parm1, light_alarm_parm2, light_alarm_parm3);
     light_alarm_num = 0;
   }
 
@@ -304,7 +349,7 @@ void loop() {
         // this prevents alarm from going off on a restart where configured alarm is in past
         currentTime = now();
         if (IsDay(currentTime) || alarmInfo[alarm_ind].alarmType > 0) {
-          show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration);
+          show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3);
           // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
           Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
         } else {
@@ -313,9 +358,8 @@ void loop() {
           Serial.println(buf);
           webSocket.sendTXT(websocketId_num, buf);
         }
-        sprintf(buf, "Alarm type %d at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType,  hour(currentTime), minute(currentTime),
-                second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
-                monthNames[month(currentTime)].c_str(), year(currentTime));
+        sprintf(buf, "Alarm type %d (%d, %d, %d) at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+                hour(currentTime), minute(currentTime), second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),  monthNames[month(currentTime)].c_str(), year(currentTime));
         Serial.println();
         Serial.println(buf);
         webSocket.sendTXT(websocketId_num, buf);
@@ -368,33 +412,36 @@ void loop() {
   delay(10); // needed to keep wifi going
 }
 
-void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
-  Serial.println(light_alarm_num);
+void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3) {
+  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d", light_alarm_num, duration,  parm1, parm2, parm3);
+  Serial.println(buf);
+
   int isecond = second(now());
   int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
 
   switch (light_alarm_num) {
-    case 1:
+    case 1:  // rainbow 10 wait
       showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1, now());
       break;
-    case 2:
+    case 2: // rainbow 5 wait
       showlights(duration, -1, -1, -1, -1, -1, -1, 5, -1, now());
       break;
-    case 3:
+    case 3: // rainbow 1 wait
       showlights(duration, -1, -1, -1, -1, -1, -1, 1, -1, now());
       break;
-    case 4:
+    case 4: // ranbow2 0 wait
       showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
       break;
-    case 5:
+    case 5: // 3 worms fast 1 wait
       moveworms(1, now(), duration);
       break;
-    case 6:
+    case 6: // 3  worms slow 5 wait
       moveworms(5, now(), duration);
       break;
+
+    //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
     case 7:
-      //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
       cellularAutomata(250, 26, 30, 60, random(65535), now(), duration);
       break;
     case 8:
@@ -431,9 +478,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
     case 18:
       cellularAutomata(50, 110, random(65535), now(), duration);
       break;
-    case 19:
+    case 19: // fire
       fire(now(), duration);
       break;
+    // fireflys
     case 20:
       firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
       break;
@@ -449,51 +497,55 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
     case 24:
       firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), duration);
       break;
+    // (partial) rainbows
     case 25:
-      rainbow2(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
+      //void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
+      rainbow(0, parm1, 0, parm2, 16, parm3, ihour, now(), duration); // full rainbow ring rotating
+      //rainbow(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
     case 26:
-      rainbow2(0, 1, 0, 32, 1, 1, ihour, now(), duration);  // full rainbox ring rotating 8 times slower
+      rainbow(0, 1, 0, 32, 1, 1, ihour, now(), duration);  // full rainbox ring rotating 8 times slower
       break;
     case 27:
-      rainbow2(0, 1, 0, 256, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating
+      rainbow(0, 1, 0, 256, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating
       break;
     case 28:
-      rainbow2(0, 1, 0, 32, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating 8 times slower
+      rainbow(0, 1, 0, 32, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating 8 times slower
       break;
     case 29:
-      rainbow2(0, 1, 32000, 32, 4, 1, ihour, now(), duration); // 4 full rainbows as above starting different place
+      rainbow(0, 1, 32000, 32, 4, 1, ihour, now(), duration); // 4 full rainbows as above starting different place
       break;
     case 30:
-      rainbow2(0, 2, 0, 256, 4, 1, ihour, now(), duration); //  4 full and 4 reverse flowing from ihour led
+      rainbow(0, 2, 0, 256, 4, 1, ihour, now(), duration); //  4 full and 4 reverse flowing from ihour led
       break;
     case 31:
-      rainbow2(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
       break;
     case 32:
-      rainbow2(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
       break;
     case 33:
-      rainbow2(0, 2, 0, 16, 1, 4, ihour, now(), duration); //   1/64 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 0, 16, 1, 4, ihour, now(), duration); //   1/64 rainbox and its reverse flowing from ihour led
       break;
     case 34:
-      rainbow2(0, 2, 32000, 16, 1, 4, ihour, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 32000, 16, 1, 4, ihour, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from ihour led
       break;
     case 35:
-      rainbow2(0, 3, 0, 256, 1, 1, ihour, now(), duration);
+      rainbow(0, 3, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 36:
-      rainbow2(0, 3, 0, 256, 4, 1, ihour, now(), duration);
+      rainbow(0, 3, 0, 256, 4, 1, ihour, now(), duration);
       break;
     case 37:
-      rainbow2(0, 4, 0, 256, 1, 1, ihour, now(), duration);
+      rainbow(0, 4, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 38:
-      rainbow2(0, 4, 0, 256, 4, 1, ihour, now(), duration);
+      rainbow(0, 4, 0, 256, 4, 1, ihour, now(), duration);
       break;
     case 39:
-      rainbow2(0, 5, 0, 256, 1, 1, ihour, now(), duration);
+      rainbow(0, 5, 0, 256, 1, 1, ihour, now(), duration);
       break;
+    // color wipes
     case 40:
       showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1, now());
       break;
@@ -504,7 +556,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration) {
       showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
       break;
     default:
-      rainbow2(0, 5, 0, 256, 4, 1, ihour, now(), duration);
+      rainbow(0, 5, 0, 256, 4, 1, ihour, now(), duration);
   }
 }
 
@@ -550,7 +602,8 @@ bool loadConfig() {
   }
 
   size_t size = configFile.size();
-  if (size > 1024) {
+  // Safety code incase somehow had too big file
+  if (size > 2048) {
     Serial.println("Config file size is too large");
     return false;
   }
@@ -558,11 +611,8 @@ bool loadConfig() {
   // Allocate a buffer to store contents of the file.
   std::unique_ptr<char[]> buf(new char[size]);
 
-  // We don't use String here because ArduinoJson library requires the input
-  // buffer to be mutable. If you don't use ArduinoJson, you may as well
-  // use configFile.readString instead.
   configFile.readBytes(buf.get(), size);
-  DynamicJsonDocument doc(1536);
+  DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, buf.get());
 
   if (error) {
@@ -575,6 +625,9 @@ bool loadConfig() {
     //TODO if alarm_ind >=NUM_ALARMS abort
     alarmInfo[alarm_ind].alarmSet = alarm["alarmSet"]; // true, true, true, true, true
     alarmInfo[alarm_ind].alarmType = alarm["alarmType"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm1 = alarm["parm1"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm2 = alarm["parm2"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm3 = alarm["parm3"]; // 0, 0, 0, 0, 0
     alarmInfo[alarm_ind].duration = alarm["duration"]; // 10000, 10000, 10000, 10000, 10000
     alarmInfo[alarm_ind].repeat = alarm["repeat"]; // 86400, 86400, 86400, 86400, 86400
 
@@ -587,17 +640,97 @@ bool loadConfig() {
     alarmInfo[alarm_ind].alarmTime.Year = alarm_alarmTime["year"]; // 53, 53, 53, 53, 53
     alarm_ind++;
   }
+
+  // Deserialize Twelve
+  JsonArray twelveArray = doc["Twelve"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = twelveArray[i];
+    Twelve[i].r = rgbObj["r"];
+    Twelve[i].g = rgbObj["g"];
+    Twelve[i].b = rgbObj["b"];
+  }
+
+  // Deserialize Quarters
+  JsonArray quartersArray = doc["Quarters"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = quartersArray[i];
+    Quarters[i].r = rgbObj["r"];
+    Quarters[i].g = rgbObj["g"];
+    Quarters[i].b = rgbObj["b"];
+  }
+
+  // Deserialize Divisions
+  JsonArray divisionsArray = doc["Divisions"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = divisionsArray[i];
+    Divisions[i].r = rgbObj["r"];
+    Divisions[i].g = rgbObj["g"];
+    Divisions[i].b = rgbObj["b"];
+  }
+
+  // Deserialize Background
+  JsonArray backgroundArray = doc["Background"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = backgroundArray[i];
+    Background[i].r = rgbObj["r"];
+    Background[i].g = rgbObj["g"];
+    Background[i].b = rgbObj["b"];
+  }
+
+  // Deserialize Hour
+  JsonArray hourArray = doc["Hour"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = hourArray[i];
+    Hour[i].r = rgbObj["r"];
+    Hour[i].g = rgbObj["g"];
+    Hour[i].b = rgbObj["b"];
+    hour_width[i] = rgbObj["width"];
+  }
+
+  // Deserialize Minute
+  JsonArray minuteArray = doc["Minute"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = minuteArray[i];
+    Minute[i].r = rgbObj["r"];
+    Minute[i].g = rgbObj["g"];
+    Minute[i].b = rgbObj["b"];
+    minute_blink[i] = rgbObj["blink"];
+    minute_width[i] = rgbObj["width"];
+  }
+
+  // Deserialize Second
+  JsonArray secondArray = doc["Second"];
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = secondArray[i];
+    Second[i].r = rgbObj["r"];
+    Second[i].g = rgbObj["g"];
+    Second[i].b = rgbObj["b"];
+    second_width[i] = rgbObj["width"];
+  }
+
+  // Deserialize auto_night_disp
+  auto_night_disp = doc["auto_night_disp"];
+  // Deserialize day_disp_ind
+  day_disp_ind = doc["day_disp_ind"];
+  // Deserialize night_brightness
+  night_brightness = doc["night_brightness"];
+  night_brightness = min(night_brightness, day_brightness);
+
   return true;
 }
 
 bool saveConfig() {
 
-  StaticJsonDocument<1024> doc;
+  DynamicJsonDocument doc(4096);
+  // Serialize alarms
   JsonArray alarms = doc.createNestedArray("alarms");
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
     JsonObject alarms_nested = alarms.createNestedObject();
     alarms_nested["alarmSet"] = alarmInfo[alarm_ind].alarmSet;
     alarms_nested["alarmType"] = alarmInfo[alarm_ind].alarmType;
+    alarms_nested["parm1"] = alarmInfo[alarm_ind].parm1;
+    alarms_nested["parm2"] = alarmInfo[alarm_ind].parm2;
+    alarms_nested["parm3"] = alarmInfo[alarm_ind].parm3;
     alarms_nested["duration"] = alarmInfo[alarm_ind].duration;
     alarms_nested["repeat"] = alarmInfo[alarm_ind].repeat;
 
@@ -609,6 +742,81 @@ bool saveConfig() {
     alarms_nested_alarmTime["month"] = alarmInfo[alarm_ind].alarmTime.Month;
     alarms_nested_alarmTime["year"] = alarmInfo[alarm_ind].alarmTime.Year;
   }
+
+  // Serialize Twelve
+  JsonArray twelveArray = doc.createNestedArray("Twelve");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = twelveArray.createNestedObject();
+    rgbObj["r"] = Twelve[i].r;
+    rgbObj["g"] = Twelve[i].g;
+    rgbObj["b"] = Twelve[i].b;
+  }
+
+  // Serialize Quarters
+  JsonArray quartersArray = doc.createNestedArray("Quarters");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = quartersArray.createNestedObject();
+    rgbObj["r"] = Quarters[i].r;
+    rgbObj["g"] = Quarters[i].g;
+    rgbObj["b"] = Quarters[i].b;
+  }
+
+  // Serialize Divisions
+  JsonArray divisionsArray = doc.createNestedArray("Divisions");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = divisionsArray.createNestedObject();
+    rgbObj["r"] = Divisions[i].r;
+    rgbObj["g"] = Divisions[i].g;
+    rgbObj["b"] = Divisions[i].b;
+  }
+
+  // Serialize Background
+  JsonArray backgroundArray = doc.createNestedArray("Background");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = backgroundArray.createNestedObject();
+    rgbObj["r"] = Background[i].r;
+    rgbObj["g"] = Background[i].g;
+    rgbObj["b"] = Background[i].b;
+  }
+
+  // Serialize Hour
+  JsonArray hourArray = doc.createNestedArray("Hour");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = hourArray.createNestedObject();
+    rgbObj["r"] = Hour[i].r;
+    rgbObj["g"] = Hour[i].g;
+    rgbObj["b"] = Hour[i].b;
+    rgbObj["width"] = hour_width[i];
+  }
+
+  // Serialize Minute
+  JsonArray minuteArray = doc.createNestedArray("Minute");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = minuteArray.createNestedObject();
+    rgbObj["r"] = Minute[i].r;
+    rgbObj["g"] = Minute[i].g;
+    rgbObj["b"] = Minute[i].b;
+    rgbObj["blink"] = minute_blink[i];
+    rgbObj["width"] = minute_width[i];
+  }
+
+  // Serialize Second
+  JsonArray secondArray = doc.createNestedArray("Second");
+  for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
+    JsonObject rgbObj = secondArray.createNestedObject();
+    rgbObj["r"] = Second[i].r;
+    rgbObj["g"] = Second[i].g;
+    rgbObj["b"] = Second[i].b;
+    rgbObj["width"] = second_width[i];
+  }
+
+  // Serialize day_disp_ind
+  doc["day_disp_ind"] = day_disp_ind;
+  // Serialize auto_night_disp
+  doc["auto_night_disp"] = auto_night_disp;
+  // Serialize night_brightness
+  doc["night_brightness"] = night_brightness;
+
 
   File configFile = SPIFFS.open("/config.json", "w");
   if (!configFile) {
@@ -971,9 +1179,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Second[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
-      } else if (payload[0] == 'R') {                      // the browser sends an RNN when the rainbow effect is enabled
+      } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, parm2 and parm3
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "R%2d", &light_alarm_num);
+        sscanf((char *) payload, "P%d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3);
         //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -993,12 +1201,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int Aminute;
         int alarm_ind;
         int alarmtype;
+        int parm1;
+        int parm2;
+        int parm3;
         int alarmrepeat;
         int alarmduration;
 
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
-        sscanf((char *) payload, "A%d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
         //PREVENT bad input
         if (alarm_ind >= 5) alarm_ind = 0;
         if (alarm_ind < 0) alarm_ind = 0;
@@ -1008,16 +1219,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
 
-        setalarm(alarm_ind, alarmtype, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
+        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
         alarmInfo[alarm_ind].alarmSet = true;
-
-
-
-        sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, duration %d ms repeat %d sec", alarm_ind,
-                hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)), second(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat);
+        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+                alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+                hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
         webSocket.sendTXT(num, buf);
 
       } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
@@ -1028,9 +1236,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
-  Serial.printf("setalarmtime: %d %d %d %d %d %d %d %d %d\n", alarmtype, t, r, s, m, h, d, mth, y);
+void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   alarmInfo[alarm_ind].alarmType = alarmtype;
+  alarmInfo[alarm_ind].parm1 = p1;
+  alarmInfo[alarm_ind].parm2 = p2;
+  alarmInfo[alarm_ind].parm3 = p3;
   alarmInfo[alarm_ind].duration = t;
   alarmInfo[alarm_ind].repeat = r;
   alarmInfo[alarm_ind].alarmTime.Second = s;
@@ -1040,6 +1250,14 @@ void setalarm(int alarm_ind, int alarmtype,  uint16_t t, uint32_t r, uint8_t s, 
   alarmInfo[alarm_ind].alarmTime.Month = mth;
   //NOTE year is excess from 1970
   alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
+
+  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+          alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+          hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+          second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+          monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+  server.send(200, "text/plain", buf);
+  Serial.println(buf);
 }
 
 void setalarmurl()
@@ -1053,6 +1271,9 @@ void setalarmurl()
 
   alarmInfo[alarm_num].alarmSet = true;
   String type = server.arg("type");
+  String p1 = server.arg("parm1");
+  String p2 = server.arg("parm2");
+  String p3 = server.arg("parm3");
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
   String h = server.arg("hour");
@@ -1066,6 +1287,9 @@ void setalarmurl()
 
   setalarm(alarm_num,
            (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
+           (strlen(p1.c_str()) > 0) ? p1.toInt() : alarmInfo[alarm_num].parm1,
+           (strlen(p2.c_str()) > 0) ? p2.toInt() : alarmInfo[alarm_num].parm2,
+           (strlen(p3.c_str()) > 0) ? p3.toInt() : alarmInfo[alarm_num].parm3,
            (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
            (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
            (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
@@ -1074,14 +1298,6 @@ void setalarmurl()
            (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo[alarm_num].alarmTime.Day,
            (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
            (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
-
-  sprintf(buf, "Alarm[%d] Set to %d:%02d:%02d %s %d %s %d, type %d duration %d ms repeat %d sec", alarm_num,
-          hour(makeTime(alarmInfo[alarm_num].alarmTime)), minute(makeTime(alarmInfo[alarm_num].alarmTime)), second(makeTime(alarmInfo[alarm_num].alarmTime)),
-          daysOfWeek[weekday(makeTime(alarmInfo[alarm_num].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_num].alarmTime)),
-          monthNames[month(makeTime(alarmInfo[alarm_num].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_num].alarmTime)),
-          alarmInfo[alarm_num].alarmType, alarmInfo[alarm_num].duration, alarmInfo[alarm_num].repeat);
-  server.send(200, "text/plain", buf);
-  Serial.println(buf);
 }
 
 
@@ -1390,7 +1606,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
     if (w4 >= 0) theaterChase(strip.Color(127, 127, 127), w4, t); // White, half brightness
     if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5, t); // Red, half brightness
     if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6, t); // Blue, half brightness
-    if (w7 >= 0) rainbow2(w7, 1, 0, 256, 4, 1, 15, t, duration);            // Flowing rainbow cycle along the whole strip
+    if (w7 >= 0) rainbow(w7, 1, 0, 256, 4, 1, 15, t, duration);            // Flowing rainbow cycle along the whole strip
     if (w8 >= 0) theaterChaseRainbow(w8, t); // Rainbow-enhanced theaterChase variant
     time_elapsed = millis() - time_start;
   }
@@ -1425,30 +1641,35 @@ void colorAll(uint32_t color, int duration, time_t t) {
 }
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
+void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
+  sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, ncolorfrac = %d, nodepix = %d, duration = %d",
+          wait, embedding, firsthue, hueinc, ncolorloop, ncolorfrac, nodepix, duration);
+  Serial.println(buf);
+
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
   // means we'll make ncolorloop*65536/256   passes through this outer loop:
+  int pixelHue;
   time_elapsed = 0;
   uint16_t time_start = millis();
   long firstPixelHue = firsthue;
   vector<pair<int8_t, int8_t>> points;
   int j;
-  switch (ex) {
-    case 1:
+  switch (embedding) {
+    case 1: // full mapping
       points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS}};
       break;
-    case 2:
+    case 2: // up, down, half peak 1/2 way
       points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
       break;
-    case 3:
+    case 3: // up, down, full peak 1/2 way
       points = {{0, 0}, {NUM_LEDS / 2, NUM_LEDS}, {NUM_LEDS - 1, 0}};
       break;
-    case 4:
+    case 4: // up, down, up max 1/3
       points = {{0, 0}, {NUM_LEDS / 3, NUM_LEDS / 3 - 1}, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS / 3}};
       break;
-    default:
+    default: // up, down, up, down full height
       points = {{0, 0}, {NUM_LEDS / 4, NUM_LEDS}, {NUM_LEDS / 2, 0}, {3 * NUM_LEDS / 4, NUM_LEDS}, {NUM_LEDS - 1, 0}};
   }
 
@@ -1459,7 +1680,12 @@ void rainbow2(int wait, int ex, long firsthue, int hueinc,  int ncolorloop, int 
       // color wheel (range of 65536) along the length of the strip
       // (strip.numPixels() steps):
       j = piecewise_linear(i, points);
-      int pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
+
+      if (ncolorfrac != 0) {
+        pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
+      } else {
+        pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
+      }
       // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
       // optionally add saturation and value (brightness) (each 0 to 255).
       // Here we're using just the single-argument hue variant. The result
@@ -1788,33 +2014,6 @@ void theaterChase(uint32_t color, int wait, time_t t) {
     }
   }
 }
-
-// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait, int ncolorloop, time_t t) {
-  // Hue of first pixel runs ncolorloop complete loops through the color wheel.
-  // Color wheel has a range of 65536 but it's OK if we roll over, so
-  // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
-  // means we'll make ncolorloop*65536/256   passes through this outer loop:
-  for (long firstPixelHue = 0; firstPixelHue < ncolorloop * 65536; firstPixelHue += 256) {
-    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-      // Offset pixel hue by an amount to make one full revolution of the
-      // color wheel (range of 65536) along the length of the strip
-      // (strip.numPixels() steps):
-      int pixelHue = firstPixelHue + (ClockCorrect(i) * 65536L / strip.numPixels());
-      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
-      // optionally add saturation and value (brightness) (each 0 to 255).
-      // Here we're using just the single-argument hue variant. The result
-      // is passed through strip.gamma32() to provide 'truer' colors
-      // before assigning to each pixel:
-      strip.setPixelColor(ClockCorrect(i), strip.gamma32(strip.ColorHSV(pixelHue)));
-    }
-    SetBrightness(t); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
-  }
-}
-
-
 
 // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
 void theaterChaseRainbow(int wait, time_t t) {

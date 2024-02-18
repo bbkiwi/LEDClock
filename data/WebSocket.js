@@ -86,17 +86,23 @@ function pickerTimeDate(date) {
 function setalarm() {
   var alarmnum = document.getElementById('alarmnum').value;
   var alarmtype = document.getElementById('alarmtype').value;
+  var parm1 = document.getElementById('al_parm1').value;
+  var parm2 = document.getElementById('al_parm2').value;
+  var parm3 = document.getElementById('al_parm3').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
   var alarmduration = document.getElementById('alarmduration').value;
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
-	connection.send("A" + alarmnum + " " + alarmtype + " " + alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+	connection.send("A" + alarmnum + " " + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
 }
 
 
-function rainbowEffect(){
+function patternEffect(){
   var num = document.getElementById('numpattern').value;
-  connection.send("R" + num);
+  var parm1 = document.getElementById('pat_parm1').value;
+  var parm2 = document.getElementById('pat_parm2').value;
+  var parm3 = document.getElementById('pat_parm3').value;
+  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
 
