@@ -23,7 +23,6 @@ function sendRGB() {
     var r = document.getElementById('r').value**2/1023; // non linear
     var g = document.getElementById('g').value**2/1023;
     var b = document.getElementById('b').value**2/1023;
-
     var rgb = r << 20 | g << 10 | b;
     var rgbstr = '#'+ rgb.toString(16);
     console.log('RGB: ' + rgbstr);
@@ -133,9 +132,15 @@ function hideDiv(elementId) {
 
 function toggleShowHide(elementId) {
 	var ledControl = document.getElementById(elementId);
+	var els = ["Clock-Control", "Display-Control", "Alarm-Control"];
+	  els.forEach(function(el){
+	    if (el != elementId) {
+	      hideDiv(el);
+	    }
+	  });
     if (ledControl.style.display === "block") {
-      hideDiv(elementId)
+      hideDiv(elementId);
     } else {
-      showDiv(elementId)
+      showDiv(elementId);
     }
 }

@@ -57,14 +57,16 @@
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
 <button onclick="toggleShowHide('Display-Control')">Display Control</button>
 <button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
-<div id="Clock-Control" style="display: none;">
+<div id="Clock-Control" style="display: block;">
     <center>
         <header>
             <h1>Clock Control</h1>
         </header>
-        <div>
-             <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
-             <p style="margin:8px 0px"><button id="pattern" class="button" style="background-color:#999" onclick="patternEffect();">Pattern</button>
+        <div class="btn-group">
+             <p style="margin:8px 0px">
+               <button id="whattimeb" class="button"  onclick="whattimeAnswer();">Time?</button><br>
+               <button id="whattime" class="button">What time?</button></p>
+             <p style="margin:8px 0px"><button id="pattern" class="button" onclick="patternEffect();">Pattern</button>
              <select id="numpattern">
                 <option value="0">None</option>
                 <option value="25">Rainbow</option>
@@ -73,6 +75,7 @@
                 <option value="19">Fire</option>
                 <option value="21">FireFly</option>
                 <option value="41">Wipe</option>
+                <option value="26">WipeT</option>
                 <option value="50">Random</option>
              </select><br>
              <input type="text" size = "4" disabled value='parm1'>
@@ -82,9 +85,8 @@
              <input type="text" size = "4" id="pat_parm2" value=0>
              <input type="text" size = "4" id="pat_parm3" value=0> </p>
 
-             <p style="margin:8px 0px"><button id="melody" class="button" style="background-color:#999" onclick="melodyEffect();">Melody</button></p>
-             <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
-             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
+             <p style="margin:8px 0px"><button id="melody" class="button" onclick="melodyEffect();">Melody</button></p>
+             <p style="margin:8px 0px"><button id="sunset" class="button" onclick="calcSunsets();">Calc Sunsets</button></p>
        </div>
     </center>
 </div>
@@ -117,7 +119,7 @@
              <button id="setquarter" class="button"  onclick="setquarter();">Quad</button>
              <button id="setdivision" class="button"  onclick="setdivision();">Div</button>
        </div>
-       <div>
+       <div class="btn-group">
             <table>
                 <tr>
                     <td style="width:14.4px; text-align: right"><button id="sethour" class="button"  onclick="sethour();">Hour</button> </td>
@@ -185,6 +187,7 @@
                     <td style="width:14.4px; text-align: right"> </td>
                 </tr>
             </table>
+       <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config</button></p>
        </div>
     </center>
 </div>
@@ -194,10 +197,10 @@
         <header>
             <h1>Alarm Control</h1>
         </header>
-        <div>
+        <div class="btn-group">
           <button class="simplepicker-btn">Choose Date and Time</button>
-          <p style="margin:8px 0px"><button id="saveddatetime" class="button" style="background-color:#999">Save Date Time</button></p>
-          <p style="margin:8px 0px"><button id="type" class="button" style="background-color:#999" onclick="savetype();">Type</button>
+          <p style="margin:8px 0px"><button id="saveddatetime" class="button">Saved Date Time</button></p>
+          <p style="margin:8px 0px"><button id="type" class="button" onclick="savetype();">Type</button>
           <input type="text" id="alarmtype" value=1><br>
              <input type="text" size = "4" disabled value='parm1'>
              <input type="text" size = "4" disabled value='parm2'>
@@ -206,12 +209,13 @@
              <input type="text" size = "4" id="al_parm2" value=0>
              <input type="text" size = "4" id="al_parm3" value=0> </p>
 
-             <p style="margin:8px 0px"><button id="repeat" class="button" style="background-color:#999" onclick="saverepeat();">Repeat</button>
+             <p style="margin:8px 0px"><button id="repeat" class="button" onclick="saverepeat();">Repeat</button>
              <input type="text" id="alarmrepeat" value=86400></p>
-             <p style="margin:8px 0px"><button id="duration" class="button" style="background-color:#999" onclick="saveduration();">Duration</button>
+             <p style="margin:8px 0px"><button id="duration" class="button" onclick="saveduration();">Duration</button>
              <input type="text" id="alarmduration" value=10000></p>
-             <p style="margin:8px 0px"><button id="setalarm" class="button" style="background-color:#999" onclick="setalarm();">Set Alarm</button>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Set Alarm</button>
              <input type="text" id="alarmnum" value=1></p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config</button></p>
         </div>
     </center>
 </div>
