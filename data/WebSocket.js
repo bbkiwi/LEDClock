@@ -96,12 +96,21 @@ function setalarm() {
 	connection.send("A" + alarmnum + " " + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
 }
 
+function getRandomIntInclusive(min, max) {
+  const minCeiled = Math.ceil(min);
+  const maxFloored = Math.floor(max);
+  return Math.floor(Math.random() * (maxFloored - minCeiled + 1) + minCeiled); // The maximum is inclusive and the minimum is inclusive
+}
+
 
 function patternEffect(){
   var num = document.getElementById('numpattern').value;
   var parm1 = document.getElementById('pat_parm1').value;
   var parm2 = document.getElementById('pat_parm2').value;
   var parm3 = document.getElementById('pat_parm3').value;
+  if (num == 50) {
+    num = getRandomIntInclusive(1, 41);
+  }
   connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }

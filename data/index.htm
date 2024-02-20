@@ -65,7 +65,16 @@
         <div>
              <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
              <p style="margin:8px 0px"><button id="pattern" class="button" style="background-color:#999" onclick="patternEffect();">Pattern</button>
-             <input type="text" id="numpattern" value=1><br>
+             <select id="numpattern">
+                <option value="0">None</option>
+                <option value="25">Rainbow</option>
+                <option value="5">Worms</option>
+                <option value="7">CAuto</option>
+                <option value="19">Fire</option>
+                <option value="21">FireFly</option>
+                <option value="41">Wipe</option>
+                <option value="50">Random</option>
+             </select><br>
              <input type="text" size = "4" disabled value='parm1'>
              <input type="text" size = "4" disabled value='parm2'>
              <input type="text" size = "4" disabled value='parm3'><br>
@@ -196,6 +205,7 @@
              <input type="text" size = "4" id="al_parm1" value=0>
              <input type="text" size = "4" id="al_parm2" value=0>
              <input type="text" size = "4" id="al_parm3" value=0> </p>
+
              <p style="margin:8px 0px"><button id="repeat" class="button" style="background-color:#999" onclick="saverepeat();">Repeat</button>
              <input type="text" id="alarmrepeat" value=86400></p>
              <p style="margin:8px 0px"><button id="duration" class="button" style="background-color:#999" onclick="saveduration();">Duration</button>

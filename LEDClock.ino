@@ -39,8 +39,8 @@
 #include <ArduinoJson.h>
 
 //#define BEDROOM_CLOCK
-//#define IRIS_CLOCK
-#define TEST_CLOCK
+#define IRIS_CLOCK
+// #define TEST_CLOCK
 //#define GBT_CLOCK
 
 /* Cass Bay */
