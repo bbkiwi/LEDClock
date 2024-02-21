@@ -1,5 +1,6 @@
 /*********
    Using for Bedroom, Iris, and GBT clocks Feb 2024
+   Only Bedroom has mic and speaker
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
 
@@ -79,7 +80,7 @@ const char *OTAandMdnsName = "TestLEDClock";           // A name and a password 
 const char *OTAPassword = "ledclock";
 
 // must be longer than longest message
-char buf[200];
+char buf[400];
 
 
 time_t currentTime;
@@ -130,6 +131,7 @@ int hour_width[NUM_DISP_OPTIONS] = {3, 5, 3, 3, 0};
 int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 
 //Set brightness by time for night and day mode
+//TODO set via gui or have auto set
 TIME WeekNight = {18, 00}; // Night time to go dim
 TIME WeekMorning = {7, 15}; //Morning time to go bright
 TIME WeekendNight = {18, 00}; // Night time to go dim
@@ -146,7 +148,12 @@ TIME AstroSunset;
 
 byte day_brightness = 127;
 byte night_brightness = 16;
-bool auto_night_disp = false;
+// Can force night mode during day
+//     and day mode during night
+// force_night gets set to false when becomes night
+// force_day get set to false wehn become day
+bool force_night = false;
+bool force_day = false;
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
@@ -160,6 +167,9 @@ int light_alarm_num = 0;
 int light_alarm_parm1 = 0;
 int light_alarm_parm2 = 0;
 int light_alarm_parm3 = 0;
+int light_alarm_parm4 = 0;
+int light_alarm_parm5 = 0;
+int light_alarm_parm6 = 0;
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
 //tmElements_t alarmTime;
@@ -177,6 +187,9 @@ struct ALARM {
   int parm1;
   int parm2;
   int parm3;
+  int parm4;
+  int parm5;
+  int parm6;
   uint16_t duration;
   uint32_t repeat;
   tmElements_t alarmTime;
@@ -260,8 +273,10 @@ void setup() {
   // Initialize alarmTime(s) to default (now)
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
     breakTime(now(), alarmInfo[alarm_ind].alarmTime);
-    sprintf(buf, "Default alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-            alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+    sprintf(buf, "Default alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+            alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+            alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+            alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
             hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
             second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
             monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -282,8 +297,10 @@ void setup() {
     // will have loaded the saved parameters
     Serial.println("Config loaded");
     for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-      sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+      sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+              alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+              alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
               hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
               second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
               monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -313,7 +330,7 @@ void loop() {
   MDNS.update();                              // must have above as well
 
   if (light_alarm_num)  {
-    show_alarm_pattern(light_alarm_num, 10000, light_alarm_parm1, light_alarm_parm2, light_alarm_parm3);
+    show_alarm_pattern(light_alarm_num, 10000, light_alarm_parm1, light_alarm_parm2, light_alarm_parm3, light_alarm_parm4, light_alarm_parm5, light_alarm_parm6);
     light_alarm_num = 0;
   }
 
@@ -322,6 +339,7 @@ void loop() {
     led_color_alarm_flag = false;
   }
 
+#ifdef BEDROOM_CLOCK
   if (sound_alarm_flag) {
     Serial.println("sound flag on\n");
     playsong(melody, noteDurations, whole_note_duration, PIEZO_PIN);
@@ -337,6 +355,7 @@ void loop() {
     //noTone(PIEZO_PIN);
     sound_alarm_flag = false;
   }
+#endif
 
   // Check for alarms
   // Note if multiple alarms scheduled for same time they will go consecutively
@@ -348,17 +367,22 @@ void loop() {
         // only show the alarm if close to set time
         // this prevents alarm from going off on a restart where configured alarm is in past
         currentTime = now();
-        if (IsDay(currentTime) || alarmInfo[alarm_ind].alarmType > 0) {
-          show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3);
+        //if (IsDay(currentTime) || alarmInfo[alarm_ind].alarmType > 0) {
+        if (force_day || ( not force_night and IsDay(currentTime)) || alarmInfo[alarm_ind].alarmType > 0) {
+          show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration,
+                             alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+                             alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6);
           // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
           Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
         } else {
-          sprintf(buf, "Display supressed at night");
+          sprintf(buf, "Display supressed at night or via pause");
           Serial.println();
           Serial.println(buf);
           webSocket.sendTXT(websocketId_num, buf);
         }
-        sprintf(buf, "Alarm type %d (%d, %d, %d) at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType, alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+        sprintf(buf, "Alarm type %d (%d, %d, %d, %d, %d, %d) at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType,
+                alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
                 hour(currentTime), minute(currentTime), second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),  monthNames[month(currentTime)].c_str(), year(currentTime));
         Serial.println();
         Serial.println(buf);
@@ -383,7 +407,7 @@ void loop() {
     }
   }
 
-
+#ifdef BEDROOM_CLOCK
   // read the analog in value coming from microphone
   int sensorValue = analogRead(analogInPin);
   if (sensorValue > 900 ) {
@@ -391,7 +415,7 @@ void loop() {
     light_alarm_num = random(1, 40);
     time_elapsed = 0;
   }
-
+#endif
 
   time_t t = now(); // Get the current time seconds
   if (now() != prevDisplay) { //update the display only if time has changed
@@ -400,6 +424,9 @@ void loop() {
       digitalClockDisplay();
     else
       Serial.print('-');
+    // Reset forcing
+    force_day = force_day and not IsDay(t);
+    force_night = force_night and IsDay(t);
     Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
     ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
   }
@@ -412,8 +439,8 @@ void loop() {
   delay(10); // needed to keep wifi going
 }
 
-void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3) {
-  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d", light_alarm_num, duration,  parm1, parm2, parm3);
+void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6) {
+  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d", light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6);
   Serial.println(buf);
 
   int isecond = second(now());
@@ -434,7 +461,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
       break;
     case 5: // 3 worms fast 1 wait
-      moveworms(1, now(), duration);
+      moveworms(parm1, now(), duration);
       break;
     case 6: // 3  worms slow 5 wait
       moveworms(5, now(), duration);
@@ -561,6 +588,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
   }
 }
 
+#ifdef BEDROOM_CLOCK
 void playsong(int * melody, int * noteDurations, int whole_note_duration, int pin) {
   int maxnumNotes = 2000;
   uint32_t time_start;
@@ -592,6 +620,7 @@ void playsong(int * melody, int * noteDurations, int whole_note_duration, int pi
   //  otherwise get funny signal going to LED ring aftwerwards
   noTone(pin);
 }
+#endif
 
 /*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
 // Taken from ConfigFile example
@@ -604,7 +633,7 @@ bool loadConfig() {
 
   size_t size = configFile.size();
   // Safety code incase somehow had too big file
-  if (size > 2048) {
+  if (size > 4096) {
     Serial.println("Config file size is too large");
     return false;
   }
@@ -613,7 +642,7 @@ bool loadConfig() {
   std::unique_ptr<char[]> buf(new char[size]);
 
   configFile.readBytes(buf.get(), size);
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(6144);
   DeserializationError error = deserializeJson(doc, buf.get());
 
   if (error) {
@@ -621,14 +650,25 @@ bool loadConfig() {
     Serial.println(error.f_str());
     return false;
   }
+
+  // Deserialize day_disp_ind
+  day_disp_ind = doc["day_disp_ind"];
+  // Deserialize night_brightness
+  night_brightness = doc["night_brightness"];
+  night_brightness = min(night_brightness, day_brightness);
+
+
   int alarm_ind = 0;
   for (JsonObject alarm : doc["alarms"].as<JsonArray>()) {
     //TODO if alarm_ind >=NUM_ALARMS abort
     alarmInfo[alarm_ind].alarmSet = alarm["alarmSet"]; // true, true, true, true, true
     alarmInfo[alarm_ind].alarmType = alarm["alarmType"]; // 0, 0, 0, 0, 0
-    alarmInfo[alarm_ind].parm1 = alarm["parm1"]; // 0, 0, 0, 0, 0
-    alarmInfo[alarm_ind].parm2 = alarm["parm2"]; // 0, 0, 0, 0, 0
-    alarmInfo[alarm_ind].parm3 = alarm["parm3"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm1 = alarm["p1"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm2 = alarm["p2"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm3 = alarm["p3"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm4 = alarm["p4"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm5 = alarm["p5"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm6 = alarm["p6"]; // 0, 0, 0, 0, 0
     alarmInfo[alarm_ind].duration = alarm["duration"]; // 10000, 10000, 10000, 10000, 10000
     alarmInfo[alarm_ind].repeat = alarm["repeat"]; // 86400, 86400, 86400, 86400, 86400
 
@@ -709,29 +749,31 @@ bool loadConfig() {
     second_width[i] = rgbObj["width"];
   }
 
-  // Deserialize auto_night_disp
-  auto_night_disp = doc["auto_night_disp"];
-  // Deserialize day_disp_ind
-  day_disp_ind = doc["day_disp_ind"];
-  // Deserialize night_brightness
-  night_brightness = doc["night_brightness"];
-  night_brightness = min(night_brightness, day_brightness);
 
   return true;
 }
 
 bool saveConfig() {
 
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(6144);
+
+  // Serialize day_disp_ind
+  doc["day_disp_ind"] = day_disp_ind;
+  // Serialize night_brightness
+  doc["night_brightness"] = night_brightness;
+
   // Serialize alarms
   JsonArray alarms = doc.createNestedArray("alarms");
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
     JsonObject alarms_nested = alarms.createNestedObject();
     alarms_nested["alarmSet"] = alarmInfo[alarm_ind].alarmSet;
     alarms_nested["alarmType"] = alarmInfo[alarm_ind].alarmType;
-    alarms_nested["parm1"] = alarmInfo[alarm_ind].parm1;
-    alarms_nested["parm2"] = alarmInfo[alarm_ind].parm2;
-    alarms_nested["parm3"] = alarmInfo[alarm_ind].parm3;
+    alarms_nested["p1"] = alarmInfo[alarm_ind].parm1;
+    alarms_nested["p2"] = alarmInfo[alarm_ind].parm2;
+    alarms_nested["p3"] = alarmInfo[alarm_ind].parm3;
+    alarms_nested["p4"] = alarmInfo[alarm_ind].parm4;
+    alarms_nested["p5"] = alarmInfo[alarm_ind].parm5;
+    alarms_nested["p6"] = alarmInfo[alarm_ind].parm6;
     alarms_nested["duration"] = alarmInfo[alarm_ind].duration;
     alarms_nested["repeat"] = alarmInfo[alarm_ind].repeat;
 
@@ -810,14 +852,6 @@ bool saveConfig() {
     rgbObj["b"] = Second[i].b;
     rgbObj["width"] = second_width[i];
   }
-
-  // Serialize day_disp_ind
-  doc["day_disp_ind"] = day_disp_ind;
-  // Serialize auto_night_disp
-  doc["auto_night_disp"] = auto_night_disp;
-  // Serialize night_brightness
-  doc["night_brightness"] = night_brightness;
-
 
   File configFile = SPIFFS.open("/config.json", "w");
   if (!configFile) {
@@ -1180,9 +1214,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Second[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
-      } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, parm2 and parm3
+      } else if (payload[0] == 'F') {                      // browser sent F to force_day
+        force_day = true;
+        force_night = false;
+      } else if (payload[0] == 'G') {                      // browser sent G to  force_night
+        force_night = true;
+        force_day = false;
+      } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm6
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "P%d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3);
+        sscanf((char *) payload, "P%d %d %d %d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5, &light_alarm_parm6);
         //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -1205,25 +1245,31 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int parm1;
         int parm2;
         int parm3;
+        int parm4;
+        int parm5;
+        int parm6;
         int alarmrepeat;
         int alarmduration;
 
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
-        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3,
+               &parm4, &parm5, &parm6, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
         //PREVENT bad input
         if (alarm_ind >= 5) alarm_ind = 0;
         if (alarm_ind < 0) alarm_ind = 0;
 
 
-        Serial.printf("Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
+        Serial.printf("%d Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", parm1, alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
 
-        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
+        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, parm4, parm5, parm6, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
         alarmInfo[alarm_ind].alarmSet = true;
-        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-                alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+                alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+                alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
                 hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -1237,11 +1283,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
+void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   alarmInfo[alarm_ind].alarmType = alarmtype;
   alarmInfo[alarm_ind].parm1 = p1;
   alarmInfo[alarm_ind].parm2 = p2;
   alarmInfo[alarm_ind].parm3 = p3;
+  alarmInfo[alarm_ind].parm4 = p4;
+  alarmInfo[alarm_ind].parm5 = p5;
+  alarmInfo[alarm_ind].parm6 = p6;
   alarmInfo[alarm_ind].duration = t;
   alarmInfo[alarm_ind].repeat = r;
   alarmInfo[alarm_ind].alarmTime.Second = s;
@@ -1251,9 +1300,10 @@ void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3,  uint16_t t,
   alarmInfo[alarm_ind].alarmTime.Month = mth;
   //NOTE year is excess from 1970
   alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
-
-  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-          alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3, alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+          alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+          alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+          alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
           second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
           monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -1275,6 +1325,9 @@ void setalarmurl()
   String p1 = server.arg("parm1");
   String p2 = server.arg("parm2");
   String p3 = server.arg("parm3");
+  String p4 = server.arg("parm4");
+  String p5 = server.arg("parm5");
+  String p6 = server.arg("parm6");
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
   String h = server.arg("hour");
@@ -1291,6 +1344,9 @@ void setalarmurl()
            (strlen(p1.c_str()) > 0) ? p1.toInt() : alarmInfo[alarm_num].parm1,
            (strlen(p2.c_str()) > 0) ? p2.toInt() : alarmInfo[alarm_num].parm2,
            (strlen(p3.c_str()) > 0) ? p3.toInt() : alarmInfo[alarm_num].parm3,
+           (strlen(p4.c_str()) > 0) ? p4.toInt() : alarmInfo[alarm_num].parm4,
+           (strlen(p5.c_str()) > 0) ? p5.toInt() : alarmInfo[alarm_num].parm5,
+           (strlen(p6.c_str()) > 0) ? p6.toInt() : alarmInfo[alarm_num].parm6,
            (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
            (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
            (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
@@ -1330,7 +1386,7 @@ void setBright()
   server.send(200, "text/plain", rsp);
 }
 
-void calcSun()
+void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
 {
   double sunrise;
   double sunset;
@@ -1497,7 +1553,8 @@ void Draw_Clock(time_t t, byte Phase)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
 
   int disp_ind;
-  disp_ind = IsDay(t) ?  day_disp_ind : 4;
+  //disp_ind = IsDay(t) ?  day_disp_ind : 4;
+  disp_ind = force_day or ( not force_night and IsDay(t)) ?  day_disp_ind : 4;
 
   if (Phase >= 1) // Draw all pixels background color
     for (int i = 0; i < NUM_LEDS; i++)
@@ -1571,7 +1628,9 @@ bool IsDay(time_t t)
 //************* Function to set the clock brightness ******************************
 void SetBrightness(time_t t)
 {
-  if (IsDay(t) & ClockInitialized)
+
+  //if (IsDay(t) & ClockInitialized)
+  if ((force_day or ( not force_night and IsDay(t))) and ClockInitialized)
     strip.setBrightness(day_brightness);
   else
     strip.setBrightness(night_brightness);

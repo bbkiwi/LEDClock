@@ -88,11 +88,14 @@ function setalarm() {
   var parm1 = document.getElementById('al_parm1').value;
   var parm2 = document.getElementById('al_parm2').value;
   var parm3 = document.getElementById('al_parm3').value;
+  var parm4 = document.getElementById('al_parm4').value;
+  var parm5 = document.getElementById('al_parm5').value;
+  var parm6 = document.getElementById('al_parm6').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
   var alarmduration = document.getElementById('alarmduration').value;
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
-	connection.send("A" + alarmnum + " " + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+	connection.send("A" + alarmnum + " " + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
 }
 
 function getRandomIntInclusive(min, max) {
@@ -107,12 +110,26 @@ function patternEffect(){
   var parm1 = document.getElementById('pat_parm1').value;
   var parm2 = document.getElementById('pat_parm2').value;
   var parm3 = document.getElementById('pat_parm3').value;
+  var parm4 = document.getElementById('pat_parm4').value;
+  var parm5 = document.getElementById('pat_parm5').value;
+  var parm6 = document.getElementById('pat_parm6').value;
   if (num == 50) {
     num = getRandomIntInclusive(1, 41);
   }
-  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3);
+  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
+
+function togForceDay(){
+    connection.send("F");
+    //document.getElementById('forceday').style.backgroundColor = '#00878F';
+}
+
+function togForceNight(){
+    connection.send("G");
+    //document.getElementById('forcenight').style.backgroundColor = '#00878F';
+}
+
 
 function melodyEffect(){
     connection.send("L");
