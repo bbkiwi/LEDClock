@@ -65,7 +65,7 @@
         <div class="btn-group">
              <p style="margin:8px 0px">
                <button id="whattimeb" class="button"  onclick="whattimeAnswer();">Time?</button><br>
-               <button id="whattime" class="button">What time?</button></p>
+               <button id="whattime" class="button">Time Will Appear Here</button></p>
              <p style="margin:8px 0px"><button id="pattern" class="button" onclick="patternEffect();">Pattern</button>
              <select id="numpattern">
                 <option value="0">None</option>
@@ -90,10 +90,11 @@
              <input type="text" size = "4" id="pat_parm4" value=0>
              <input type="text" size = "4" id="pat_parm5" value=0>
              <input type="text" size = "4" id="pat_parm6" value=0> </p>
-
              <p style="margin:8px 0px"><button id="forceday" class="button" onclick="togForceDay();">Force Day</button>
              <button id="forcenight" class="button" onclick="togForceNight();">Force Night</button></p>
-             <p style="margin:8px 0px"><button id="melody" class="button" onclick="melodyEffect();">Melody</button></p>
+             <div id="Melody-Button" style= "display:none;">
+             <p style="margin:8px 0px"><button id="melody" class="button"  onclick="melodyEffect();">Melody</button></p>
+             </div>
              <p style="margin:8px 0px"><button id="sunset" class="button" onclick="calcSunsets();">Calc Sunsets</button></p>
        </div>
     </center>
@@ -208,27 +209,20 @@
         <div class="btn-group">
           <button class="simplepicker-btn">Choose Date and Time</button>
           <p style="margin:8px 0px"><button id="saveddatetime" class="button">Saved Date Time</button></p>
-          <p style="margin:8px 0px"><button id="type" class="button" onclick="savetype();">Type</button>
-          <input type="text" id="alarmtype" value=1><br>
-             <input type="text" size = "4" disabled value='parm1'>
-             <input type="text" size = "4" disabled value='parm2'>
-             <input type="text" size = "4" disabled value='parm3'>
-             <input type="text" size = "4" disabled value='parm4'>
-             <input type="text" size = "4" disabled value='parm5'>
-             <input type="text" size = "4" disabled value='parm6'><br>
-             <input type="text" size = "4" id="al_parm1" value=0>
-             <input type="text" size = "4" id="al_parm2" value=0>
-             <input type="text" size = "4" id="al_parm3" value=0>
-             <input type="text" size = "4" id="al_parm4" value=0>
-             <input type="text" size = "4" id="al_parm5" value=0>
-             <input type="text" size = "4" id="al_parm6" value=0> </p>
-
-             <p style="margin:8px 0px"><button id="repeat" class="button" onclick="saverepeat();">Repeat</button>
+             <p style="margin:8px 0px"><button id="repeat" class="button">Repeat</button>
              <input type="text" id="alarmrepeat" value=86400></p>
-             <p style="margin:8px 0px"><button id="duration" class="button" onclick="saveduration();">Duration</button>
+             <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
              <input type="text" id="alarmduration" value=10000></p>
              <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Set Alarm</button>
-             <input type="text" id="alarmnum" value=1></p>
+             <select id="alarmnum">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        </select>
+             <button id="dayonly" class="button" onclick="togdayonly();">Day Only</button>
+             </p>
              <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config</button></p>
         </div>
     </center>

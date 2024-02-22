@@ -1,8 +1,8 @@
 var rainbowEnable = false;
 var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
 //var connection = new WebSocket('wss://echo.websocket.org/');
-var savedate;
 
+var savedate;
 connection.onopen = function () {
     connection.send('Connect ' + new Date());
 };
@@ -12,7 +12,11 @@ connection.onerror = function (error) {
 connection.onmessage = function (e) {
 	const $eventLog = document.querySelector('.event-log');
     console.log('Server: ', e.data);
-    document.getElementById('whattime').innerHTML = e.data;
+    if (e.data === 'MUSIC') {
+      document.getElementById("Melody-Button").style.display = "block";
+    } else {
+      document.getElementById('whattime').innerHTML = e.data;
+    }
 	$eventLog.innerHTML =  e.data + '\n' + $eventLog.innerHTML;
 };
 connection.onclose = function(){
@@ -84,20 +88,31 @@ function pickerTimeDate(date) {
 
 function setalarm() {
   var alarmnum = document.getElementById('alarmnum').value;
-  var alarmtype = document.getElementById('alarmtype').value;
-  var parm1 = document.getElementById('al_parm1').value;
-  var parm2 = document.getElementById('al_parm2').value;
-  var parm3 = document.getElementById('al_parm3').value;
-  var parm4 = document.getElementById('al_parm4').value;
-  var parm5 = document.getElementById('al_parm5').value;
-  var parm6 = document.getElementById('al_parm6').value;
+  var alarmtype = document.getElementById('numpattern').value;
+  var parm1 = document.getElementById('pat_parm1').value;
+  var parm2 = document.getElementById('pat_parm2').value;
+  var parm3 = document.getElementById('pat_parm3').value;
+  var parm4 = document.getElementById('pat_parm4').value;
+  var parm5 = document.getElementById('pat_parm5').value;
+  var parm6 = document.getElementById('pat_parm6').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
   var alarmduration = document.getElementById('alarmduration').value;
+  var dayonlysign = "";
+  if (document.getElementById('dayonly').innerHTML === "Day Only") {
+      dayonlysign = "-";
+  }
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
-	connection.send("A" + alarmnum + " " + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+	connection.send("A" + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
 }
 
+function togdayonly() {
+    if (document.getElementById('dayonly').innerHTML === "Day Only") {
+      document.getElementById('dayonly').innerHTML = "Day and Night";
+    } else {
+      document.getElementById('dayonly').innerHTML = "Day Only";
+    }
+}
 function getRandomIntInclusive(min, max) {
   const minCeiled = Math.ceil(min);
   const maxFloored = Math.floor(max);

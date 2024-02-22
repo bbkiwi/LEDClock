@@ -18,16 +18,7 @@
 #include "pitches.h"
 #include "sunset.h"
 
-/************ NOTE __has_include not work for esp8266
-  #if __has_include ("localwificonfig.h")
-  #  include "localwificonfig.h"
-  #endif
-  #ifndef homeSSID
-  #  define homeSSID "homeSSID"
-  #  define homePW "homePW"
-  #endif
-*************/
-// So MUST have this file which defines homeSSID and homePW
+//  MUST have this file which defines homeSSID and homePW
 #include "localwificonfig.h"
 
 #include <ESP8266WiFi.h>
@@ -43,6 +34,12 @@
 //#define IRIS_CLOCK
 #define TEST_CLOCK
 //#define GBT_CLOCK
+
+//#if defined BEDROOM_CLOCK || defined TEST_CLOCK
+#if defined BEDROOM_CLOCK
+#define MUSIC
+#define HASMIC
+#endif
 
 /* Cass Bay */
 #define LATITUDE        -43.601131
@@ -211,7 +208,7 @@ int TopOfClock = 15; // to make given pixel the top
 #endif
 
 
-
+#ifdef MUSIC
 // notes in the melody for the sound alarm:
 int melody[] = { // Shave and a hair cut (3x) two bits terminate with -1 = STOP
   NOTE_C5, NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, REST,
@@ -223,7 +220,7 @@ int whole_note_duration = 1000; // milliseconds
 int noteDurations[] = {
   4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 8, 8, 4, 4, 4, 4, 4
 };
-
+#endif
 
 WiFiUDP ntpUDP;
 //NTPClient timeClient(ntpUDP);
@@ -339,7 +336,7 @@ void loop() {
     led_color_alarm_flag = false;
   }
 
-#ifdef BEDROOM_CLOCK
+#ifdef MUSIC
   if (sound_alarm_flag) {
     Serial.println("sound flag on\n");
     playsong(melody, noteDurations, whole_note_duration, PIEZO_PIN);
@@ -407,7 +404,7 @@ void loop() {
     }
   }
 
-#ifdef BEDROOM_CLOCK
+#ifdef HASMIC
   // read the analog in value coming from microphone
   int sensorValue = analogRead(analogInPin);
   if (sensorValue > 900 ) {
@@ -588,7 +585,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
   }
 }
 
-#ifdef BEDROOM_CLOCK
+#ifdef MUSIC
 void playsong(int * melody, int * noteDurations, int whole_note_duration, int pin) {
   int maxnumNotes = 2000;
   uint32_t time_start;
@@ -870,7 +867,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
   Serial.println("\" started\r\n");
 
   wifiMulti.addAP(homeSSID, homePW);  // add Wi-Fi networks you want to connect to
-  //wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+  wifiMulti.addAP(homeSSID2, homePW2);
   //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting");
@@ -1167,6 +1164,12 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         IPAddress ip = webSocket.remoteIP(num);
         Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
       }
+#ifdef MUSIC
+      sprintf(buf, "MUSIC");
+      Serial.println();
+      Serial.println(buf);
+      webSocket.sendTXT(websocketId_num, buf);
+#endif
       break;
     case WStype_TEXT:                     // if new text data is received
       Serial.printf("[%u] payload: %s length: %d\n", num, payload, length);
