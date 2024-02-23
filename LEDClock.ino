@@ -1173,6 +1173,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       break;
     case WStype_TEXT:                     // if new text data is received
       Serial.printf("[%u] payload: %s length: %d\n", num, payload, length);
+      // first char of payload specifies action
+      // #, V, B, t, q, d, H, M, s, D, F, G, P, L, W, A, a, S
       if (payload[0] == '#') {            // we get RGB data
         uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
@@ -1231,11 +1233,24 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sound_alarm_flag = true;
         //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
-        sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
+        sprintf(buf, "WHATTIME%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
+
+
+      } else if (payload[0] == 'R') {                      // the browser sends an R to reset alarm
+        int alarm_ind;
+        sscanf((char *) payload, "R%d", &alarm_ind);
+        //PREVENT bad input
+        if (alarm_ind >= 5) alarm_ind = 0;
+        if (alarm_ind < 0) alarm_ind = 0;
+        alarmInfo[alarm_ind].alarmSet = false;
+        Serial.printf("%Reset alarm[%d]\n", alarm_ind);
+        sprintf(buf, "Reset alarm[%d]", alarm_ind);
+        webSocket.sendTXT(num, buf);
+
+
       } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
-        // TODO Now only sets one alarm, but will allow many
         char Aday[4]; //3 char
         char Amonth[4]; //3 char
         int  AmonthNum;
@@ -1263,7 +1278,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         if (alarm_ind < 0) alarm_ind = 0;
 
 
-        Serial.printf("%d Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", parm1, alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
+        Serial.printf("Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
 
@@ -1276,6 +1291,22 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
                 hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+        webSocket.sendTXT(num, buf);
+
+      } else if (payload[0] == 'a') {
+        // populate by sending  Alarm info back
+        int alarm_ind = payload[1] - '0';
+        // send back info same order as payload when alarm defined
+        sprintf(buf, "ALARMINFO,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+                alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+                alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].duration,
+                daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
+                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
+                day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                year(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+                second(makeTime(alarmInfo[alarm_ind].alarmTime)));
         webSocket.sendTXT(num, buf);
 
       } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets

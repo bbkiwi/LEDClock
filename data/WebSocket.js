@@ -14,8 +14,32 @@ connection.onmessage = function (e) {
     console.log('Server: ', e.data);
     if (e.data === 'MUSIC') {
       document.getElementById("Melody-Button").style.display = "block";
-    } else {
-      document.getElementById('whattime').innerHTML = e.data;
+    } else if (e.data.startsWith('ALARMINFO')) {
+      var alarminfo = e.data.split(',');
+      console.log(alarminfo);
+      document.getElementById('numpattern').value = Math.abs(Number(alarminfo[3]));
+      document.getElementById('pat_parm1').value = Number(alarminfo[4]);
+      document.getElementById('pat_parm2').value = Number(alarminfo[5]);
+      document.getElementById('pat_parm3').value = Number(alarminfo[6]);
+      document.getElementById('pat_parm4').value = Number(alarminfo[7]);
+      document.getElementById('pat_parm5').value = Number(alarminfo[8]);
+      document.getElementById('pat_parm6').value = Number(alarminfo[9]);
+      document.getElementById('alarmrepeat').value = Number(alarminfo[10]);
+      document.getElementById('alarmduration').value = Number(alarminfo[11]);
+      savedate = new Date(Date.parse(alarminfo[12]));
+      document.getElementById('saveddatetime').innerHTML = savedate;
+      if (alarminfo[2] === '1') {
+        if (Number(alarminfo[3]) < 0) {
+          document.getElementById('dayonly').innerHTML ="Day Only";
+        } else {
+          document.getElementById('dayonly').innerHTML = "Day and Night";
+        }
+      } else {
+        document.getElementById('dayonly').innerHTML = "Off or Unset";
+        document.getElementById('saveddatetime').innerHTML = 'NOT SET MUST CHOOSE WHEN';
+      }
+    } else if (e.data.startsWith('WHATTIME')) {
+      document.getElementById('whattime').innerHTML = e.data.substring(8);
     }
 	$eventLog.innerHTML =  e.data + '\n' + $eventLog.innerHTML;
 };
@@ -86,8 +110,17 @@ function pickerTimeDate(date) {
 	//connection.send("A" + alarmnum + " " + date.getMonth() +" " + date);
 }
 
+function RequestPopulate(alarmnum) {
+  console.log('Request Populate Alarm ' + alarmnum);
+  connection.send("a" + alarmnum);
+}
+
 function setalarm() {
   var alarmnum = document.getElementById('alarmnum').value;
+  if (document.getElementById('dayonly').innerHTML === "Off or Unset") {
+      connection.send("R" + alarmnum);
+    return;
+  }
   var alarmtype = document.getElementById('numpattern').value;
   var parm1 = document.getElementById('pat_parm1').value;
   var parm2 = document.getElementById('pat_parm2').value;
@@ -106,10 +139,12 @@ function setalarm() {
 	connection.send("A" + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
 }
 
-function togdayonly() {
+function handleWhen() {
     if (document.getElementById('dayonly').innerHTML === "Day Only") {
       document.getElementById('dayonly').innerHTML = "Day and Night";
-    } else {
+    } else if (document.getElementById('dayonly').innerHTML === "Day and Night") {
+      document.getElementById('dayonly').innerHTML = "Off or Unset";
+    }  else if (document.getElementById('dayonly').innerHTML === "Off or Unset") {
       document.getElementById('dayonly').innerHTML = "Day Only";
     }
 }

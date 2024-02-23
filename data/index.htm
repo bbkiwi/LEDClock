@@ -213,15 +213,15 @@
              <input type="text" id="alarmrepeat" value=86400></p>
              <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
              <input type="text" id="alarmduration" value=10000></p>
-             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Set Alarm</button>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Settings</button>
              <select id="alarmnum">
-                        <option value="0">0</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
+                        <option value="0" onclick="RequestPopulate(0);">0</option>
+                        <option value="1" onclick="RequestPopulate(1);">1</option>
+                        <option value="2" onclick="RequestPopulate(2);">2</option>
+                        <option value="3" onclick="RequestPopulate(3);">3</option>
+                        <option value="4" onclick="RequestPopulate(4);">4</option>
                         </select>
-             <button id="dayonly" class="button" onclick="togdayonly();">Day Only</button>
+             <button id="dayonly" class="button" onclick="handleWhen();">Day Only</button>
              </p>
              <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config</button></p>
         </div>
