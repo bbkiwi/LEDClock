@@ -245,6 +245,7 @@ void SetBrightness(time_t t);
 bool SetClockFromNTP();
 bool IsDst();
 bool IsDay();
+void limited_delay(int d);
 
 
 //************* Declare NeoPixel ******************************
@@ -436,6 +437,10 @@ void loop() {
   delay(10); // needed to keep wifi going
 }
 
+void limited_delay(int d) {
+  delay(min(abs(d), 10000));
+}
+
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6) {
   sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d", light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6);
   Serial.println(buf);
@@ -458,10 +463,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
       break;
     case 5: // 3 worms fast 1 wait
-      moveworms(parm1, now(), duration);
+      moveworms(parm1, parm2, now(), duration);
       break;
     case 6: // 3  worms slow 5 wait
-      moveworms(5, now(), duration);
+      moveworms(5, 3, now(), duration);
       break;
 
     //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
@@ -528,7 +533,8 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       //rainbow(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
     case 26:
-      color_wipe(20, parm1, 0, parm2 == 0 ? 0 : 65336 / parm2 , parm3 == 0 ? 0 : 100 / parm3 , 0, ihour, now(), duration); // color_wipe
+      color_wipe(parm1, parm2, parm3, parm4 == 0 ? 0 : 65336 / parm4 , parm5 == 0 ? 0 : 100 / parm5 , parm6, ihour, now(), duration); // color_wipe
+      // old color_wipe(20, parm1, 0, parm2 == 0 ? 0 : 65336 / parm2 , parm3 == 0 ? 0 : 100 / parm3 , 0, ihour, now(), duration); // color_wipe
       //rainbow(0, 1, 0, 32, 1, 1, ihour, now(), duration);  // full rainbox ring rotating 8 times slower
       break;
     case 27:
@@ -1731,7 +1737,7 @@ void colorAll(uint32_t color, int duration, time_t t) {
   strip.fill(color);
   SetBrightness(t); // Set the clock brightness dependant on the time
   strip.show();                          //  Update strip to match
-  delay(duration);                           //  Pause for a moment
+  limited_delay(duration);                           //  Pause for a moment
 }
 
 vector<pair<int8_t, int8_t>> points_for_embedding(int embedding) {
@@ -1817,15 +1823,15 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
 
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
+    limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
 }
 
 
-void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
-  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, ncolorfrac = %d, nodepix = %d, duration = %d",
-          wait, embedding, firsthue, hueinc, ncolorloop, ncolorfrac, nodepix, duration);
+void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration) {
+  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, blocksize = %d, nodepix = %d, duration = %d",
+          wait, embedding, firsthue, hueinc, ncolorloop, blocksize, nodepix, duration);
   Serial.println(buf);
 
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
@@ -1839,30 +1845,39 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
   int i = 0; // starting index
   vector<pair<int8_t, int8_t>> points;
   int j;
+  int maxcnt;
   points = points_for_embedding(embedding);
+  strip.fill(); // clear
   while (time_elapsed < duration) {
-    // routine setting all leds (pixels) for one frame of the animation
-    // must have yield() in loop
-    if (ncolorloop >= 0) {
-      i++;
-      if (i  >= strip.numPixels()) {
-        i = 0;
-        firstPixelHue += hueinc;
-      }
+    if (blocksize > 0) {
+      maxcnt = blocksize;
     } else {
-      i --;
-      if (i  < 0) {
-        i =   - 1 + strip.numPixels();
-        firstPixelHue += hueinc;
-      }
+      maxcnt = random(1, 1 - blocksize);
     }
-    j = piecewise_linear(i, points);
-    pixelHue = firstPixelHue + (j * 65536L  * ncolorloop / 100  / strip.numPixels() );
-    strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
-    yield();
+    for (int cnt = 0; cnt < maxcnt; cnt++) {
+      // routine setting all leds (pixels) for one frame of the animation
+      // must have yield() in loop
+      if (ncolorloop >= 0) {
+        i++;
+        if (i  >= strip.numPixels()) {
+          i = 0;
+          firstPixelHue += hueinc;
+        }
+      } else {
+        i --;
+        if (i  < 0) {
+          i =   - 1 + strip.numPixels();
+          firstPixelHue += hueinc;
+        }
+      }
+      j = piecewise_linear(i, points);
+      pixelHue = firstPixelHue + (j * 65536L  * ncolorloop / 100  / strip.numPixels() );
+      strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
+      yield();
+    }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
+    limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
 }
@@ -1942,28 +1957,37 @@ class Worm
     };
 };
 
-void moveworms(int wait, time_t t, uint16_t duration) {
+void moveworms(int wait, int nworms, time_t t, uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
-  vector < int >colors = {100, 101, 102, 103, 104, 105};
-  vector < int >colors2 = {15000, 15000, 15000};
-  vector < int >colors3 = {25000, 25000, 25000};
-  vector < int >path2 = {5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29};
   vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
-  int cyclelen = 1;
   int direction = 1;
-  vector < int >height = {100, 100, 100, 100, 100, 100};
-  Worm w1(colors, path, cyclelen, direction, height);
-  Worm w2(colors2, path, 5, -1, colors2);
-  Worm w3(colors3, path, 4, 1, colors3);
+  nworms = min(abs(nworms), 10);
+  vector<Worm>Worms;
+  for (int i = 0; i < nworms; i++) {
+    int lenworm = random(2, 15);
+    int cyclelen = random(1, 8);
+    int dir = random(2);
+    dir = 2 * dir - 1;
+    vector <int> colors = {};
+    int col = random(65535);
+    for (int len = 0; len < lenworm; len++) {
+      colors.push_back(col);
+    }
+    Worm w(colors, path, cyclelen, dir, colors);
+    Worms.push_back(w);
+  }
+
+  strip.fill(); // clear
   while (time_elapsed < duration) {
-    w1.move();
-    w2.move();
-    w3.move();
+    for (int i = 0; i < nworms; i++) {
+      Worms[i].move();
+      yield();
+    }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-    yield();
-    delay(wait);  // Pause for a moment
+    //yield();
+    limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
 }
@@ -1997,7 +2021,7 @@ void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uin
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     yield();
-    delay(wait);  // Pause for a moment
+    limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
 }
@@ -2112,7 +2136,7 @@ void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t 
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     yield();
-    delay(wait); // wait
+    limited_delay(wait); // wait
     time_elapsed = millis() - time_start;
   }
 }
@@ -2146,7 +2170,7 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, lon
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     yield();
-    delay(wait); // wait
+    limited_delay(wait); // wait
     time_elapsed = millis() - time_start;
   }
 }
@@ -2166,7 +2190,7 @@ void colorWipe(uint32_t color, int wait, time_t t) {
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show();                          //  Update strip to match
     yield();
-    delay(wait);                           //  Pause for a moment
+    limited_delay(wait);                           //  Pause for a moment
   }
 }
 
@@ -2184,7 +2208,7 @@ void theaterChase(uint32_t color, int wait, time_t t) {
       SetBrightness(t); // Set the clock brightness dependant on the time
       strip.show(); // Update strip with new contents
       yield();
-      delay(wait);  // Pause for a moment
+      limited_delay(wait);  // Pause for a moment
     }
   }
 }
@@ -2207,7 +2231,7 @@ void theaterChaseRainbow(int wait, time_t t) {
       SetBrightness(t); // Set the clock brightness dependant on the time
       strip.show();                // Update strip with new contents
       yield();
-      delay(wait);                 // Pause for a moment
+      limited_delay(wait);                 // Pause for a moment
       firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
     }
   }
