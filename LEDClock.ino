@@ -1170,6 +1170,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         IPAddress ip = webSocket.remoteIP(num);
         Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
       }
+      send_alarmInfo(0);
 #ifdef MUSIC
       sprintf(buf, "MUSIC");
       Serial.println();
@@ -1302,18 +1303,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'a') {
         // populate by sending  Alarm info back
         int alarm_ind = payload[1] - '0';
-        // send back info same order as payload when alarm defined
-        sprintf(buf, "ALARMINFO,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-                alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
-                alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].duration,
-                daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
-                monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
-                day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                year(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-                second(makeTime(alarmInfo[alarm_ind].alarmTime)));
-        webSocket.sendTXT(num, buf);
+        send_alarmInfo(alarm_ind);
 
       } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
         Serial.printf("Compute Sunsets\n");
@@ -1321,6 +1311,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       }
       break;
   }
+}
+
+void send_alarmInfo(int alarm_ind) {
+  // send back info same order as payload when alarm defined
+  sprintf(buf, "ALARMINFO,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+          alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+          alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+          alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].duration,
+          daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
+          monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
+          day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+          year(makeTime(alarmInfo[alarm_ind].alarmTime)),
+          hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+          second(makeTime(alarmInfo[alarm_ind].alarmTime)));
+  webSocket.sendTXT(websocketId_num, buf);
 }
 
 void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {

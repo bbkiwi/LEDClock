@@ -36,7 +36,7 @@ connection.onmessage = function (e) {
         }
       } else {
         document.getElementById('dayonly').innerHTML = "Off or Unset";
-        document.getElementById('saveddatetime').innerHTML = 'NOT SET MUST CHOOSE WHEN';
+        //document.getElementById('saveddatetime').innerHTML = 'NOT SET MUST CHOOSE WHEN';
       }
     } else if (e.data.startsWith('WHATTIME')) {
       document.getElementById('whattime').innerHTML = e.data.substring(8);
@@ -110,7 +110,8 @@ function pickerTimeDate(date) {
 	//connection.send("A" + alarmnum + " " + date.getMonth() +" " + date);
 }
 
-function RequestPopulate(alarmnum) {
+function RequestPopulate() {
+  var alarmnum = document.getElementById('alarmnum').value;
   console.log('Request Populate Alarm ' + alarmnum);
   connection.send("a" + alarmnum);
 }
