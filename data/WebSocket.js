@@ -24,7 +24,15 @@ connection.onmessage = function (e) {
       document.getElementById('pat_parm4').value = Number(alarminfo[7]);
       document.getElementById('pat_parm5').value = Number(alarminfo[8]);
       document.getElementById('pat_parm6').value = Number(alarminfo[9]);
-      document.getElementById('alarmrepeat').value = Number(alarminfo[10]);
+      document.getElementById('alarmrepeat').value = alarminfo[10];
+      if (document.getElementById('alarmrepeat').value === '') {
+        document.getElementById('alarmrepeat').value = 'other';
+        document.getElementById('othervalue').hidden =  false;
+        document.getElementById('othervalue').value = alarminfo[10];
+      } else {
+        document.getElementById('othervalue').hidden =  true;
+      }
+
       document.getElementById('alarmduration').value = Number(alarminfo[11]);
       savedate = new Date(Date.parse(alarminfo[12]));
       document.getElementById('saveddatetime').innerHTML = savedate;
@@ -116,6 +124,14 @@ function RequestPopulate() {
   connection.send("a" + alarmnum);
 }
 
+function AlarmrepeatChanged() {
+  if (document.getElementById('alarmrepeat').value === "other") {
+    document.getElementById('othervalue').hidden =  false;
+  } else {
+    document.getElementById('othervalue').hidden =  true;
+  }
+}
+
 function setalarm() {
   var alarmnum = document.getElementById('alarmnum').value;
   if (document.getElementById('dayonly').innerHTML === "Off or Unset") {
@@ -130,6 +146,9 @@ function setalarm() {
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
+  if (alarmrepeat === 'other') {
+    alarmrepeat = document.getElementById('othervalue').value;
+  }
   var alarmduration = document.getElementById('alarmduration').value;
   var dayonlysign = "";
   if (document.getElementById('dayonly').innerHTML === "Day Only") {

@@ -143,7 +143,7 @@ TIME AstroSunrise;
 TIME AstroSunset;
 
 
-byte day_brightness = 127;
+byte day_brightness = 127; // keep below 127 to limit power use
 byte night_brightness = 16;
 // Can force night mode during day
 //     and day mode during night
@@ -187,8 +187,8 @@ struct ALARM {
   int parm4;
   int parm5;
   int parm6;
-  uint16_t duration;
-  uint32_t repeat;
+  uint16_t duration; //ms
+  uint32_t repeat; //sec
   tmElements_t alarmTime;
 };
 

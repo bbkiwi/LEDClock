@@ -210,8 +210,16 @@
           <button class="simplepicker-btn">Choose Date and Time</button>
           <p style="margin:8px 0px"><button id="saveddatetime" class="button">Saved Date Time</button></p>
              <p style="margin:8px 0px"><button id="repeat" class="button">Repeat</button>
-             <input type="text" id="alarmrepeat" value=86400></p>
-             <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
+
+             <select id="alarmrepeat" onchange="AlarmrepeatChanged();">
+                        <option value="86400">Daily</option>
+                        <option value="3600">Hourly</option>
+                        <option value="1800">Half Hourly</option>
+                        <option value="604800">Weekly</option>
+                        <option value="other">Other</option>
+                        </select>
+                        <input hidden type="text" id="othervalue" size='8' value=0>
+              <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
              <input type="text" id="alarmduration" value=10000></p>
              <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Settings</button>
              <select id="alarmnum" onchange="RequestPopulate();">
