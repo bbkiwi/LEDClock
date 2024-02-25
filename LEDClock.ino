@@ -252,6 +252,7 @@ void limited_delay(int d);
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
 #define NUM_LEDS 60
+//int LEDsegheights[NUM_LEDS]; // not implemented for worm
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 bool ClockInitialized = false;
 time_t nextCalcTime;
@@ -463,10 +464,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
       break;
     case 5: // 3 worms fast 1 wait
-      moveworms(parm1, parm2, now(), duration);
+      moveworms(parm1, parm2, ihour, parm3, now(), duration);
       break;
     case 6: // 3  worms slow 5 wait
-      moveworms(5, 3, now(), duration);
+      moveworms(5, 3, ihour, 1, now(), duration);
       break;
 
     //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
@@ -1892,7 +1893,7 @@ class Worm
     // colors, a list of worm segment (starting with head) hues
     // path a list of the LED indices over which the worm will travel (from 0 to 59 for clock)
     // cyclelen controls speed, worm movement only when LED upload cycles == 0 mod cyclelen
-    // height (of worm segments) is same length as colors: higher value worms segments go over top of lower value worms
+    // NOT IMPLEMENTED height (of worm segments) is same length as colors: higher value worms segments go over top of lower value worms
     // equal value segments have later worm having priority
   private:
     vector < int >colors;
@@ -1910,8 +1911,8 @@ class Worm
       this->colors.push_back (0); // add blank seqment to end worm
       this->path = path;
       this->cyclelen = cyclelen;  // movement only occurs on LED upload cycles == 0 mod cyclelen
-      this->height = height;
-      this->height.push_back (-1);  // add lowest value for height
+      //this->height = height;
+      //this->height.push_back (-1);  // add lowest value for height
       this->activecount = 0;
       this->direction = direction;
       this->headposition = -this->direction;
@@ -1919,41 +1920,39 @@ class Worm
 
     //    void move (vector < int >&LEDStripBuf,
     //               vector < int >&LEDsegheights)
-    void move ()
+    void move (int nodepix)
     {
       bool acted = this->activecount == 0;
       if (acted)
       {
-        // % does not work with negative
+        // % fixed to work with negative
         this->headposition = this->headposition + this->direction + this->path.size ();
         this->headposition %= this->path.size ();
+        this->headposition += this->path.size ();
+        this->headposition %= this->path.size ();
+
         // Put worm into strip and blank end
         int segpos = this->headposition;
         //Serial.println(" ");
         for (int x = 0; x < this->colors.size (); x++)
         {
           int strippos = this->path[segpos];
-          //sprintf(buf, "x = %d, c[x]=%d,  segpos=%d, strippos=%d, pathsize=%d", x, this->colors[x], segpos,   strippos, this->path.size() );
-          //Serial.println(buf);
-          //sprintf(buf, "%d, ",this->colors[x] );
-          //sprintf(buf, "%d, ", segpos);
-          //sprintf(buf, "%d, ", strippos);
-          //Serial.print(buf);
-
           if (true) //(this->height[x] >= LEDsegheights[this->path[segpos]])
           {
             if (this->colors[x] == 0) {
-              strip.setPixelColor(ClockCorrect(strippos), 0, 0, 0);
+              strip.setPixelColor(ClockCorrect(strippos + nodepix), 0, 0, 0);
               //strip.setPixelColor(strippos, 0, 0, 0);
             } else {
-              strip.setPixelColor(ClockCorrect(strippos), strip.gamma32(strip.ColorHSV(this->colors[x])));
+              strip.setPixelColor(ClockCorrect(strippos + nodepix), strip.gamma32(strip.ColorHSV(this->colors[x])));
               //strip.setPixelColor(strippos, strip.gamma32(strip.ColorHSV(this->colors[x])));
               //LEDsegheights[this->path[segpos]] = this->height[x];
             }
 
           }
-          // % does not work with negative
+          // % fixed to work with negative
           segpos = segpos - this->direction + this->path.size ();
+          segpos  %= this->path.size ();
+          segpos  += this->path.size ();
           segpos  %= this->path.size ();
         }
       };
@@ -1962,10 +1961,13 @@ class Worm
     };
 };
 
-void moveworms(int wait, int nworms, time_t t, uint16_t duration) {
+void moveworms(int wait, int nworms, int nodepix, int sinksize,  time_t t, uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
   vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
+  for (int i = 0; i < sinksize; i++) {
+      path.push_back(0);
+    }
   int direction = 1;
   nworms = min(abs(nworms), 10);
   vector<Worm>Worms;
@@ -1986,7 +1988,7 @@ void moveworms(int wait, int nworms, time_t t, uint16_t duration) {
   strip.fill(); // clear
   while (time_elapsed < duration) {
     for (int i = 0; i < nworms; i++) {
-      Worms[i].move();
+      Worms[i].move(nodepix);
       yield();
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
