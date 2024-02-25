@@ -587,8 +587,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
     case 42:
       showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
       break;
+    case 50:
     default:
-      rainbow(0, 5, 0, 256, 4, 1, ihour, now(), duration);
+      light_alarm_num = random(1, 42);
+      show_alarm_pattern(light_alarm_num, duration, parm1, parm2, parm3, parm4, parm5, parm6);
   }
 }
 
@@ -1966,8 +1968,8 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize,  time_t t, uint1
   uint16_t time_start = millis();
   vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
   for (int i = 0; i < sinksize; i++) {
-      path.push_back(0);
-    }
+    path.push_back(0);
+  }
   int direction = 1;
   nworms = min(abs(nworms), 10);
   vector<Worm>Worms;
