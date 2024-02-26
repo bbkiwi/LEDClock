@@ -14,7 +14,7 @@ connection.onmessage = function (e) {
     console.log('Server: ', e.data);
     if (e.data === 'MUSIC') {
       document.getElementById("Melody-Button").style.display = "block";
-    } else if (e.data.startsWith('ALARMINFO')) {
+    } else if (e.data.startsWith('ALARMINFO:')) {
       var alarminfo = e.data.split(',');
       console.log(alarminfo);
       document.getElementById('numpattern').value = Math.abs(Number(alarminfo[3]));
@@ -48,6 +48,14 @@ connection.onmessage = function (e) {
       }
       document.getElementById('AdjMorn').value = Number(alarminfo[13]);
       document.getElementById('AdjNight').value = Number(alarminfo[14]);
+    } else if (e.data.startsWith('DISPLAYINFO:')) {
+      var displayinfo = e.data.split(',');
+      console.log(displayinfo);
+      document.getElementById('dispind').value = Math.abs(Number(displayinfo[1]));
+      document.getElementById('widthhour').value = Number(displayinfo[2]);
+      document.getElementById('widthminute').value = Number(displayinfo[3]);
+      document.getElementById('blinkminute').checked = 1 === Number(displayinfo[4]);
+      document.getElementById('widthsecond').value = Number(displayinfo[5]);
     } else if (e.data.startsWith('WHATTIME')) {
       document.getElementById('whattime').innerHTML = e.data.substring(8);
     }
@@ -72,17 +80,30 @@ function setbackground() {
 }
 
 function sethour() {
-    connection.send("H" + document.getElementById('widthhour').value);
+    connection.send("h" + " " + document.getElementById('widthhour').value);
 }
 
 function setminute() {
     var blink = (document.getElementById('blinkminute').checked) ? 1: 0
-    connection.send("M" + blink + " " + document.getElementById('widthminute').value);
+    connection.send("m" + blink + " " + document.getElementById('widthminute').value);
 }
 
 function setsecond() {
     connection.send("s" + " " + document.getElementById('widthsecond').value);
 }
+
+function sethourcol() {
+    connection.send("H");
+}
+
+function setminutecol() {
+    connection.send("M");
+}
+
+function setsecondcol() {
+    connection.send("S");
+}
+
 
 function setdispind() {
       connection.send("D" + " " + document.getElementById('dispind').value);
@@ -109,7 +130,7 @@ function whattimeAnswer() {
 }
 
 function calcSunsets() {
-    connection.send("S");
+    connection.send("C");
 }
 
 function pickerTimeDate(date) {

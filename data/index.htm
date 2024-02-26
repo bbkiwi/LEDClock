@@ -131,14 +131,14 @@
        <div class="btn-group">
             <table>
                 <tr>
-                    <td style="width:14.4px; text-align: right"><button id="sethour" class="button"  onclick="sethour();">Hour</button> </td>
-                     <td style="width:14.4px; text-align: right"> <button id="setminute" class="button"  onclick="setminute();">Min</button></td>
-                     <td style="width:14.4px; text-align: right"> <button id="setsecond" class="button"  onclick="setsecond();">Sec</button></td>
+                    <td style="width:14.4px; text-align: right"><button id="sethourcol" class="button"  onclick="sethourcol();">Hour</button> </td>
+                     <td style="width:14.4px; text-align: right"> <button id="setminutecol" class="button"  onclick="setminutecol();">Min</button></td>
+                     <td style="width:14.4px; text-align: right"> <button id="setsecondcol" class="button"  onclick="setsecondcol();">Sec</button></td>
                      <td style="width:14.4px; text-align: right"> <button id="setdispind" class="button"  onclick="setdispind();">Disp#</button></td>
                 </tr>
                 <tr>
                     <td style="width:14.4px; text-align: right">
-                      <select id="widthhour">
+                      <select id="widthhour" onchange="sethour();">
                         <option value="0">0</option>
                         <option value="1">1</option>
                         <option value="2">2</option>
@@ -151,8 +151,8 @@
                         <option value="9">9</option>
                       </select></td>
                      <td style="width:14.4px; text-align: right">
-                       <select id="widthminute">
-                        <option value="-1">Hide</option>
+                       <select id="widthminute" onchange="setminute();">
+                        <option value="-3">Hide</option>
                         <option value="0">0</option>
                         <option value="1">1</option>
                         <option value="2">2</option>
@@ -165,8 +165,8 @@
                         <option value="9">9</option>
                       </select> </td>
                      <td style="width:14.4px; text-align: right">
-                        <select id="widthsecond">
-                        <option value="-1">Hide</option>
+                        <select id="widthsecond" onchange="setsecond();">
+                        <option value="-3">Hide</option>
                         <option value="0">0</option>
                         <option value="1">1</option>
                         <option value="2">2</option>
@@ -180,7 +180,7 @@
                         </select>
                      </td>
                      <td style="width:14.4px; text-align: right">
-                        <select id="dispind">
+                        <select id="dispind" onchange="setdispind();">
                         <option value="0">0</option>
                         <option value="1">1</option>
                         <option value="2">2</option>

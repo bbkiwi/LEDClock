@@ -1183,6 +1183,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
       }
       send_alarmInfo(0);
+      send_displayInfo();
 #ifdef MUSIC
       sprintf(buf, "MUSIC");
       Serial.println();
@@ -1193,7 +1194,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     case WStype_TEXT:                     // if new text data is received
       Serial.printf("[%u] payload: %s length: %d\n", num, payload, length);
       // first char of payload specifies action
-      // #, V, B, t, q, d, H, M, s, D, F, G, P, L, W, A, a, S, J
+      // #, V, B, t, q, d, H, h, M, m, S, s, D, F, G, P, L, W, A, a, C, J
       if (payload[0] == '#') {            // we get RGB data
         uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
@@ -1227,17 +1228,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'd') {                      // browser sent d to set Divisions color from SliderColor
         Divisions[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'H') {                      // browser sent H to set Hour hand color from SliderColor
-        hour_width[day_disp_ind] = payload[1] - '0';
         Hour[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
+        Minute[day_disp_ind] = SliderColor;
+      } else if (payload[0] == 'S') {                      // browser sent S to set Second hand color from SliderColor
+       Second[day_disp_ind] = SliderColor;
+      } else if (payload[0] == 'h') {                      // browser sent h to set Hour hand width
+        hour_width[day_disp_ind] = payload[2] - '0';
+      } else if (payload[0] == 'm') {                      // browser sent m to set Minute hand width and blink status
         minute_width[day_disp_ind] = payload[3] - '0';
         minute_blink[day_disp_ind] = (payload[1] == '1');
-        Minute[day_disp_ind] = SliderColor;
-      } else if (payload[0] == 's') {                      // browser sent s to set Second hand color from SliderColor
+      } else if (payload[0] == 's') {                      // browser sent s to set Second hand color width
         second_width[day_disp_ind] = payload[2] - '0';
-        Second[day_disp_ind] = SliderColor;
-      } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
+     } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
+        send_displayInfo();
       } else if (payload[0] == 'F') {                      // browser sent F to force_day
         force_day = true;
         force_night = false;
@@ -1255,8 +1260,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sprintf(buf, "WHATTIME%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
         //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
-
-
       } else if (payload[0] == 'R') {                      // the browser sends an R to reset alarm
         int alarm_ind;
         sscanf((char *) payload, "R%d", &alarm_ind);
@@ -1322,7 +1325,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int alarm_ind = payload[1] - '0';
         send_alarmInfo(alarm_ind);
 
-      } else if (payload[0] == 'S') {                      // the browser sends an S to compute sunsets
+      } else if (payload[0] == 'C') {                      // the browser sends an C to compute sunsets
         Serial.printf("Compute Sunsets\n");
         calcSun();
       }
@@ -1330,9 +1333,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
+void send_displayInfo() {
+  sprintf(buf, "DISPLAYINFO:,%d,%d,%d,%d,%d",
+          day_disp_ind, hour_width[day_disp_ind], minute_width[day_disp_ind], minute_blink[day_disp_ind], second_width[day_disp_ind]);
+  webSocket.sendTXT(websocketId_num, buf);
+}
+
 void send_alarmInfo(int alarm_ind) {
   // send back info same order as payload when alarm defined
-  sprintf(buf, "ALARMINFO,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d, %d, %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d, %d, %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
           alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
           alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].duration,
