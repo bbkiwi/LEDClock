@@ -46,6 +46,8 @@ connection.onmessage = function (e) {
         document.getElementById('dayonly').innerHTML = "Off or Unset";
         //document.getElementById('saveddatetime').innerHTML = 'NOT SET MUST CHOOSE WHEN';
       }
+      document.getElementById('AdjMorn').value = Number(alarminfo[13]);
+      document.getElementById('AdjNight').value = Number(alarminfo[14]);
     } else if (e.data.startsWith('WHATTIME')) {
       document.getElementById('whattime').innerHTML = e.data.substring(8);
     }
@@ -146,6 +148,8 @@ function setalarm() {
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
+  var adjmorn = document.getElementById('AdjMorn').value;
+  var adjnight = document.getElementById('AdjNight').value;
   if (alarmrepeat === 'other') {
     alarmrepeat = document.getElementById('othervalue').value;
   }
@@ -157,6 +161,7 @@ function setalarm() {
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
 	connection.send("A" + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+	connection.send("J" + adjmorn + " " + adjnight);
 }
 
 function handleWhen() {

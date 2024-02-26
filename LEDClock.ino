@@ -128,7 +128,8 @@ int hour_width[NUM_DISP_OPTIONS] = {3, 5, 3, 3, 0};
 int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 
 //Set brightness by time for night and day mode
-//TODO set via gui or have auto set
+int AdjustMorning = 0;
+int AdjustNight = 0;
 TIME WeekNight = {18, 00}; // Night time to go dim
 TIME WeekMorning = {7, 15}; //Morning time to go bright
 TIME WeekendNight = {18, 00}; // Night time to go dim
@@ -272,13 +273,14 @@ void setup() {
   // Initialize alarmTime(s) to default (now)
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
     breakTime(now(), alarmInfo[alarm_ind].alarmTime);
-    sprintf(buf, "Default alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+    sprintf(buf, "Default alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d, adj %d %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
             alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
             alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
             alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
             hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
             second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-            monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+            monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)),
+            AdjustMorning, AdjustNight);
     //Serial.println();
     Serial.println(buf);
   }
@@ -296,13 +298,14 @@ void setup() {
     // will have loaded the saved parameters
     Serial.println("Config loaded");
     for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-      sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+      sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d, adj %d %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
               alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
               alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
               alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
               hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
               second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-              monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+              monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)),
+              AdjustMorning, AdjustNight);
       //Serial.println();
       Serial.println(buf);
     }
@@ -657,6 +660,9 @@ bool loadConfig() {
     return false;
   }
 
+  // Deserialize day/night adjustments
+  AdjustMorning = doc["AdjustMorning"]; // mins added to sunrise
+  AdjustNight = doc["AdjustNight"]; // mins added to civilsunset
   // Deserialize day_disp_ind
   day_disp_ind = doc["day_disp_ind"];
   // Deserialize night_brightness
@@ -763,6 +769,9 @@ bool saveConfig() {
 
   DynamicJsonDocument doc(6144);
 
+  // Serialize day/night adjustments
+  doc["AdjustMorning"] = AdjustMorning ; // mins added to sunrise
+  doc["AdjustNight"] =   AdjustNight; // mins added to civilsunset
   // Serialize day_disp_ind
   doc["day_disp_ind"] = day_disp_ind;
   // Serialize night_brightness
@@ -1184,7 +1193,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     case WStype_TEXT:                     // if new text data is received
       Serial.printf("[%u] payload: %s length: %d\n", num, payload, length);
       // first char of payload specifies action
-      // #, V, B, t, q, d, H, M, s, D, F, G, P, L, W, A, a, S
+      // #, V, B, t, q, d, H, M, s, D, F, G, P, L, W, A, a, S, J
       if (payload[0] == '#') {            // we get RGB data
         uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
         int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
@@ -1259,6 +1268,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sprintf(buf, "Reset alarm[%d]", alarm_ind);
         webSocket.sendTXT(num, buf);
 
+      } else if (payload[0] == 'J') {   // to aJust day/night
+        sscanf((char *) payload, "J%d %d", &AdjustMorning, &AdjustNight);
+        sprintf(buf, "Set day to sunrise plus %d mins, and night to civilsunset plus %d ", AdjustMorning, AdjustNight);
+        webSocket.sendTXT(num, buf);
+        Serial.println(buf);
 
       } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
         char Aday[4]; //3 char
@@ -1318,7 +1332,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
 void send_alarmInfo(int alarm_ind) {
   // send back info same order as payload when alarm defined
-  sprintf(buf, "ALARMINFO,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "ALARMINFO,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d, %d, %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
           alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
           alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].duration,
@@ -1327,7 +1341,7 @@ void send_alarmInfo(int alarm_ind) {
           day(makeTime(alarmInfo[alarm_ind].alarmTime)),
           year(makeTime(alarmInfo[alarm_ind].alarmTime)),
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-          second(makeTime(alarmInfo[alarm_ind].alarmTime)));
+          second(makeTime(alarmInfo[alarm_ind].alarmTime)), AdjustMorning, AdjustNight);
   webSocket.sendTXT(websocketId_num, buf);
 }
 
@@ -1474,22 +1488,23 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   Sunset.Minute = sunset - 60 * Sunset.Hour + 0.5;
   CivilSunset.Hour = civilsunset / 60;
   CivilSunset.Minute = civilsunset - 60 * CivilSunset.Hour + 0.5;
+  WeekNight.Hour = (civilsunset + AdjustNight) / 60;
+  WeekNight.Minute = (civilsunset + AdjustNight) - 60 * WeekNight.Hour + 0.5;
+
   NauticalSunset.Hour = nauticalsunset / 60;
   NauticalSunset.Minute = nauticalsunset - 60 * NauticalSunset.Hour + 0.5;
   AstroSunset.Hour = astrosunset / 60;
   AstroSunset.Minute = astrosunset - 60 * AstroSunset.Hour + 0.5;
-
   Sunrise.Hour = sunrise / 60;
   Sunrise.Minute = sunrise - 60 * Sunrise.Hour + 0.5;
+  WeekMorning.Hour = (sunrise + AdjustMorning) / 60;
+  WeekMorning.Minute = (sunrise + AdjustMorning) - 60 * WeekMorning.Hour + 0.5;
   CivilSunrise.Hour = civilsunrise / 60;
   CivilSunrise.Minute = civilsunrise - 60 * CivilSunrise.Hour + 0.5;
   NauticalSunrise.Hour = nauticalsunrise / 60;
   NauticalSunrise.Minute = nauticalsunrise - 60 * NauticalSunrise.Hour + 0.5;
   AstroSunrise.Hour = astrosunrise / 60;
   AstroSunrise.Minute = astrosunrise - 60 * AstroSunrise.Hour + 0.5;
-
-  WeekMorning = Sunrise;
-  WeekNight = CivilSunset;
 
   WeekendNight = WeekNight;
   WeekendMorning = WeekMorning;
