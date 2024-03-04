@@ -71,7 +71,7 @@ const char *OTAandMdnsName = "IrisLEDClock";           // A name and a password 
 const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
 #endif
 #ifdef GBT_CLOCK
-const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
+const char *OTAandMdnsName = "GBTLEDClock";           // A name and a password for the OTA and mDns service
 #endif
 
 const char *OTAPassword = "ledclock";

@@ -105,36 +105,31 @@
             <h1>Display Control</h1>
         </header>
         <div>
-            <table>
-                <tr>
-                    <td style="width:14.4px; text-align: right">R: </td>
-                    <td><input class="enabled" id="r" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();" value="0"></td>
-                </tr>
-                <tr>
-                    <td style="width:14.4px; text-align: right">G: </td>
-                    <td><input class="enabled" id="g" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
-                </tr>
-                <tr>
-                    <td style="width:14.4px; text-align: right">B: </td>
-                    <td><input class="enabled" id="b" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
-                </tr>
-            </table>
+          <p>Display <select id="dispind" onchange="setdispind();">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">night</option>
+                        </select></p>
+       <p>Can choose color and test how it looks on the LEDS</p>
+       <input class="enabled" type="color" id="cp"  value="#0"><button id="testbutton"  onclick="sendColor();">Test Color</button>
        </div>
 
-
        <div class="btn-group">
-             <button id="setbackground" class="button"  onclick="setbackground();">Back</button>
+         Buttons change display part to selected color<br>
              <button id="set12" class="button"  onclick="set12();">12</button>
              <button id="setquarter" class="button"  onclick="setquarter();">Quad</button>
              <button id="setdivision" class="button"  onclick="setdivision();">Div</button>
+             <button id="setbackground" class="button"  onclick="setbackground();">Back</button>
        </div>
        <div class="btn-group">
+         Buttons change hand to selected color<br> Selections set width
             <table>
                 <tr>
                     <td style="width:14.4px; text-align: right"><button id="sethourcol" class="button"  onclick="sethourcol();">Hour</button> </td>
                      <td style="width:14.4px; text-align: right"> <button id="setminutecol" class="button"  onclick="setminutecol();">Min</button></td>
                      <td style="width:14.4px; text-align: right"> <button id="setsecondcol" class="button"  onclick="setsecondcol();">Sec</button></td>
-                     <td style="width:14.4px; text-align: right"> <button id="setdispind" class="button"  onclick="setdispind();">Disp#</button></td>
                 </tr>
                 <tr>
                     <td style="width:14.4px; text-align: right">
@@ -179,15 +174,6 @@
                         <option value="9">9</option>
                         </select>
                      </td>
-                     <td style="width:14.4px; text-align: right">
-                        <select id="dispind" onchange="setdispind();">
-                        <option value="0">0</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">night</option>
-                        </select>
-                     </td>
                  </tr>
                  <tr>
                     <td style="width:14.4px; text-align: right"> </td>
@@ -196,7 +182,7 @@
                     <td style="width:14.4px; text-align: right"> </td>
                 </tr>
             </table>
-       <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config</button></p>
+       <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
        </div>
     </center>
 </div>
@@ -207,10 +193,16 @@
             <h1>Alarm Control</h1>
         </header>
         <div class="btn-group">
+             <p>Alarm number - <select id="alarmnum" onchange="RequestPopulate();">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        </select></p>
           <button class="simplepicker-btn">Choose Date and Time</button>
           <p style="margin:8px 0px"><button id="saveddatetime" class="button">Saved Date Time</button></p>
              <p style="margin:8px 0px"><button id="repeat" class="button">Repeat</button>
-
              <select id="alarmrepeat" onchange="AlarmrepeatChanged();">
                         <option value="86400">Daily</option>
                         <option value="3600">Hourly</option>
@@ -219,20 +211,14 @@
                         <option value="other">Other</option>
                         </select>
                         <input hidden type="text" id="othervalue" size='8' value=0>
-              <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
+            <button id="dayonly" class="button" onclick="handleWhen();">Day Only</button>
+
+             <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
              <input type="text" id="alarmduration" value=10000></p>
-             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Settings</button>
-             <select id="alarmnum" onchange="RequestPopulate();">
-                        <option value="0">0</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        </select>
-             <button id="dayonly" class="button" onclick="handleWhen();">Day Only</button>
-             </p>
              <p>Day sunrise plus <input type="text" size = "4" id="AdjMorn" value=0> Night sunset plus <input type="text" size = "4" id="AdjNight" value=0></p>
-             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config</button></p>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Settings</button>
+             </p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
         </div>
     </center>
 </div>

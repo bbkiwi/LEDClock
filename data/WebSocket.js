@@ -65,19 +65,19 @@ connection.onclose = function(){
     console.log('WebSocket connection closed');
 };
 
-function sendRGB() {
-    var r = document.getElementById('r').value**2/1023; // non linear
-    var g = document.getElementById('g').value**2/1023;
-    var b = document.getElementById('b').value**2/1023;
-    var rgb = r << 20 | g << 10 | b;
+
+function sendColor() {
+    var color = document.getElementById('cp').value;
+    var r = parseInt(color.substring(1,3),16)**2/255;
+    var g = parseInt(color.substring(3,5),16)**2/255;
+    var b = parseInt(color.substring(5,7),16)**2/255;
+    var rgb = r << 22 | g << 12 | b << 2;
     var rgbstr = '#'+ rgb.toString(16);
-    console.log('RGB: ' + rgbstr);
+    console.log('sendColor: ' + color + ' r = ' + r + ', g= ' + g + ',b= ' + b + ', rgbstr= ' +rgbstr);
+    //console.log('COLOR PICKER: ' + rgbstr);
     connection.send(rgbstr);
 }
 
-function setbackground() {
-    connection.send("B");
-}
 
 function sethour() {
     connection.send("h" + " " + document.getElementById('widthhour').value);
@@ -93,31 +93,41 @@ function setsecond() {
 }
 
 function sethourcol() {
+    sendColor();
     connection.send("H");
 }
 
 function setminutecol() {
+    sendColor();
     connection.send("M");
 }
 
 function setsecondcol() {
+    sendColor();
     connection.send("S");
 }
-
 
 function setdispind() {
       connection.send("D" + " " + document.getElementById('dispind').value);
 }
 
+function setbackground() {
+    sendColor();
+    connection.send("B");
+}
+
 function set12() {
+    sendColor();
     connection.send("t");
 }
 
 function setquarter() {
+    sendColor();
     connection.send("q");
 }
 
 function setdivision() {
+    sendColor();
     connection.send("d");
 }
 
