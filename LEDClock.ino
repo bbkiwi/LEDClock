@@ -247,7 +247,8 @@ bool SetClockFromNTP();
 bool IsDst();
 bool IsDay();
 void limited_delay(int d);
-
+//If want to have default arguments MUST delclare with the default values here and just the argments when defined later
+void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 0 );
 
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
@@ -532,8 +533,9 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       break;
     // (partial) rainbows
     case 25:
-      //void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
-      rainbow(0, parm1, 0, parm2, 16, parm3, ihour, now(), duration); // full rainbow ring rotating
+      //void rainbow(wait, embedding, long firsthue, hueinc,  ncolorloop, ncolorfrac, nodepix, time_t t, uint16_t duration, nbrightloop = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
+      //          emb  firsthue,hueinc     ncolfra                        nbright nbrfrac valinc
+      rainbow(0, parm1, parm2, parm3, 120, parm4, ihour, now(), duration, 120,   parm5, parm6); // full rainbow ring rotating
       //rainbow(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
     case 26:
@@ -1232,7 +1234,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
         Minute[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'S') {                      // browser sent S to set Second hand color from SliderColor
-       Second[day_disp_ind] = SliderColor;
+        Second[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'h') {                      // browser sent h to set Hour hand width
         hour_width[day_disp_ind] = payload[2] - '0';
       } else if (payload[0] == 'm') {                      // browser sent m to set Minute hand width and blink status
@@ -1240,7 +1242,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         minute_blink[day_disp_ind] = (payload[1] == '1');
       } else if (payload[0] == 's') {                      // browser sent s to set Second hand color width
         second_width[day_disp_ind] = payload[2] - '0';
-     } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
+      } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
         send_displayInfo();
       } else if (payload[0] == 'F') {                      // browser sent F to force_day
@@ -1812,27 +1814,36 @@ vector<pair<int8_t, int8_t>> points_for_embedding(int embedding) {
 }
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration) {
-  sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, ncolorfrac = %d, nodepix = %d, duration = %d",
-          wait, embedding, firsthue, hueinc, ncolorloop, ncolorfrac, nodepix, duration);
+void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop, int nbrightfrac, int valinc, int firstval) {
+  sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, ncolorfrac = %d, nodepix = %d, duration = %d, nbrightloop = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
+          wait, embedding, firsthue, hueinc, ncolorloop, ncolorfrac, nodepix, duration, nbrightloop, nbrightfrac, valinc, firstval);
   Serial.println(buf);
-
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
   // means we'll make ncolorloop*65536/256   passes through this outer loop:
+  // sine8 provides a 'brightness wheel'
   int pixelHue;
+  uint8_t pixelVal = 255;
+  uint8_t pixelSat = 255;
   time_elapsed = 0;
   uint16_t time_start = millis();
+  int firstPixelVal = firstval;
   long firstPixelHue = firsthue;
   vector<pair<int8_t, int8_t>> points;
   int j;
   points = points_for_embedding(embedding);
   while (time_elapsed < duration) {
+    // For each frame, the colorwheel and brightness wheel shift
+    // This gives apparent motion. If values are same both move
+    // at same rate.
     firstPixelHue += hueinc;
-
+    firstPixelVal += valinc;
     // routine setting all leds (pixels) for one frame of the animation
-    // must have yield() in loop
+    // where ncolorloop/ncolorfrac of colorwheel
+    //   and nbrightloop/nbrightfrac of brightness wave from min to max is mapped
+    // is mapped to LEDs via embedding
+    // MUST have yield() in loop
     for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
       // Offset pixel hue by an amount to make ncolorloop/ ncolorfrac  revolutions of the
       // color wheel (range of 65536) along the length of the strip
@@ -1844,12 +1855,27 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
       } else {
         pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
       }
-      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
-      // optionally add saturation and value (brightness) (each 0 to 255).
-      // Here we're using just the single-argument hue variant. The result
-      // is passed through strip.gamma32() to provide 'truer' colors
-      // before assigning to each pixel:
-      strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
+      if (nbrightloop != 0) { // will change Value (brightness)
+        // Offset pixel val by an amount to make nbrightloop/ nbrightfrac  revolutions of the
+        // brightness wheel (range of 256) along the length of the strip
+        if (nbrightfrac != 0) {
+          pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels() / nbrightfrac);
+        } else {
+          pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels());
+        }
+        // need empirical adjustment as for too low value LEDs don't shine at all
+        if (force_day or ( not force_night and IsDay(t))) {
+          // day brightness
+          pixelVal = 33 + 222 * pixelVal / 255;
+        } else {
+          // night brightness
+          pixelVal = 84 + 171 * pixelVal / 255;
+        }
+      }
+
+      // Using 3 argument strip.ColorHSV(): a hue (0 to 65535),saturation and value (brightness) (each 0 to 255).
+      // Passed through strip.gamma32() to provide 'truer' colors before assigning to each pixel:
+      strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue, pixelSat, pixelVal)));
       yield();
     }
 
@@ -1859,7 +1885,6 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
     time_elapsed = millis() - time_start;
   }
 }
-
 
 void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration) {
   sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, blocksize = %d, nodepix = %d, duration = %d",
