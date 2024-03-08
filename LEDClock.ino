@@ -249,6 +249,7 @@ bool IsDay();
 void limited_delay(int d);
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
 void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 0 );
+void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 0);
 
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
@@ -1751,8 +1752,8 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 #include <cmath>
 #include <vector>
 
-using namespace std;
-int8_t piecewise_linear(int8_t x, vector<pair<int8_t, int8_t>> points) {
+//using namespace std;
+int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
       int x1 = points[i].first;
@@ -1774,8 +1775,47 @@ void colorAll(uint32_t color, int duration, time_t t) {
   limited_delay(duration);                           //  Pause for a moment
 }
 
-vector<pair<int8_t, int8_t>> points_for_embedding(int embedding) {
-  vector<pair<int8_t, int8_t>> points;
+void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int nodepix, time_t t, long firstPixelHue, int firstPixelVal, int ncolorloop, int ncolorfrac, int nbrightloop, int nbrightfrac) {
+  int pixelHue;
+  uint8_t pixelVal = 255;
+  uint8_t pixelSat = 255;
+  // Offset pixel hue by an amount to make ncolorloop/ ncolorfrac  revolutions of the
+  // color wheel (range of 65536) along the length of the strip
+  // (strip.numPixels() steps):
+  int j = piecewise_linear(i, points);
+
+  if (ncolorfrac != 0) {
+    pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
+  } else {
+    pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
+  }
+  if (nbrightloop != 0) { // will change Value (brightness)
+    // Offset pixel val by an amount to make nbrightloop/ nbrightfrac  revolutions of the
+    // brightness wheel (range of 256) along the length of the strip
+    if (nbrightfrac != 0) {
+      pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels() / nbrightfrac);
+    } else {
+      pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels());
+    }
+    // need empirical adjustment as for too low value LEDs don't shine at all
+    if (force_day or ( not force_night and IsDay(t))) {
+      // day brightness
+      pixelVal = 33 + 222 * pixelVal / 255;
+    } else {
+      // night brightness
+      pixelVal = 84 + 171 * pixelVal / 255;
+    }
+  }
+
+  // Using 3 argument strip.ColorHSV(): a hue (0 to 65535),saturation and value (brightness) (each 0 to 255).
+  // Passed through strip.gamma32() to provide 'truer' colors before assigning to each pixel:
+  strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue, pixelSat, pixelVal)));
+  yield();
+}
+
+
+std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding) {
+  std::vector<std::pair<int8_t, int8_t>> points;
   switch (embedding) {
     case 1: // full mapping
       points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS - 1}};
@@ -1813,6 +1853,7 @@ vector<pair<int8_t, int8_t>> points_for_embedding(int embedding) {
   return points;
 }
 
+
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
 void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop, int nbrightfrac, int valinc, int firstval) {
   sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, ncolorfrac = %d, nodepix = %d, duration = %d, nbrightloop = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
@@ -1823,15 +1864,11 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
   // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
   // means we'll make ncolorloop*65536/256   passes through this outer loop:
   // sine8 provides a 'brightness wheel'
-  int pixelHue;
-  uint8_t pixelVal = 255;
-  uint8_t pixelSat = 255;
   time_elapsed = 0;
   uint16_t time_start = millis();
   int firstPixelVal = firstval;
   long firstPixelHue = firsthue;
-  vector<pair<int8_t, int8_t>> points;
-  int j;
+  std::vector<std::pair<int8_t, int8_t>> points;
   points = points_for_embedding(embedding);
   while (time_elapsed < duration) {
     // For each frame, the colorwheel and brightness wheel shift
@@ -1845,38 +1882,7 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
     // is mapped to LEDs via embedding
     // MUST have yield() in loop
     for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-      // Offset pixel hue by an amount to make ncolorloop/ ncolorfrac  revolutions of the
-      // color wheel (range of 65536) along the length of the strip
-      // (strip.numPixels() steps):
-      j = piecewise_linear(i, points);
-
-      if (ncolorfrac != 0) {
-        pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
-      } else {
-        pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
-      }
-      if (nbrightloop != 0) { // will change Value (brightness)
-        // Offset pixel val by an amount to make nbrightloop/ nbrightfrac  revolutions of the
-        // brightness wheel (range of 256) along the length of the strip
-        if (nbrightfrac != 0) {
-          pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels() / nbrightfrac);
-        } else {
-          pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels());
-        }
-        // need empirical adjustment as for too low value LEDs don't shine at all
-        if (force_day or ( not force_night and IsDay(t))) {
-          // day brightness
-          pixelVal = 33 + 222 * pixelVal / 255;
-        } else {
-          // night brightness
-          pixelVal = 84 + 171 * pixelVal / 255;
-        }
-      }
-
-      // Using 3 argument strip.ColorHSV(): a hue (0 to 65535),saturation and value (brightness) (each 0 to 255).
-      // Passed through strip.gamma32() to provide 'truer' colors before assigning to each pixel:
-      strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue, pixelSat, pixelVal)));
-      yield();
+      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, ncolorfrac, nbrightloop, nbrightfrac);
     }
 
     SetBrightness(t); // Set the clock brightness dependant on the time
@@ -1886,9 +1892,9 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
   }
 }
 
-void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration) {
-  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, blocksize = %d, nodepix = %d, duration = %d",
-          wait, embedding, firsthue, hueinc, ncolorloop, blocksize, nodepix, duration);
+void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration, int nbrightloop, int nbrightfrac, int valinc, int firstval) {
+  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, blocksize = %d, nodepix = %d, duration = %d, nbrightloop = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
+          wait, embedding, firsthue, hueinc, ncolorloop, blocksize, nodepix, duration, nbrightloop, nbrightfrac, valinc, firstval);
   Serial.println(buf);
 
   // Hue of first pixel runs ncolorloop complete loops through the color wheel.
@@ -1898,9 +1904,10 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
   int pixelHue;
   time_elapsed = 0;
   uint16_t time_start = millis();
+  int firstPixelVal = firstval;
   long firstPixelHue = firsthue;
   int i = 0; // starting index
-  vector<pair<int8_t, int8_t>> points;
+  std::vector<std::pair<int8_t, int8_t>> points;
   int j;
   int maxcnt;
   points = points_for_embedding(embedding);
@@ -1918,19 +1925,18 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
         i++;
         if (i  >= strip.numPixels()) {
           i = 0;
+          firstPixelVal += valinc;
           firstPixelHue += hueinc;
         }
       } else {
         i --;
         if (i  < 0) {
           i =   - 1 + strip.numPixels();
+          firstPixelVal += valinc;
           firstPixelHue += hueinc;
         }
       }
-      j = piecewise_linear(i, points);
-      pixelHue = firstPixelHue + (j * 65536L  * ncolorloop / 100  / strip.numPixels() );
-      strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue)));
-      yield();
+      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, 0, nbrightloop, nbrightfrac);
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
@@ -1947,16 +1953,16 @@ class Worm
     // NOT IMPLEMENTED height (of worm segments) is same length as colors: higher value worms segments go over top of lower value worms
     // equal value segments have later worm having priority
   private:
-    vector < int >colors;
-    vector < int >path;
+    std::vector < int >colors;
+    std::vector < int >path;
     int cyclelen;
-    vector < int >height;
+    std::vector < int >height;
     int activecount;
     int direction;
     int headposition;
   public:
-    Worm (vector < int >colors, vector < int >path, int cyclelen,
-          int direction, vector < int >height)
+    Worm (std::vector < int >colors, std::vector < int >path, int cyclelen,
+          int direction, std::vector < int >height)
     {
       this->colors = colors;
       this->colors.push_back (0); // add blank seqment to end worm
@@ -1969,8 +1975,8 @@ class Worm
       this->headposition = -this->direction;
     }
 
-    //    void move (vector < int >&LEDStripBuf,
-    //               vector < int >&LEDsegheights)
+    //    void move (std::vector < int >&LEDStripBuf,
+    //               std::vector < int >&LEDsegheights)
     void move (int nodepix)
     {
       bool acted = this->activecount == 0;
@@ -2015,19 +2021,19 @@ class Worm
 void moveworms(int wait, int nworms, int nodepix, int sinksize,  time_t t, uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
-  vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
+  std::vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
   for (int i = 0; i < sinksize; i++) {
     path.push_back(0);
   }
   int direction = 1;
   nworms = min(abs(nworms), 10);
-  vector<Worm>Worms;
+  std::vector<Worm>Worms;
   for (int i = 0; i < nworms; i++) {
     int lenworm = random(2, 15);
     int cyclelen = random(1, 8);
     int dir = random(2);
     dir = 2 * dir - 1;
-    vector <int> colors = {};
+    std::vector <int> colors = {};
     int col = random(65535);
     for (int len = 0; len < lenworm; len++) {
       colors.push_back(col);
@@ -2171,7 +2177,7 @@ void fire(time_t t, uint16_t duration) {
 //https://en.wikipedia.org/wiki/Elementary_cellular_automaton#
 void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t duration) {
   time_elapsed = 0;
-  vector < int >next(NUM_LEDS);
+  std::vector < int >next(NUM_LEDS);
   uint16_t time_start = millis();
   // initial state
   strip.fill();
@@ -2202,9 +2208,9 @@ void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t 
 
 void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, long pixelHue, time_t t, uint16_t duration) {
   time_elapsed = 0;
-  vector < int >nextR(NUM_LEDS);
-  vector < int >nextG(NUM_LEDS);
-  vector < int >nextB(NUM_LEDS);
+  std::vector < int >nextR(NUM_LEDS);
+  std::vector < int >nextG(NUM_LEDS);
+  std::vector < int >nextB(NUM_LEDS);
   uint16_t time_start = millis();
   // initial state
   strip.fill();
