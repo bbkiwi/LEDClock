@@ -41,6 +41,10 @@
 #define HASMIC
 #endif
 
+#if defined TEST_CLOCK
+#define HAS_24_RING
+#endif
+
 /* Cass Bay */
 #define LATITUDE        -43.601131
 #define LONGITUDE       172.689831
@@ -203,7 +207,7 @@ ALARM alarmInfo[NUM_ALARMS];
 uint16_t time_elapsed = 0;
 
 #ifdef TEST_CLOCK
-int TopOfClock = 0; // to make given pixel the top
+int TopOfClock = 30; // to make given pixel the top
 #else
 int TopOfClock = 15; // to make given pixel the top
 #endif
@@ -232,8 +236,13 @@ NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, up
 #ifdef BEDROOM_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin
 #endif
-#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK
+#if defined IRIS_CLOCK || defined GBT_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
+#endif
+#ifdef HAS_24_RING
+#define NEOPIXEL_PIN 4      // This is the D2 pin
+#define NEOPIXEL_INNER_PIN 5      // This is the D1 pin
+#define NUM_INNER_LEDS 24
 #endif
 
 #define PIEZO_PIN 5         // This is D1
@@ -257,6 +266,9 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
 #define NUM_LEDS 60
 //int LEDsegheights[NUM_LEDS]; // not implemented for worm
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+#ifdef HAS_24_RING
+Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_PIN, NEO_GRB + NEO_KHZ800);
+#endif
 bool ClockInitialized = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
@@ -316,6 +328,11 @@ void setup() {
   startMDNS();                 // Start the mDNS responder
   startServer();               // Start a HTTP server with a file read handler and an upload handler
   strip.begin(); // This initializes the NeoPixel library.
+#ifdef HAS_24_RING
+  stripinner.begin();
+  stripinner.clear();
+  stripinner.show();
+#endif
   colorAll(strip.Color(127, 0, 0), 1000, now());
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
@@ -535,8 +552,9 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
     // (partial) rainbows
     case 25:
       //void rainbow(wait, embedding, long firsthue, hueinc,  ncolorloop, ncolorfrac, nodepix, time_t t, uint16_t duration, nbrightloop = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
-      //          emb  firsthue,hueinc     ncolfra                        nbright nbrfrac valinc
-      rainbow(0, parm1, parm2, parm3, 120, parm4, ihour, now(), duration, 120,   parm5, parm6); // full rainbow ring rotating
+      // rgb sep                                                 nrfrac     ngfrac                                           nbfrac
+      //          emb  firsthue,hueinc nrfra ngfrac                        nbrfrac   brightfrac valinc
+      rainbow(0, parm1, 0,     parm2, parm3, parm4, ihour, now(), duration, parm5,   parm6); // full rainbow ring rotating
       //rainbow(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
     case 26:
@@ -588,7 +606,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1, now());
       break;
     case 41:
-      showlights(duration, 2, 2, 2, -1, -1, -1, -1, -1, now());
+      showlights(duration, parm1, parm2, parm3, -1, -1, -1, -1, -1, now());
       break;
     case 42:
       showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
@@ -598,6 +616,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       light_alarm_num = random(1, 42);
       show_alarm_pattern(light_alarm_num, duration, parm1, parm2, parm3, parm4, parm5, parm6);
   }
+#ifdef HAS_24_RING
+  stripinner.fill();
+  stripinner.show();
+#endif
 }
 
 #ifdef MUSIC
@@ -1623,9 +1645,12 @@ void printDigits(int digits)
 //************* Functions to draw the clock ******************************
 void Draw_Clock(time_t t, byte Phase)
 {
-  if (Phase <= 0) // Set all pixels black
+  if (Phase <= 0) {
+    // Set all pixels black
     for (int i = 0; i < NUM_LEDS; i++)
       strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
+  }
+
 
   int disp_ind;
   //disp_ind = IsDay(t) ?  day_disp_ind : 4;
@@ -1703,12 +1728,18 @@ bool IsDay(time_t t)
 //************* Function to set the clock brightness ******************************
 void SetBrightness(time_t t)
 {
-
   //if (IsDay(t) & ClockInitialized)
-  if ((force_day or ( not force_night and IsDay(t))) and ClockInitialized)
+  if ((force_day or ( not force_night and IsDay(t))) and ClockInitialized) {
     strip.setBrightness(day_brightness);
-  else
+#ifdef HAS_24_RING
+    stripinner.setBrightness(day_brightness);
+#endif
+  } else {
     strip.setBrightness(night_brightness);
+#ifdef HAS_24_RING
+    stripinner.setBrightness(night_brightness);
+#endif
+  }
 }
 
 //************* This function reverses the pixel order ******************************
@@ -1752,7 +1783,6 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 #include <cmath>
 #include <vector>
 
-//using namespace std;
 int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
@@ -1777,25 +1807,60 @@ void colorAll(uint32_t color, int duration, time_t t) {
 
 void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int nodepix, time_t t, long firstPixelHue, int firstPixelVal, int ncolorloop, int ncolorfrac, int nbrightloop, int nbrightfrac) {
   int pixelHue;
+#define SEPARATE_RGB
+#ifdef SEPARATE_RGB
+  int pixelHueR;
+  int pixelHueG;
+  int pixelHueB;
+  uint8_t pixelR;
+  uint8_t pixelG;
+  uint8_t pixelB;
+  uint32_t pixelRcol;
+  uint32_t pixelGcol;
+  uint32_t pixelBcol;
+  int nredloop  = 120;
+  int ngreenloop = 120;
+  int nblueloop = 120;
+  int nredfrac = ncolorloop;
+  int ngreenfrac = ncolorfrac;
+  int nbluefrac = nbrightloop;
+#endif
   uint8_t pixelVal = 255;
   uint8_t pixelSat = 255;
+  int j = piecewise_linear(i, points);
+
+#ifdef SEPARATE_RGB
+  if (nredfrac != 0) {
+    pixelHueR = firstPixelHue + (j * nredloop * 65536L / strip.numPixels() / nredfrac);
+  } else {
+    pixelHueR = firstPixelHue + (j * nredloop * 65536L / strip.numPixels());
+  }
+  if (ngreenfrac != 0) {
+    pixelHueG = firstPixelHue + (j * ngreenloop * 65536L / strip.numPixels() / ngreenfrac);
+  } else {
+    pixelHueG = firstPixelHue + (j * ngreenloop * 65536L / strip.numPixels());
+  }
+  if (nbluefrac != 0) {
+    pixelHueB = firstPixelHue + (j * nblueloop * 65536L / strip.numPixels() / nbluefrac);
+  } else {
+    pixelHueB = firstPixelHue + (j * nblueloop * 65536L / strip.numPixels());
+  }
+#else
   // Offset pixel hue by an amount to make ncolorloop/ ncolorfrac  revolutions of the
   // color wheel (range of 65536) along the length of the strip
   // (strip.numPixels() steps):
-  int j = piecewise_linear(i, points);
-
   if (ncolorfrac != 0) {
     pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
   } else {
     pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
   }
+#endif
+
   if (nbrightloop != 0) { // will change Value (brightness)
     // Offset pixel val by an amount to make nbrightloop/ nbrightfrac  revolutions of the
     // brightness wheel (range of 256) along the length of the strip
     if (nbrightfrac != 0) {
       pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels() / nbrightfrac);
-    } else {
-      pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels());
     }
     // need empirical adjustment as for too low value LEDs don't shine at all
     if (force_day or ( not force_night and IsDay(t))) {
@@ -1807,9 +1872,37 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
     }
   }
 
+#ifdef SEPARATE_RGB
+  if (nredfrac == 0) {
+    pixelR = 0;
+  } else {
+    pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
+    pixelR = pixelRcol >> 16;
+  }
+  if (ngreenfrac == 0) {
+    pixelG = 0;
+  } else {
+    pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
+    pixelG = pixelGcol >> 8;
+  }
+  if (nbluefrac == 0) {
+    pixelB = 0;
+  } else {
+    pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
+    pixelB = pixelBcol;
+  }
+  strip.setPixelColor(ClockCorrect(i + nodepix), pixelR, pixelG, pixelB);
+#ifdef HAS_24_RING
+  stripinner.setPixelColor(ClockCorrect(i + nodepix) * 2 / 5, pixelR, pixelG, pixelB);
+#endif
+#else
   // Using 3 argument strip.ColorHSV(): a hue (0 to 65535),saturation and value (brightness) (each 0 to 255).
   // Passed through strip.gamma32() to provide 'truer' colors before assigning to each pixel:
   strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue, pixelSat, pixelVal)));
+#ifdef HAS_24_RING
+  stripinner.setPixelColor(ClockCorrect(i + nodepix) * 2 / 5, stripinner.gamma32(stripinner.ColorHSV(pixelHue, pixelSat, pixelVal)));
+#endif
+#endif
   yield();
 }
 
@@ -1887,6 +1980,9 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
 
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
+#ifdef HAS_24_RING
+    stripinner.show();
+#endif
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
@@ -1912,6 +2008,9 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
   int maxcnt;
   points = points_for_embedding(embedding);
   strip.fill(); // clear
+#ifdef HAS_24_RING
+  stripinner.fill(); // clear
+#endif
   while (time_elapsed < duration) {
     if (blocksize > 0) {
       maxcnt = blocksize;
@@ -1940,6 +2039,9 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
+#ifdef HAS_24_RING
+    stripinner.show();
+#endif
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
@@ -2022,7 +2124,8 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize,  time_t t, uint1
   time_elapsed = 0;
   uint16_t time_start = millis();
   std::vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
-  for (int i = 0; i < sinksize; i++) {
+  // Limit sinksize
+  for (int i = 0; i < min(sinksize, 120); i++) {
     path.push_back(0);
   }
   int direction = 1;
@@ -2067,6 +2170,9 @@ void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uin
   numff = max(1, numff); // will blow up otherwise
   while (time_elapsed < duration) {
     strip.fill(); // clear
+#ifdef HAS_24_RING
+    stripinner.fill();
+#endif
     for (int i = 0; i < numff; i++) {
       pixel = random(NUM_LEDS);
       if (hueInc == 0) {
@@ -2080,10 +2186,21 @@ void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uin
       }
       Sat = random(minSat, maxSat);
       Val = random(minVal, maxVal);
+#ifdef HAS_24_RING
+      if (pixel % 2 == 0) {
+        stripinner.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+      } else {
+        strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+      }
+#else
       strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+#endif
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
+#ifdef HAS_24_RING
+    stripinner.show(); // Update strip with new contents
+#endif
     yield();
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
@@ -2249,8 +2366,12 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, lon
 // strip.Color(red, green, blue) as shown in the loop() function above),
 // and a delay time (in milliseconds) between pixels.
 void colorWipe(uint32_t color, int wait, time_t t) {
+  int isecond = second(t);
+  int iminute = (60 * minute(t) + isecond + 30) / 60; // round to nearest minute
+  int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-    strip.setPixelColor(ClockCorrect(i), color);         //  Set pixel's color (in RAM)
+    strip.setPixelColor(ClockCorrect(i + ihour + 30), color);         //  Set pixel's color (in RAM)
+    strip.setPixelColor(ClockCorrect(-i + ihour + 30), color);         //  Set pixel's color (in RAM)
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show();                          //  Update strip to match
     yield();
