@@ -34,10 +34,15 @@
 //#define IRIS_CLOCK
 #define TEST_CLOCK
 //#define GBT_CLOCK
+// #define BRYN_CLOCK
 
 //#if defined BEDROOM_CLOCK || defined TEST_CLOCK
 #if defined BEDROOM_CLOCK
 #define MUSIC
+#define HASMIC
+#endif
+
+#if defined BRYN_CLOCK
 #define HASMIC
 #endif
 
@@ -117,7 +122,7 @@ RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 },
 RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 // Make clock go forwards or backwards (dependant on hardware)
-#ifdef BEDROOM_CLOCK
+#ifdef BEDROOM_CLOCK || defined BRYN_CLOCK
 bool ClockGoBackwards = true;
 #endif
 #if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK
@@ -233,8 +238,8 @@ unsigned long int update_interval_secs = 3601;
 NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
-#ifdef BEDROOM_CLOCK
-#define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin
+#ifdef BEDROOM_CLOCK || defined BRYN_CLOCK
+#define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin RX
 #endif
 #if defined IRIS_CLOCK || defined GBT_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
