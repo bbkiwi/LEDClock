@@ -219,8 +219,8 @@ function patternEffect(){
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
-  if (num == 50) {
-    num = getRandomIntInclusive(1, 41);
+  if (num == 43) {
+    num = getRandomIntInclusive(1, 42);
   }
   connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';

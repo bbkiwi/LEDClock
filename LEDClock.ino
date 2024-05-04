@@ -40,14 +40,24 @@
 #if defined BEDROOM_CLOCK
 #define MUSIC
 #define HASMIC
+#define SENSOR_CUTOFF 700
+#define SENSOR_LOW_TIME 1000
+#define SENSOR_HIGH_TIME 2000
 #endif
 
 #if defined BRYN_CLOCK
 #define HASMIC
+#define SENSOR_CUTOFF 100
+#define SENSOR_LOW_TIME 500
+#define SENSOR_HIGH_TIME 1000
 #endif
 
 #if defined TEST_CLOCK
 #define HAS_24_RING
+#define HASMIC
+#define SENSOR_CUTOFF 100
+#define SENSOR_LOW_TIME 500
+#define SENSOR_HIGH_TIME 1000
 #endif
 
 /* Cass Bay */
@@ -122,7 +132,7 @@ RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 },
 RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 // Make clock go forwards or backwards (dependant on hardware)
-#ifdef BEDROOM_CLOCK || defined BRYN_CLOCK
+#if defined BEDROOM_CLOCK || defined BRYN_CLOCK
 bool ClockGoBackwards = true;
 #endif
 #if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK
@@ -238,14 +248,13 @@ unsigned long int update_interval_secs = 3601;
 NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
-#ifdef BEDROOM_CLOCK || defined BRYN_CLOCK
+#if defined BEDROOM_CLOCK || defined BRYN_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin RX
 #endif
-#if defined IRIS_CLOCK || defined GBT_CLOCK
+#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
 #endif
 #ifdef HAS_24_RING
-#define NEOPIXEL_PIN 4      // This is the D2 pin
 #define NEOPIXEL_INNER_PIN 5      // This is the D1 pin
 #define NUM_INNER_LEDS 24
 #endif
@@ -277,7 +286,7 @@ Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_
 bool ClockInitialized = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
-
+unsigned long prev_sound_time = 0;
 const int ESP_BUILTIN_LED = 2;
 
 void setup() {
@@ -356,6 +365,7 @@ void loop() {
   MDNS.update();                              // must have above as well
 
   if (light_alarm_num)  {
+    light_alarm_parm1 = max(light_alarm_parm1, 1);
     show_alarm_pattern(light_alarm_num, 10000, light_alarm_parm1, light_alarm_parm2, light_alarm_parm3, light_alarm_parm4, light_alarm_parm5, light_alarm_parm6);
     light_alarm_num = 0;
   }
@@ -436,10 +446,17 @@ void loop() {
 #ifdef HASMIC
   // read the analog in value coming from microphone
   int sensorValue = analogRead(analogInPin);
-  if (sensorValue > 900 ) {
-    Serial.println(sensorValue);
-    light_alarm_num = random(1, 40);
-    time_elapsed = 0;
+  if (sensorValue > SENSOR_CUTOFF ) {
+    unsigned long sound_time = millis();
+    int sound_gap = sound_time - prev_sound_time;
+    sprintf(buf, "Sound:%d, elaspsed time:%d\n", sensorValue, sound_gap);
+    prev_sound_time = sound_time;
+    Serial.println(buf);
+    if (sound_gap > SENSOR_LOW_TIME and sound_gap < SENSOR_HIGH_TIME) {
+      //Could randomly assign valuse to light_alarm_parm1, ...
+      light_alarm_num = random(6, 42);
+    }
+    //time_elapsed = 0;
   }
 #endif
 
@@ -478,145 +495,144 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
 
   switch (light_alarm_num) {
-    case 1:  // rainbow 10 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1, now());
+    case 1: // wait parm1, parm2 number of worms sink size parm3 maxlen parm4 maxcycle parm5 dir parm6 (-1, 0=rand, 1)
+      moveworms(parm1, parm2, ihour, parm3, parm4, parm5, parm6,  now(), duration);
       break;
-    case 2: // rainbow 5 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 5, -1, now());
-      break;
-    case 3: // rainbow 1 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 1, -1, now());
-      break;
-    case 4: // ranbow2 0 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
-      break;
-    case 5: // 3 worms fast 1 wait
-      moveworms(parm1, parm2, ihour, parm3, now(), duration);
-      break;
-    case 6: // 3  worms slow 5 wait
-      moveworms(5, 3, ihour, 1, now(), duration);
-      break;
-
-    //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
-    case 7:
-      cellularAutomata(250, 26, 30, 60, random(65535), now(), duration);
-      break;
-    case 8:
-      cellularAutomata(250, 26, 26, 26, random(65535), now(), duration);
-      break;
-    case 9:
-      cellularAutomata(250, 30, 30, 30, random(65535), now(), duration);
-      break;
-    case 10:
-      cellularAutomata(250, 60, 60, 60, random(65535), now(), duration);
-      break;
-    case 11:
-      // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), duration);
-      cellularAutomata(250, 110, 110, 110, random(65535), now(), duration);
-      break;
-    case 12:
-      cellularAutomata(50, 26, random(65535), now(), duration);
-      break;
-    case 13:
-      cellularAutomata(50, 30, random(65535), now(), duration);
-      break;
-    case 14:
-      cellularAutomata(50, 45, random(65535), now(), duration);
-      break;
-    case 15:
-      cellularAutomata(50, 57, random(65535), now(), duration);
-      break;
-    case 16:
-      cellularAutomata(50, 60, random(65535), now(), duration);
-      break;
-    case 17:
-      cellularAutomata(50, 73, random(65535), now(), duration);
-      break;
-    case 18:
-      cellularAutomata(50, 110, random(65535), now(), duration);
-      break;
-    case 19: // fire
-      fire(now(), duration);
-      break;
-    // fireflys
-    case 20:
-      firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
-      break;
-    case 21:
+    case 2:
       firefly(parm1, parm2, 0, 65535, parm3, 255, 256,  255, 256, now(), duration);
       break;
-    case 22:
-      firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), duration);
-      break;
-    case 23:
-      firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), duration);
-      break;
-    case 24:
-      firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), duration);
-      break;
-    // (partial) rainbows
-    case 25:
+    case 3:
       //void rainbow(wait, embedding, long firsthue, hueinc,  ncolorloop, ncolorfrac, nodepix, time_t t, uint16_t duration, nbrightloop = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
       // rgb sep                                                 nrfrac     ngfrac                                           nbfrac
       //          emb  firsthue,hueinc nrfra ngfrac                        nbrfrac   brightfrac valinc
       rainbow(0, parm1, 0,     parm2, parm3, parm4, ihour, now(), duration, parm5,   parm6); // full rainbow ring rotating
       //rainbow(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
-    case 26:
-      color_wipe(parm1, parm2, parm3, parm4 == 0 ? 0 : 65336 / parm4 , parm5 == 0 ? 0 : 100 / parm5 , parm6, ihour, now(), duration); // color_wipe
+    case 4:
+      color_wipe(parm1, parm2, parm3, parm4, parm5, parm6, ihour, now(), duration, 120, 0); // color_wipe
       // old color_wipe(20, parm1, 0, parm2 == 0 ? 0 : 65336 / parm2 , parm3 == 0 ? 0 : 100 / parm3 , 0, ihour, now(), duration); // color_wipe
       //rainbow(0, 1, 0, 32, 1, 1, ihour, now(), duration);  // full rainbox ring rotating 8 times slower
       break;
+    case 5: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
+      showlights(duration, parm1, parm2, parm3, -1, -1, -1, -1, -1, now());
+      break;
+    case 6:  // rainbow 10 wait
+      showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1, now());
+      break;
+    case 7: // rainbow 5 wait
+      showlights(duration, -1, -1, -1, -1, -1, -1, 5, -1, now());
+      break;
+    case 8: // rainbow 1 wait
+      showlights(duration, -1, -1, -1, -1, -1, -1, 1, -1, now());
+      break;
+    case 9: // ranbow2 0 wait
+      showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1, now());
+      break;
+    case 10: //
+      moveworms(5, 3, ihour, 1, 20, 8, 0, now(), duration);
+      break;
+    //cellularAutomata(int wait, uint8_t rule, long pixelhue, time_t t, uint16_t duration)
+    case 11:
+      cellularAutomata(250, 26, 30, 60, random(65535), now(), duration);
+      break;
+    case 12:
+      cellularAutomata(250, 26, 26, 26, random(65535), now(), duration);
+      break;
+    case 13:
+      cellularAutomata(250, 30, 30, 30, random(65535), now(), duration);
+      break;
+    case 14:
+      cellularAutomata(250, 60, 60, 60, random(65535), now(), duration);
+      break;
+    case 15:
+      // goes black cellularAutomata(250, 104, 104, 104, random(65535), now(), duration);
+      cellularAutomata(250, 110, 110, 110, random(65535), now(), duration);
+      break;
+    case 16:
+      cellularAutomata(50, 26, random(65535), now(), duration);
+      break;
+    case 17:
+      cellularAutomata(50, 30, random(65535), now(), duration);
+      break;
+    case 18:
+      cellularAutomata(50, 45, random(65535), now(), duration);
+      break;
+    case 19:
+      cellularAutomata(50, 57, random(65535), now(), duration);
+      break;
+    case 20:
+      cellularAutomata(50, 60, random(65535), now(), duration);
+      break;
+    case 21:
+      cellularAutomata(50, 73, random(65535), now(), duration);
+      break;
+    case 22:
+      cellularAutomata(50, 110, random(65535), now(), duration);
+      break;
+    case 23: // fire
+      fire(now(), duration);
+      break;
+    // fireflys
+    case 24:
+      firefly(1000, 5, 0, 65535, 256, 255, 256,  255, 256, now(), duration);
+      break;
+    case 25:
+      firefly(1000, 5, 32000, 32001, 0, 255, 256,  255, 256, now(), duration);
+      break;
+    case 26:
+      firefly(1000, 5, 0, 65535, 33000, 255, 256,  255, 256, now(), duration);
+      break;
     case 27:
+      firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, now(), duration);
+      break;
+    // (partial) rainbows
+    case 28:
       rainbow(0, 1, 0, 256, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating
       break;
-    case 28:
+    case 29:
       rainbow(0, 1, 0, 32, 4, 1, ihour, now(), duration); // 4 full rainbows in ring rotating 8 times slower
       break;
-    case 29:
+    case 30:
       rainbow(0, 1, 32000, 32, 4, 1, ihour, now(), duration); // 4 full rainbows as above starting different place
       break;
-    case 30:
-      rainbow(0, 2, 0, 256, 4, 1, ihour, now(), duration); //  4 full and 4 reverse flowing from ihour led
-      break;
     case 31:
-      rainbow(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 0, 256, 4, 1, ihour, now(), duration); //  4 full and 4 reverse flowing from ihour led
       break;
     case 32:
       rainbow(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
       break;
     case 33:
-      rainbow(0, 2, 0, 16, 1, 4, ihour, now(), duration); //   1/64 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 0, 256, 1, 4, ihour, now(), duration); //  1/4 rainbox and its reverse flowing from ihour led
       break;
     case 34:
-      rainbow(0, 2, 32000, 16, 1, 4, ihour, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from ihour led
+      rainbow(0, 2, 0, 16, 1, 4, ihour, now(), duration); //   1/64 rainbox and its reverse flowing from ihour led
       break;
     case 35:
-      rainbow(0, 3, 0, 256, 1, 1, ihour, now(), duration);
+      rainbow(0, 2, 32000, 16, 1, 4, ihour, now(), duration); // start diff place 1/64 rainbox and its reverse flowing from ihour led
       break;
     case 36:
-      rainbow(0, 3, 0, 256, 4, 1, ihour, now(), duration);
+      rainbow(0, 3, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 37:
-      rainbow(0, 4, 0, 256, 1, 1, ihour, now(), duration);
+      rainbow(0, 3, 0, 256, 4, 1, ihour, now(), duration);
       break;
     case 38:
-      rainbow(0, 4, 0, 256, 4, 1, ihour, now(), duration);
+      rainbow(0, 4, 0, 256, 1, 1, ihour, now(), duration);
       break;
     case 39:
+      rainbow(0, 4, 0, 256, 4, 1, ihour, now(), duration);
+      break;
+    case 40:
       rainbow(0, 5, 0, 256, 1, 1, ihour, now(), duration);
       break;
     // color wipes
-    case 40:
-      showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1, now());
-      break;
     case 41:
-      showlights(duration, parm1, parm2, parm3, -1, -1, -1, -1, -1, now());
+      showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1, now());
       break;
     case 42:
       showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1, now());
       break;
-    case 50:
+    case 43:
     default:
       light_alarm_num = random(1, 42);
       show_alarm_pattern(light_alarm_num, duration, parm1, parm2, parm3, parm4, parm5, parm6);
@@ -1787,6 +1803,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 
 #include <cmath>
 #include <vector>
+#include <numeric>
 
 int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
@@ -2040,7 +2057,7 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
           firstPixelHue += hueinc;
         }
       }
-      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, 0, nbrightloop, nbrightfrac);
+      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, nbrightfrac, nbrightloop, 0);
     }
     SetBrightness(t); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
@@ -2125,22 +2142,32 @@ class Worm
     };
 };
 
-void moveworms(int wait, int nworms, int nodepix, int sinksize,  time_t t, uint16_t duration) {
+void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int maxcyclelen, int dirchoice,  time_t t, uint16_t duration) {
+  // wait=0 and nworms=0 give wdt reset
   time_elapsed = 0;
   uint16_t time_start = millis();
-  std::vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
+  std::vector<int>path(NUM_LEDS);
+  std::iota(path.begin(), path.end(), 0); // path will become: [0..NUM_LEDS-1]
+
+  //std::vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
   // Limit sinksize
   for (int i = 0; i < min(sinksize, 120); i++) {
     path.push_back(0);
   }
-  int direction = 1;
+  int dir;
   nworms = min(abs(nworms), 10);
   std::vector<Worm>Worms;
   for (int i = 0; i < nworms; i++) {
-    int lenworm = random(2, 15);
-    int cyclelen = random(1, 8);
-    int dir = random(2);
-    dir = 2 * dir - 1;
+    int lenworm = random(2, min(NUM_LEDS / 4, 2 + abs(maxlen)));
+    int cyclelen = random(1, min(20, 1 + abs(maxcyclelen)));
+    if (dirchoice < 0) {
+      dir = -1;
+    } else if (dirchoice > 0) {
+      dir = 1;
+    } else {
+      dir = 2 * random(2) - 1;
+    }
+
     std::vector <int> colors = {};
     int col = random(65535);
     for (int len = 0; len < lenworm; len++) {
@@ -2269,7 +2296,7 @@ uint32_t Substract(uint32_t color1, uint32_t color2)
 //  strip.setPixelColor(position, blended_color);
 //}
 
-void SubstractColor(uint8_t position, uint32_t color)
+void SubstractColor(int position, uint32_t color)
 {
   uint32_t blended_color = Substract(strip.getPixelColor(position), color);
   strip.setPixelColor(position, blended_color);
