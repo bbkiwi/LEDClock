@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>LED Control</title>
     <link href='main.css' rel='stylesheet' type='text/css'>
-	<link rel="stylesheet" href="dist/simplepicker.css">
+	  <link rel="stylesheet" href="dist/simplepicker.css">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
     <link rel="icon" type="image/png" sizes="144x144"  href="/favicon-144x144.png">
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon.ico">
@@ -50,6 +50,29 @@
         .btn-group button:hover {
           background-color: #3e8e41;
         }
+
+         .tabledays{
+            table-layout: fixed;
+            float: center;
+
+        }
+         .tabledays td{
+            width: 10px;
+            text-align: center;
+
+        }
+
+       .tablemode{
+            table-layout: fixed;
+            float: center;
+
+        }
+         .tablemode td{
+            width: 200px;
+            text-align: center;
+
+        }
+
   </style>
 </head>
 
@@ -57,6 +80,7 @@
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
 <button onclick="toggleShowHide('Display-Control')">Display Control</button>
 <button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
+<button onclick="toggleShowHide('Mode-Control')">Mode Control</button>
 <div id="Clock-Control" style="display: block;">
     <center>
         <header>
@@ -202,6 +226,8 @@
                         </select></p>
           <button class="simplepicker-btn">Choose Date and Time</button>
           <p style="margin:8px 0px"><button id="saveddatetime" class="button">Saved Date Time</button></p>
+
+          <div>
              <p style="margin:8px 0px"><button id="repeat" class="button">Repeat</button>
              <select id="alarmrepeat" onchange="AlarmrepeatChanged();">
                         <option value="86400">Daily</option>
@@ -211,16 +237,71 @@
                         <option value="other">Other</option>
                         </select>
                         <input hidden type="text" id="othervalue" size='8' value=0>
-            <button id="dayonly" class="button" onclick="handleWhen();">Day Only</button>
+                        </p>
+
+                        <table class="tabledays">
+                        <tr><td>S</td><td>M</td><td>T</td><td>W</td><td>T</td><td>F</td><td>S</td></tr>
+                        <tr>
+                          <td><input type="checkbox" id="dayactive1"></td><td>
+                          <input type="checkbox" id="dayactive2"></td><td>
+                          <input type="checkbox" id="dayactive3"></td><td>
+                          <input type="checkbox" id="dayactive4"></td><td>
+                          <input type="checkbox" id="dayactive5"></td><td>
+                          <input type="checkbox" id="dayactive6"></td><td>
+                          <input type="checkbox" id="dayactive7"></td>
+                        </tr>
+                        </table>
+
+             </div>
+            <p><button id="dayonly" class="button" onclick="handleWhen();">Day Only</button></p>
 
              <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
              <input type="text" id="alarmduration" value=10000></p>
-             <p>Day sunrise plus <input type="text" size = "4" id="AdjMorn" value=0> Night sunset plus <input type="text" size = "4" id="AdjNight" value=0></p>
              <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Settings</button>
              </p>
              <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
         </div>
     </center>
+</div>
+
+<div id="Mode-Control" style="display: none;">
+    <center>
+        <header>
+            <h1 style ="margin-bottom: 0">Mode Control </h1>
+            <h4 style ="margin-top: 0">&#10003; = mins relative to sun</h4>
+        </header>
+
+        <table class="tablemode" id="ModeTimesTable">
+            <thead>
+                <tr><th></th><th>Day Starts</th><th>Night Starts</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Sun</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Mon</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Tue</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Wed</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Thu</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Fri</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Sat</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+            </tbody>
+        </table>
+
+             <p>Day sunrise plus <input type="text" size = "4" id="AdjMorn" value=0> Night sunset plus <input type="text" size = "4" id="AdjNight" value=0></p>
+             <p style="margin:8px 0px"><button class="button" onclick="sendTableData();">Send Table Data</button>
+             </p>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Settings</button>
+             </p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
+
+    </center>
+
 </div>
 
   <div class="picker-area">
@@ -254,6 +335,8 @@
     simplepicker.on('close', (date) => {
       $eventLog.innerHTML = 'Picker Closed'  + '\n' + $eventLog.innerHTML;
     });
+
+
   </script>
   </div>
 </body>

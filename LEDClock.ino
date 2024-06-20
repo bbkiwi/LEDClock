@@ -8,6 +8,19 @@
    Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
+//TODO starting to put in features request by Colin
+// fix IsDay() to be implement like an alarm eg. use time of
+//     night begins and day begins to turn on and off IsDay
+//     then can have time before day begins and night begins to fade
+//     in or out display
+// TODO store in config
+// Daily IsDay specs either specify directly or as ajustments to sun rise/set
+// have partially changed gui but not storing in config or program yet
+// only have for weekdays and weekend, now built in default
+// Alarms  specify days TODO store in config
+// Make gui for all this
+//
+// TODO have some very soothing displays
 
 //NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
 /************* Declare included libraries ******************************/
@@ -60,6 +73,7 @@
 #define SENSOR_HIGH_TIME 1000
 #endif
 
+#define ONE_WEEK 604800 // seconds
 /* Cass Bay */
 #define LATITUDE        -43.601131
 #define LONGITUDE       172.689831
@@ -147,12 +161,28 @@ int hour_width[NUM_DISP_OPTIONS] = {3, 5, 3, 3, 0};
 int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 
 //Set brightness by time for night and day mode
+
+//Default
+//TODO need to save in config
+TIME WeekNight = {20, 00}; // Night time to go dim
+TIME WeekMorning = {6, 46}; //Morning time to go bright
+TIME WeekendNight = {21, 00}; // Night time to go dim
+TIME WeekendMorning = {9, 15}; //Morning time to go bright
+
+//TODO need to save in config
+// if setting day and night by the sun can adjust
+// The following indexed by weekday(now()) eg 1 Sun, 2 Mon, ... 8 Sat
+//int AdjustMorning[8] = {0};
+//int Adjust[8] = {0};
 int AdjustMorning = 0;
 int AdjustNight = 0;
-TIME WeekNight = {18, 00}; // Night time to go dim
-TIME WeekMorning = {7, 15}; //Morning time to go bright
-TIME WeekendNight = {18, 00}; // Night time to go dim
-TIME WeekendMorning = {7, 15}; //Morning time to go bright
+bool UseSun = false;
+
+//Default
+//TODO need to save in config
+TIME Night[8] = {WeekNight, WeekendNight, WeekNight, WeekNight, WeekNight, WeekNight, WeekNight, WeekendNight}; // time to go dim so
+TIME Morning[8] = {WeekMorning, WeekendMorning, WeekMorning, WeekMorning, WeekMorning, WeekMorning, WeekMorning, WeekendMorning}; // time to go bright
+
 TIME Sunrise;
 TIME Sunset;
 TIME CivilSunrise;
@@ -198,6 +228,7 @@ tmElements_t calcTime = {0};
 //  WEEKLY
 //} alarmType;
 
+//TODO save daysactive in config, have input via gui
 struct ALARM {
   bool alarmSet = false;
   int alarmType; // if neg only display during daylight mode
@@ -210,6 +241,11 @@ struct ALARM {
   uint16_t duration; //ms
   uint32_t repeat; //sec
   tmElements_t alarmTime;
+  // for k = 1,...k bit k of daysactive is 1 if alarm active daysOfWeek[k]
+  // eg daysactive = 0b1111100 weekdays only, 0b10000010 weekend only etc.
+  //        Sa Fr Th We Tu Mo Su -
+  //
+  uint8_t daysactive = 0b1111100; //weekdays only
 };
 
 #define NUM_ALARMS 5
@@ -397,13 +433,13 @@ void loop() {
   // Note if multiple alarms scheduled for same time they will go consecutively
   //
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    if (alarmInfo[alarm_ind].alarmSet && prevDisplay >= makeTime(alarmInfo[alarm_ind].alarmTime))
+    if (alarmInfo[alarm_ind].alarmSet && alarmInfo[alarm_ind].daysactive > 0 && prevDisplay >= makeTime(alarmInfo[alarm_ind].alarmTime))
     {
-      if (prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime)) {
-        // only show the alarm if close to set time
+      currentTime = now();
+      if ((prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime)) and ( alarmInfo[alarm_ind].daysactive & (1 << weekday(currentTime)) ) ) {
+        //if (prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime))  {
+        // only show the alarm if close to set time and on active day
         // this prevents alarm from going off on a restart where configured alarm is in past
-        currentTime = now();
-        //if (IsDay(currentTime) || alarmInfo[alarm_ind].alarmType > 0) {
         if (force_day || ( not force_night and IsDay(currentTime)) || alarmInfo[alarm_ind].alarmType > 0) {
           show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration,
                              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
@@ -431,7 +467,14 @@ void loop() {
       } else { // update next repeat
         nextAlarmTime = makeTime(alarmInfo[alarm_ind].alarmTime);
         currentTime = now();
-        while (nextAlarmTime <= currentTime) nextAlarmTime += alarmInfo[alarm_ind].repeat;
+        // increment till get to next time (and day of week) alarm should fire
+        while (not ( alarmInfo[alarm_ind].daysactive & (1 << weekday(nextAlarmTime))) or nextAlarmTime <= currentTime )
+        {
+          //Serial.print(not ( alarmInfo[alarm_ind].daysactive & (1<<weekday(nextAlarmTime))) );
+          nextAlarmTime += alarmInfo[alarm_ind].repeat;
+          // to prevent infinite loop as incrementing could miss the activedays in some cases
+          if (nextAlarmTime >= currentTime + ONE_WEEK) break;
+        }
         breakTime(nextAlarmTime, alarmInfo[alarm_ind].alarmTime);
         sprintf(buf, "Next Alarm [%d] %d:%02d:%02d %s %d %s %d", alarm_ind, hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
@@ -477,7 +520,7 @@ void loop() {
   // Check if new day and recalculate sunSet etc.
   if (prevDisplay >= makeTime(calcTime))
   {
-    calcSun(); // computes sun rise and sun set, updates calcTime
+    calcSun(); // computes sun rise and sun set, updates calcTime  night and day mode times
   }
   delay(10); // needed to keep wifi going
 }
@@ -1305,17 +1348,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
         sprintf(buf, "WHATTIME%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
-        //digitalWrite(ESP_BUILTIN_LED, 0);  // turn on the LED
-      } else if (payload[0] == 'R') {                      // the browser sends an R to reset alarm
-        int alarm_ind;
-        sscanf((char *) payload, "R%d", &alarm_ind);
-        //PREVENT bad input
-        if (alarm_ind >= 5) alarm_ind = 0;
-        if (alarm_ind < 0) alarm_ind = 0;
-        alarmInfo[alarm_ind].alarmSet = false;
-        Serial.printf("%Reset alarm[%d]\n", alarm_ind);
-        sprintf(buf, "Reset alarm[%d]", alarm_ind);
-        webSocket.sendTXT(num, buf);
 
       } else if (payload[0] == 'J') {   // to aJust day/night
         sscanf((char *) payload, "J%d %d", &AdjustMorning, &AdjustNight);
@@ -1323,7 +1355,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         webSocket.sendTXT(num, buf);
         Serial.println(buf);
 
-      } else if (payload[0] == 'A') {                      // the browser sends an A to set alarm
+      } else if (payload[0] == 'A' or payload[0] == 'R') {  // the browser sends an A to set alarm, R to reset
+        bool makeset = payload[0] == 'A';
+        payload[0] = 'A';
         char Aday[4]; //3 char
         char Amonth[4]; //3 char
         int  AmonthNum;
@@ -1340,12 +1374,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int parm5;
         int parm6;
         int alarmrepeat;
+        int daysactive;
         int alarmduration;
 
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
-        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3,
-               &parm4, &parm5, &parm6, &alarmrepeat, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3,
+               &parm4, &parm5, &parm6, &alarmrepeat, &daysactive, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
         //PREVENT bad input
         if (alarm_ind >= 5) alarm_ind = 0;
         if (alarm_ind < 0) alarm_ind = 0;
@@ -1354,13 +1389,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Serial.printf("Set alarm[%d] for %s %s %2d %2d %4d %2d:%2d\n", alarm_ind, Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
+        alarmInfo[alarm_ind].alarmSet = makeset;
+        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, parm4, parm5, parm6, alarmduration, alarmrepeat, daysactive, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
 
-        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, parm4, parm5, parm6, alarmduration, alarmrepeat, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
-        alarmInfo[alarm_ind].alarmSet = true;
-        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d, daysactive=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
                 alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
                 alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
-                alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+                alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive,
                 hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -1387,10 +1422,10 @@ void send_displayInfo() {
 
 void send_alarmInfo(int alarm_ind) {
   // send back info same order as payload when alarm defined
-  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s %s %2d %4d %2d:%2d:%2d, %d, %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %2d:%2d:%2d, %d, %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
           alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
-          alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].duration,
+          alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive, alarmInfo[alarm_ind].duration,
           daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
           monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
           day(makeTime(alarmInfo[alarm_ind].alarmTime)),
@@ -1400,7 +1435,7 @@ void send_alarmInfo(int alarm_ind) {
   webSocket.sendTXT(websocketId_num, buf);
 }
 
-void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6,  uint16_t t, uint32_t r, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
+void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6,  uint16_t t, uint32_t r, int da, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   alarmInfo[alarm_ind].alarmType = alarmtype;
   alarmInfo[alarm_ind].parm1 = p1;
   alarmInfo[alarm_ind].parm2 = p2;
@@ -1410,6 +1445,7 @@ void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int 
   alarmInfo[alarm_ind].parm6 = p6;
   alarmInfo[alarm_ind].duration = t;
   alarmInfo[alarm_ind].repeat = r;
+  alarmInfo[alarm_ind].daysactive = da;
   alarmInfo[alarm_ind].alarmTime.Second = s;
   alarmInfo[alarm_ind].alarmTime.Minute = m;
   alarmInfo[alarm_ind].alarmTime.Hour = h;
@@ -1417,10 +1453,10 @@ void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int 
   alarmInfo[alarm_ind].alarmTime.Month = mth;
   //NOTE year is excess from 1970
   alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
-  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d, daysactive=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
           alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
-          alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
+          alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive,
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
           second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
           monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
@@ -1447,6 +1483,7 @@ void setalarmurl()
   String p6 = server.arg("parm6");
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
+  String da = server.arg("active"); // days active coded as binary
   String h = server.arg("hour");
   String m = server.arg("min");
   String s = server.arg("sec");
@@ -1466,6 +1503,7 @@ void setalarmurl()
            (strlen(p6.c_str()) > 0) ? p6.toInt() : alarmInfo[alarm_num].parm6,
            (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
            (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
+           (strlen(da.c_str()) > 0) ? da.toInt() : alarmInfo[alarm_num].daysactive,
            (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
            (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo[alarm_num].alarmTime.Minute,
            (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo[alarm_num].alarmTime.Hour,
@@ -1543,8 +1581,8 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   Sunset.Minute = sunset - 60 * Sunset.Hour + 0.5;
   CivilSunset.Hour = civilsunset / 60;
   CivilSunset.Minute = civilsunset - 60 * CivilSunset.Hour + 0.5;
-  WeekNight.Hour = (civilsunset + AdjustNight) / 60;
-  WeekNight.Minute = (civilsunset + AdjustNight) - 60 * WeekNight.Hour + 0.5;
+  //WeekNight.Hour = (civilsunset + AdjustNight) / 60;
+  //WeekNight.Minute = (civilsunset + AdjustNight) - 60 * WeekNight.Hour + 0.5;
 
   NauticalSunset.Hour = nauticalsunset / 60;
   NauticalSunset.Minute = nauticalsunset - 60 * NauticalSunset.Hour + 0.5;
@@ -1552,8 +1590,8 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   AstroSunset.Minute = astrosunset - 60 * AstroSunset.Hour + 0.5;
   Sunrise.Hour = sunrise / 60;
   Sunrise.Minute = sunrise - 60 * Sunrise.Hour + 0.5;
-  WeekMorning.Hour = (sunrise + AdjustMorning) / 60;
-  WeekMorning.Minute = (sunrise + AdjustMorning) - 60 * WeekMorning.Hour + 0.5;
+  //WeekMorning.Hour = (sunrise + AdjustMorning) / 60;
+  //WeekMorning.Minute = (sunrise + AdjustMorning) - 60 * WeekMorning.Hour + 0.5;
   CivilSunrise.Hour = civilsunrise / 60;
   CivilSunrise.Minute = civilsunrise - 60 * CivilSunrise.Hour + 0.5;
   NauticalSunrise.Hour = nauticalsunrise / 60;
@@ -1561,8 +1599,8 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   AstroSunrise.Hour = astrosunrise / 60;
   AstroSunrise.Minute = astrosunrise - 60 * AstroSunrise.Hour + 0.5;
 
-  WeekendNight = WeekNight;
-  WeekendMorning = WeekMorning;
+  //WeekendNight = WeekNight;
+  //WeekendMorning = WeekMorning;
 
   nextCalcTime = currentTime;
   nextCalcTime += 24 * 3600;
@@ -1597,9 +1635,18 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
           monthNames[month(makeTime(calcTime))].c_str(), year(makeTime(calcTime)));
   webSocket.sendTXT(websocketId_num, buf);
 
+  if (UseSun) {
+    int ind = weekday(now());
+    Night[ind].Hour = (civilsunset + AdjustNight) / 60;
+    Night[ind].Minute = (civilsunset + AdjustNight) - 60 * Night[ind].Hour + 0.5;
+    Morning[ind].Hour = (sunrise + AdjustMorning) / 60;
+    Morning[ind].Minute = (sunrise + AdjustMorning) - 60 * Morning[ind].Hour + 0.5;
+  }
+
   sprintf(buf, "dim at %d:%02d, brighten at %d:%02d", WeekNight.Hour, WeekNight.Minute, WeekMorning.Hour, WeekMorning.Minute);
   webSocket.sendTXT(websocketId_num, buf);
 }
+
 
 bool SetClockFromNTP()
 {
@@ -1735,15 +1782,22 @@ bool IsDay(time_t t)
   // return false; // for debug if want to test night behaviour
   int NowHour = hour(t);
   int NowMinute = minute(t);
-  if ((weekday() >= 2) && (weekday() <= 6))
-    if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
-      return false;
-    else
-      return true;
-  else if ((NowHour > WeekendNight.Hour) || ((NowHour == WeekendNight.Hour) && (NowMinute >= WeekendNight.Minute)) || ((NowHour == WeekendMorning.Hour) && (NowMinute <= WeekendMorning.Minute)) || (NowHour < WeekendMorning.Hour))
+  int NowDay = weekday();
+
+  if ((NowHour > Night[NowDay].Hour) || ((NowHour == Night[NowDay].Hour) && (NowMinute >= Night[NowDay].Minute)) || ((NowHour == Morning[NowDay].Hour) && (NowMinute <= Morning[NowDay].Minute)) || (NowHour < Morning[NowDay].Hour))
     return false;
   else
     return true;
+
+  //  if ((weekday() >= 2) && (weekday() <= 6))
+  //    if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
+  //      return false;
+  //    else
+  //      return true;
+  //  else if ((NowHour > WeekendNight.Hour) || ((NowHour == WeekendNight.Hour) && (NowMinute >= WeekendNight.Minute)) || ((NowHour == WeekendMorning.Hour) && (NowMinute <= WeekendMorning.Minute)) || (NowHour < WeekendMorning.Hour))
+  //    return false;
+  //  else
+  //    return true;
 }
 
 //************* Function to set the clock brightness ******************************
