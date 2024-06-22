@@ -9,17 +9,18 @@
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
 //TODO starting to put in features request by Colin
-// fix IsDay() to be implement like an alarm eg. use time of
+//22 June 2024
+//TODO fix isDay to be implement like an alarm eg. use time of
 //     night begins and day begins to turn on and off IsDay
 //     then can have time before day begins and night begins to fade
 //     in or out display
-// TODO store in config
-// Daily IsDay specs either specify directly or as ajustments to sun rise/set
-// have partially changed gui but not storing in config or program yet
-// only have for weekdays and weekend, now built in default
-// Alarms  specify days TODO store in config
-// Make gui for all this
 //
+// Daily mode_changes either specify directly or as ajustments to sun rise/set
+// Now saved in config, but TODO from gui to flash
+// Canged gui but not storing in config or program yet
+// only have for weekdays and weekend, now built in default
+// Alarms  specify days now in config
+
 // TODO have some very soothing displays
 
 //NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
@@ -126,6 +127,14 @@ struct TIME {
   byte Hour, Minute;
 };
 
+//Create structure for mode information
+struct MODE_CHANGE {
+  bool useSun;
+  int sunDeviation;
+  TIME specificTime;
+};
+
+
 #define NUM_DISP_OPTIONS 5
 RGB SliderColor;
 // 5 Options for display index 0 normal day, 4 night,
@@ -163,25 +172,25 @@ int second_width[NUM_DISP_OPTIONS] = {0, -1, 0, 0, -1};
 //Set brightness by time for night and day mode
 
 //Default
-//TODO need to save in config
 TIME WeekNight = {20, 00}; // Night time to go dim
 TIME WeekMorning = {6, 46}; //Morning time to go bright
 TIME WeekendNight = {21, 00}; // Night time to go dim
 TIME WeekendMorning = {9, 15}; //Morning time to go bright
 
-//TODO need to save in config
-// if setting day and night by the sun can adjust
-// The following indexed by weekday(now()) eg 1 Sun, 2 Mon, ... 8 Sat
-//int AdjustMorning[8] = {0};
-//int Adjust[8] = {0};
-int AdjustMorning = 0;
-int AdjustNight = 0;
-bool UseSun = false;
 
-//Default
-//TODO need to save in config
-TIME Night[8] = {WeekNight, WeekendNight, WeekNight, WeekNight, WeekNight, WeekNight, WeekNight, WeekendNight}; // time to go dim so
-TIME Morning[8] = {WeekMorning, WeekendMorning, WeekMorning, WeekMorning, WeekMorning, WeekMorning, WeekMorning, WeekendMorning}; // time to go bright
+// if setting day and night by the sun can adjust
+// The following indexed by weekday(now()) eg 1 Sun, 2 Mon, ... 7 Sat
+
+//Default 1,2 for Sunday day,night; 3,4 for Monday etc
+MODE_CHANGE mode_change[14] = {
+  {false, 0, WeekendMorning}, {false, 0, WeekendNight},
+  {false, 0, WeekMorning}, {false, 0, WeekNight},
+  {false, 0, WeekMorning}, {false, 0, WeekNight},
+  {false, 0, WeekMorning}, {false, 0, WeekNight},
+  {false, 0, WeekMorning}, {false, 0, WeekNight},
+  {false, 0, WeekMorning}, {false, 0, WeekNight},
+  {false, 0, WeekendMorning}, {false, 0, WeekendNight}
+};
 
 TIME Sunrise;
 TIME Sunset;
@@ -192,15 +201,11 @@ TIME NauticalSunset;
 TIME AstroSunrise;
 TIME AstroSunset;
 
-
 byte day_brightness = 127; // keep below 127 to limit power use
 byte night_brightness = 16;
-// Can force night mode during day
-//     and day mode during night
-// force_night gets set to false when becomes night
-// force_day get set to false wehn become day
-bool force_night = false;
-bool force_day = false;
+// Can force night mode during day and day mode during night
+bool isDay = true; // gets set in main loop and also toggled by gui
+bool nextModeIsDay = false; // used when scheduling next mode
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
@@ -222,11 +227,6 @@ uint32_t led_color_alarm_rgb;
 //tmElements_t alarmTime;
 tmElements_t calcTime = {0};
 
-//typedef enum {
-//  ONCE,
-//  DAILY,
-//  WEEKLY
-//} alarmType;
 
 //TODO save daysactive in config, have input via gui
 struct ALARM {
@@ -250,10 +250,6 @@ struct ALARM {
 
 #define NUM_ALARMS 5
 ALARM alarmInfo[NUM_ALARMS];
-//alarmInfo.alarmSet = false;
-
-
-//bool alarmSet = false;
 
 uint16_t time_elapsed = 0;
 
@@ -301,10 +297,9 @@ NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, up
 //************* Declare user functions ******************************
 void Draw_Clock(time_t t, byte Phase);
 int ClockCorrect(int Pixel);
-void SetBrightness(time_t t);
+void SetBrightness();
 bool SetClockFromNTP();
 bool IsDst();
-bool IsDay();
 void limited_delay(int d);
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
 void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 0 );
@@ -334,21 +329,6 @@ void setup() {
   startOTA();                  // Start the OTA service
   startSPIFFS();               // Start the SPIFFS and list all contents
 
-  // Initialize alarmTime(s) to default (now)
-  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    breakTime(now(), alarmInfo[alarm_ind].alarmTime);
-    sprintf(buf, "Default alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d, adj %d %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-            alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-            alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
-            alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
-            hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-            second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-            monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)),
-            AdjustMorning, AdjustNight);
-    //Serial.println();
-    Serial.println(buf);
-  }
-
   if (!loadConfig()) {
     Serial.println("Failed to load config will use defaults");
     // use default parameters
@@ -361,18 +341,28 @@ void setup() {
   } else {
     // will have loaded the saved parameters
     Serial.println("Config loaded");
-    for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-      sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d\n %d:%02d:%02d %s %d %s %d, adj %d %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
-              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-              alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
-              alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat,
-              hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-              second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
-              monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)),
-              AdjustMorning, AdjustNight);
-      //Serial.println();
-      Serial.println(buf);
-    }
+  }
+  for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
+    sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d, active=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+            alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
+            alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+            alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive,
+            hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
+            second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
+            monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), year(makeTime(alarmInfo[alarm_ind].alarmTime)));
+    Serial.println(buf);
+  }
+  for (int ind = 1; ind < 8; ind++) {
+    int mode_night_ind = 2 * ind - 1;
+    int mode_day_ind = mode_night_ind - 1;
+    sprintf(buf, "Mode %s  Day: useSun[%d] dev=%d, %d:%02d, Night: useSun[%d] dev=%d, %d:%02d, ",
+            daysOfWeek[ind], mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
+            mode_change[mode_night_ind].useSun, mode_change[mode_night_ind].sunDeviation ,  mode_change[mode_night_ind].specificTime.Hour, mode_change[mode_night_ind].specificTime.Minute);
+    Serial.println(buf);
+
+
+
+
   }
   startWebSocket();            // Start a WebSocket server
   startMDNS();                 // Start the mDNS responder
@@ -429,6 +419,8 @@ void loop() {
   }
 #endif
 
+  // Check for mode_change and update isDay when change occures
+
   // Check for alarms
   // Note if multiple alarms scheduled for same time they will go consecutively
   //
@@ -440,7 +432,7 @@ void loop() {
         //if (prevDisplay - 10 < makeTime(alarmInfo[alarm_ind].alarmTime))  {
         // only show the alarm if close to set time and on active day
         // this prevents alarm from going off on a restart where configured alarm is in past
-        if (force_day || ( not force_night and IsDay(currentTime)) || alarmInfo[alarm_ind].alarmType > 0) {
+        if (isDay || alarmInfo[alarm_ind].alarmType > 0) {
           show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration,
                              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
                              alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6);
@@ -510,9 +502,6 @@ void loop() {
       digitalClockDisplay();
     else
       Serial.print('-');
-    // Reset forcing
-    force_day = force_day and not IsDay(t);
-    force_night = force_night and IsDay(t);
     Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
     ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
   }
@@ -749,14 +738,21 @@ bool loadConfig() {
     return false;
   }
 
-  // Deserialize day/night adjustments
-  AdjustMorning = doc["AdjustMorning"]; // mins added to sunrise
-  AdjustNight = doc["AdjustNight"]; // mins added to civilsunset
   // Deserialize day_disp_ind
   day_disp_ind = doc["day_disp_ind"];
   // Deserialize night_brightness
   night_brightness = doc["night_brightness"];
   night_brightness = min(night_brightness, day_brightness);
+  int mode_ind = 0;
+  for (JsonObject mode_change_item : doc["mode_change"].as<JsonArray>()) {
+    mode_change[mode_ind].useSun = mode_change_item["useSun"];
+    mode_change[mode_ind].sunDeviation = mode_change_item["sunDeviation"];
+    JsonObject mode_change_specificTime = mode_change_item["specificTime"];
+    mode_change[mode_ind].specificTime.Hour = mode_change_specificTime["Hour"];
+    mode_change[mode_ind].specificTime.Minute = mode_change_specificTime["Minute"];
+    mode_ind++;
+  }
+
 
 
   int alarm_ind = 0;
@@ -780,6 +776,8 @@ bool loadConfig() {
     alarmInfo[alarm_ind].alarmTime.Day = alarm_alarmTime["date"]; // 7, 7, 7, 7, 7
     alarmInfo[alarm_ind].alarmTime.Month = alarm_alarmTime["month"]; // 1, 1, 1, 1, 1
     alarmInfo[alarm_ind].alarmTime.Year = alarm_alarmTime["year"]; // 53, 53, 53, 53, 53
+    alarmInfo[alarm_ind].daysactive = alarm["daysactive"];
+
     alarm_ind++;
   }
 
@@ -854,17 +852,27 @@ bool loadConfig() {
   return true;
 }
 
+
 bool saveConfig() {
 
   DynamicJsonDocument doc(6144);
 
-  // Serialize day/night adjustments
-  doc["AdjustMorning"] = AdjustMorning ; // mins added to sunrise
-  doc["AdjustNight"] =   AdjustNight; // mins added to civilsunset
   // Serialize day_disp_ind
   doc["day_disp_ind"] = day_disp_ind;
   // Serialize night_brightness
   doc["night_brightness"] = night_brightness;
+
+
+  //Serialize mode_change
+  JsonArray mode_change_items = doc.createNestedArray("mode_change");
+  for (int mode_ind = 0; mode_ind < 14; mode_ind++) {
+    JsonObject mode_change_nested = mode_change_items.createNestedObject();
+    mode_change_nested["useSun"] = mode_change[mode_ind].useSun;
+    mode_change_nested["sunDeviation"] = mode_change[mode_ind].sunDeviation;
+    JsonObject mode_change_nested_specificTime = mode_change_nested.createNestedObject("specifictime");
+    mode_change_nested_specificTime["Hour"] = mode_change[mode_ind].specificTime.Hour;
+    mode_change_nested_specificTime["Minute"] = mode_change[mode_ind].specificTime.Minute;
+  }
 
   // Serialize alarms
   JsonArray alarms = doc.createNestedArray("alarms");
@@ -888,6 +896,8 @@ bool saveConfig() {
     alarms_nested_alarmTime["date"] = alarmInfo[alarm_ind].alarmTime.Day;
     alarms_nested_alarmTime["month"] = alarmInfo[alarm_ind].alarmTime.Month;
     alarms_nested_alarmTime["year"] = alarmInfo[alarm_ind].alarmTime.Year;
+    alarms_nested["daysactive"] = alarmInfo[alarm_ind].daysactive;
+
   }
 
   // Serialize Twelve
@@ -1333,11 +1343,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         day_disp_ind = payload[2] - '0';
         send_displayInfo();
       } else if (payload[0] == 'F') {                      // browser sent F to force_day
-        force_day = true;
-        force_night = false;
+        isDay = true;
       } else if (payload[0] == 'G') {                      // browser sent G to  force_night
-        force_night = true;
-        force_day = false;
+        isDay = false;
       } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm6
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
         sscanf((char *) payload, "P%d %d %d %d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5, &light_alarm_parm6);
@@ -1350,8 +1358,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         webSocket.sendTXT(num, buf);
 
       } else if (payload[0] == 'J') {   // to aJust day/night
-        sscanf((char *) payload, "J%d %d", &AdjustMorning, &AdjustNight);
-        sprintf(buf, "Set day to sunrise plus %d mins, and night to civilsunset plus %d ", AdjustMorning, AdjustNight);
+        //        sscanf((char *) payload, "J%d %d", &AdjustMorning, &AdjustNight);
+        //        sprintf(buf, "Set day to sunrise plus %d mins, and night to civilsunset plus %d ", AdjustMorning, AdjustNight);
+        sprintf(buf, "Need to parse daysactive %s ", payload);
         webSocket.sendTXT(num, buf);
         Serial.println(buf);
 
@@ -1422,7 +1431,7 @@ void send_displayInfo() {
 
 void send_alarmInfo(int alarm_ind) {
   // send back info same order as payload when alarm defined
-  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %2d:%2d:%2d, %d, %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %2d:%2d:%2d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
           alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
           alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive, alarmInfo[alarm_ind].duration,
@@ -1431,7 +1440,7 @@ void send_alarmInfo(int alarm_ind) {
           day(makeTime(alarmInfo[alarm_ind].alarmTime)),
           year(makeTime(alarmInfo[alarm_ind].alarmTime)),
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-          second(makeTime(alarmInfo[alarm_ind].alarmTime)), AdjustMorning, AdjustNight);
+          second(makeTime(alarmInfo[alarm_ind].alarmTime)));
   webSocket.sendTXT(websocketId_num, buf);
 }
 
@@ -1635,13 +1644,13 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
           monthNames[month(makeTime(calcTime))].c_str(), year(makeTime(calcTime)));
   webSocket.sendTXT(websocketId_num, buf);
 
-  if (UseSun) {
-    int ind = weekday(now());
-    Night[ind].Hour = (civilsunset + AdjustNight) / 60;
-    Night[ind].Minute = (civilsunset + AdjustNight) - 60 * Night[ind].Hour + 0.5;
-    Morning[ind].Hour = (sunrise + AdjustMorning) / 60;
-    Morning[ind].Minute = (sunrise + AdjustMorning) - 60 * Morning[ind].Hour + 0.5;
-  }
+  //  if (UseSun) {
+  //    int ind = weekday(now());
+  //    Night[ind].Hour = (civilsunset + AdjustNight) / 60;
+  //    Night[ind].Minute = (civilsunset + AdjustNight) - 60 * Night[ind].Hour + 0.5;
+  //    Morning[ind].Hour = (sunrise + AdjustMorning) / 60;
+  //    Morning[ind].Minute = (sunrise + AdjustMorning) - 60 * Morning[ind].Hour + 0.5;
+  //  }
 
   sprintf(buf, "dim at %d:%02d, brighten at %d:%02d", WeekNight.Hour, WeekNight.Minute, WeekMorning.Hour, WeekMorning.Minute);
   webSocket.sendTXT(websocketId_num, buf);
@@ -1721,8 +1730,7 @@ void Draw_Clock(time_t t, byte Phase)
 
 
   int disp_ind;
-  //disp_ind = IsDay(t) ?  day_disp_ind : 4;
-  disp_ind = force_day or ( not force_night and IsDay(t)) ?  day_disp_ind : 4;
+  disp_ind = isDay ?  day_disp_ind : 4;
 
   if (Phase >= 1) // Draw all pixels background color
     for (int i = 0; i < NUM_LEDS; i++)
@@ -1773,38 +1781,36 @@ void Draw_Clock(time_t t, byte Phase)
     }
   }
 
-  SetBrightness(t); // Set the clock brightness dependant on the time
+  SetBrightness(); // Set the clock brightness dependant on the time
   strip.show(); // show all the pixels
 }
 
-bool IsDay(time_t t)
-{
-  // return false; // for debug if want to test night behaviour
-  int NowHour = hour(t);
-  int NowMinute = minute(t);
-  int NowDay = weekday();
-
-  if ((NowHour > Night[NowDay].Hour) || ((NowHour == Night[NowDay].Hour) && (NowMinute >= Night[NowDay].Minute)) || ((NowHour == Morning[NowDay].Hour) && (NowMinute <= Morning[NowDay].Minute)) || (NowHour < Morning[NowDay].Hour))
-    return false;
-  else
-    return true;
-
-  //  if ((weekday() >= 2) && (weekday() <= 6))
-  //    if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
-  //      return false;
-  //    else
-  //      return true;
-  //  else if ((NowHour > WeekendNight.Hour) || ((NowHour == WeekendNight.Hour) && (NowMinute >= WeekendNight.Minute)) || ((NowHour == WeekendMorning.Hour) && (NowMinute <= WeekendMorning.Minute)) || (NowHour < WeekendMorning.Hour))
-  //    return false;
-  //  else
-  //    return true;
-}
+//bool IsDay(time_t t)
+//{
+//  // return false; // for debug if want to test night behaviour
+//  int NowHour = hour(t);
+//  int NowMinute = minute(t);
+//  int NowDay = weekday();
+//
+//  if ((NowHour > Night[NowDay].Hour) || ((NowHour == Night[NowDay].Hour) && (NowMinute >= Night[NowDay].Minute)) || ((NowHour == Morning[NowDay].Hour) && (NowMinute <= Morning[NowDay].Minute)) || (NowHour < Morning[NowDay].Hour))
+//    return false;
+//  else
+//    return true;
+//
+//  //  if ((weekday() >= 2) && (weekday() <= 6))
+//  //    if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
+//  //      return false;
+//  //    else
+//  //      return true;
+//  //  else if ((NowHour > WeekendNight.Hour) || ((NowHour == WeekendNight.Hour) && (NowMinute >= WeekendNight.Minute)) || ((NowHour == WeekendMorning.Hour) && (NowMinute <= WeekendMorning.Minute)) || (NowHour < WeekendMorning.Hour))
+//  //    return false;
+//  //  else
+//  //    return true;
+//}
 
 //************* Function to set the clock brightness ******************************
-void SetBrightness(time_t t)
-{
-  //if (IsDay(t) & ClockInitialized)
-  if ((force_day or ( not force_night and IsDay(t))) and ClockInitialized) {
+void SetBrightness() {
+  if (isDay and ClockInitialized) {
     strip.setBrightness(day_brightness);
 #ifdef HAS_24_RING
     stripinner.setBrightness(day_brightness);
@@ -1876,7 +1882,7 @@ int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points)
 // Set All Leds to given color for wait seconds
 void colorAll(uint32_t color, int duration, time_t t) {
   strip.fill(color);
-  SetBrightness(t); // Set the clock brightness dependant on the time
+  SetBrightness(); // Set the clock brightness dependant on the time
   strip.show();                          //  Update strip to match
   limited_delay(duration);                           //  Pause for a moment
 }
@@ -1939,7 +1945,7 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
       pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels() / nbrightfrac);
     }
     // need empirical adjustment as for too low value LEDs don't shine at all
-    if (force_day or ( not force_night and IsDay(t))) {
+    if (isDay) {
       // day brightness
       pixelVal = 33 + 222 * pixelVal / 255;
     } else {
@@ -2054,7 +2060,7 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
       pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, ncolorfrac, nbrightloop, nbrightfrac);
     }
 
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING
     stripinner.show();
@@ -2113,7 +2119,7 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
       }
       pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, nbrightfrac, nbrightloop, 0);
     }
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING
     stripinner.show();
@@ -2237,7 +2243,7 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
       Worms[i].move(nodepix);
       yield();
     }
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     //yield();
     limited_delay(wait);  // Pause for a moment
@@ -2282,7 +2288,7 @@ void firefly(int wait, int numff, long minHue, long maxHue, uint16_t hueInc, uin
       strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
 #endif
     }
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING
     stripinner.show(); // Update strip with new contents
@@ -2369,7 +2375,7 @@ void fire(time_t t, uint16_t duration) {
       uint32_t diff_color = strip.Color ( r, r , r / 2);
       SubstractColor(i, diff_color);
     }
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     yield();
     delay(random(50, 150)); // Pause for a random moment
@@ -2400,7 +2406,7 @@ void cellularAutomata(int wait, uint8_t rule, long pixelHue, time_t t, uint16_t 
         strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
       }
     }
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     yield();
     limited_delay(wait); // wait
@@ -2434,7 +2440,7 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, lon
     for (int i = 0; i < NUM_LEDS; i++) {
       strip.setPixelColor(i, nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
     }
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     yield();
     limited_delay(wait); // wait
@@ -2458,7 +2464,7 @@ void colorWipe(uint32_t color, int wait, time_t t) {
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
     strip.setPixelColor(ClockCorrect(i + ihour + 30), color);         //  Set pixel's color (in RAM)
     strip.setPixelColor(ClockCorrect(-i + ihour + 30), color);         //  Set pixel's color (in RAM)
-    SetBrightness(t); // Set the clock brightness dependant on the time
+    SetBrightness(); // Set the clock brightness dependant on the time
     strip.show();                          //  Update strip to match
     yield();
     limited_delay(wait);                           //  Pause for a moment
@@ -2476,7 +2482,7 @@ void theaterChase(uint32_t color, int wait, time_t t) {
       for (int c = b; c < strip.numPixels(); c += 3) {
         strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
       }
-      SetBrightness(t); // Set the clock brightness dependant on the time
+      SetBrightness(); // Set the clock brightness dependant on the time
       strip.show(); // Update strip with new contents
       yield();
       limited_delay(wait);  // Pause for a moment
@@ -2499,7 +2505,7 @@ void theaterChaseRainbow(int wait, time_t t) {
         uint32_t color = strip.gamma32(strip.ColorHSV(hue)); // hue -> RGB
         strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
       }
-      SetBrightness(t); // Set the clock brightness dependant on the time
+      SetBrightness(); // Set the clock brightness dependant on the time
       strip.show();                // Update strip with new contents
       yield();
       limited_delay(wait);                 // Pause for a moment
