@@ -17,7 +17,6 @@ connection.onmessage = function (e) {
     if (e.data === 'MUSIC') {
       document.getElementById("Melody-Button").style.display = "block";
     } else if (e.data.startsWith('ALARMINFO:')) {
-      fillTable(exampleData);
       var alarminfo = e.data.split(',');
       console.log(alarminfo);
       document.getElementById('numpattern').value = Math.abs(Number(alarminfo[3]));
@@ -57,8 +56,6 @@ connection.onmessage = function (e) {
         document.getElementById('dayonly').innerHTML = "Off or Unset";
         //document.getElementById('saveddatetime').innerHTML = 'NOT SET MUST CHOOSE WHEN';
       }
-      document.getElementById('AdjMorn').value = Number(alarminfo[14]);
-      document.getElementById('AdjNight').value = Number(alarminfo[15]);
     } else if (e.data.startsWith('DISPLAYINFO:')) {
       var displayinfo = e.data.split(',');
       console.log(displayinfo);
@@ -67,6 +64,11 @@ connection.onmessage = function (e) {
       document.getElementById('widthminute').value = Number(displayinfo[3]);
       document.getElementById('blinkminute').checked = 1 === Number(displayinfo[4]);
       document.getElementById('widthsecond').value = Number(displayinfo[5]);
+    } else if (e.data.startsWith('MODEINFO:')) {
+      var modeinfo = e.data.split(',');
+      console.log(modeinfo);
+      fillTable(modeinfo);
+      //fillTable1(exampleData);
     } else if (e.data.startsWith('WHATTIME')) {
       document.getElementById('whattime').innerHTML = e.data.substring(8);
     }
@@ -197,10 +199,10 @@ function setalarm() {
                    ((document.getElementById('dayactive5').checked) ? 32: 0) +
                    ((document.getElementById('dayactive6').checked) ? 64: 0) +
                    ((document.getElementById('dayactive7').checked) ? 128: 0);
-  var adjmorn = document.getElementById('AdjMorn').value;
-  var daystart = 0 // document.getElementById('daystart').value;
-  var nightstart = 0 // document.getElementById('nightstart').value;
-  var adjnight = document.getElementById('AdjNight').value;
+  //var adjmorn = document.getElementById('AdjMorn').value;
+  //var daystart = 0 // document.getElementById('daystart').value;
+  //var nightstart = 0 // document.getElementById('nightstart').value;
+  //var adjnight = document.getElementById('AdjNight').value;
   if (alarmrepeat === 'other') {
     alarmrepeat = document.getElementById('othervalue').value;
   }
@@ -212,7 +214,7 @@ function setalarm() {
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
 	connection.send(cmd + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
-	connection.send("J" + adjmorn + " " + adjnight + " " + daystart + " " + nightstart);
+	//connection.send("J" + adjmorn + " " + adjnight + " " + daystart + " " + nightstart);
 }
 
 function handleWhen() {
@@ -324,12 +326,13 @@ var exampleData = [
     [true, '08:00', 11]
 ];
 
-// fills an existing table by over writing data
-function fillTable(data) {
+
+// fills an existing table by from exampleData
+function fillTable1(data) {
     var table = document.getElementById('ModeTimesTable');
     var tbody = table.querySelector('tbody');
     var rows = tbody.getElementsByTagName('tr');
-    console.log(rows)
+    console.log("ROWS " + rows)
 
     var irow = 0;
     for (var i = 0; i < data.length; i += 2) {
@@ -344,6 +347,7 @@ function fillTable(data) {
             checkbox.checked = cellData[0];
             timeInput.value = cellData[1];
             textInput.value = cellData[2];
+            console.log('working ' + cellData + " " + cellData[0]+ " " + cellData[1]+ " " + cellData[2])
             checkbox.addEventListener('change', function() {
                 toggleInputs(this);
             });
@@ -361,14 +365,52 @@ function fillTable(data) {
 }
 
 
+// fills an existing table by over writing data
+// data[0] ignored, data[1] is check, data[2] is hour, data[3] is min, data[4] is deviation, etc
+function fillTable(data) {
+    var table = document.getElementById('ModeTimesTable');
+    var tbody = table.querySelector('tbody');
+    var rows = tbody.getElementsByTagName('tr');
+    //console.log(rows)
+    var dataind = 1;
+    for (var irow = 0; irow < 7; irow++) {
+        var row = rows[irow];
+        var cells = row.getElementsByTagName('td');
+        var jcell = 1;
+        for (var j = 0; j < 2; j++) {
+            var checkbox = cells[jcell].querySelector('input[type="checkbox"]');
+            var timeInput = cells[jcell].querySelector('input[type="time"]');
+            var textInput = cells[jcell].querySelector('input[type="text"]');
+            checkbox.checked = data[dataind]==1;
+            timeInput.value =  data[dataind+1];
+            //timeInput.value = data[dataind+1]+":"+data[dataind+2];
+            //textInput.value = data[dataind+3];
+            textInput.value = data[dataind+2];
+            console.log(dataind + " " + (data[dataind]==1) + " " + data[dataind+1] + " " + data[dataind+2])
+            //dataind += 4;
+            dataind += 3;
+            checkbox.addEventListener('change', function() {
+                toggleInputs(this);
+            });
+            if (checkbox.checked) {
+                textInput.style.display = 'inline-block'; // Show text input if checkbox is checked
+                timeInput.style.display = 'none'; // Hide time input initially
+            } else {
+                textInput.style.display = 'none'; // Hide text input initially
+                timeInput.style.display = 'inline-block'; // Show time input if checkbox is unchecked
+            }
+            jcell ++;
+        }
+    }
+}
+
 // Send  table data back create a string in the format of exampleData
 function sendTableData() {
     var table = document.getElementById('ModeTimesTable');
     var tbody = table.querySelector('tbody');
     var rows = tbody.getElementsByTagName('tr');
 
-    var outputData = [];
-
+    var outputStr = "";
     for (var i = 0; i < rows.length; i++) {
         var cells = rows[i].getElementsByTagName('td');
 
@@ -377,22 +419,15 @@ function sendTableData() {
             var timeInput = cells[j].querySelector('input[type="time"]');
             var textInput = cells[j].querySelector('input[type="text"]');
 
-            var isChecked = checkbox.checked;
+            var isChecked = checkbox.checked?1:0;
             var timeValue = timeInput.value;
             var textValue = textInput.value;
 
-            outputData.push([isChecked, timeValue, textValue]);
+            outputStr += (isChecked + " " + timeValue + " " + textValue +",")
         }
     }
 
-    // Display the output data in a textarea
-    //var outputTextarea = document.getElementById('output');
-    //outputTextarea.value = JSON.stringify(outputData);
-    console.log(JSON.stringify(outputData))
-    var adjmorn = document.getElementById('AdjMorn').value;
-    var daystart = 0 // document.getElementById('daystart').value;
-    var nightstart = 0 // document.getElementById('nightstart').value;
-    var adjnight = document.getElementById('AdjNight').value;
-    connection.send("J" +  + adjmorn + " " + adjnight + " " + daystart + " " + nightstart + " " + JSON.stringify(outputData));
+    console.log(outputStr)
+    connection.send("J" + outputStr);
 
 }

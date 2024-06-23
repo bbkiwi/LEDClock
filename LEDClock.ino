@@ -16,9 +16,7 @@
 //     in or out display
 //
 // Daily mode_changes either specify directly or as ajustments to sun rise/set
-// Now saved in config, but TODO from gui to flash
-// Canged gui but not storing in config or program yet
-// only have for weekdays and weekend, now built in default
+// Now saved in config and  gui to flash
 // Alarms  specify days now in config
 
 // TODO have some very soothing displays
@@ -177,6 +175,8 @@ TIME WeekMorning = {6, 46}; //Morning time to go bright
 TIME WeekendNight = {21, 00}; // Night time to go dim
 TIME WeekendMorning = {9, 15}; //Morning time to go bright
 
+byte day_brightness = 127; // keep below 127 to limit power use
+byte night_brightness = 16;
 
 // if setting day and night by the sun can adjust
 // The following indexed by weekday(now()) eg 1 Sun, 2 Mon, ... 7 Sat
@@ -201,8 +201,7 @@ TIME NauticalSunset;
 TIME AstroSunrise;
 TIME AstroSunset;
 
-byte day_brightness = 127; // keep below 127 to limit power use
-byte night_brightness = 16;
+
 // Can force night mode during day and day mode during night
 bool isDay = true; // gets set in main loop and also toggled by gui
 bool nextModeIsDay = false; // used when scheduling next mode
@@ -228,7 +227,6 @@ uint32_t led_color_alarm_rgb;
 tmElements_t calcTime = {0};
 
 
-//TODO save daysactive in config, have input via gui
 struct ALARM {
   bool alarmSet = false;
   int alarmType; // if neg only display during daylight mode
@@ -359,10 +357,6 @@ void setup() {
             daysOfWeek[ind], mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
             mode_change[mode_night_ind].useSun, mode_change[mode_night_ind].sunDeviation ,  mode_change[mode_night_ind].specificTime.Hour, mode_change[mode_night_ind].specificTime.Minute);
     Serial.println(buf);
-
-
-
-
   }
   startWebSocket();            // Start a WebSocket server
   startMDNS();                 // Start the mDNS responder
@@ -869,7 +863,7 @@ bool saveConfig() {
     JsonObject mode_change_nested = mode_change_items.createNestedObject();
     mode_change_nested["useSun"] = mode_change[mode_ind].useSun;
     mode_change_nested["sunDeviation"] = mode_change[mode_ind].sunDeviation;
-    JsonObject mode_change_nested_specificTime = mode_change_nested.createNestedObject("specifictime");
+    JsonObject mode_change_nested_specificTime = mode_change_nested.createNestedObject("specificTime");
     mode_change_nested_specificTime["Hour"] = mode_change[mode_ind].specificTime.Hour;
     mode_change_nested_specificTime["Minute"] = mode_change[mode_ind].specificTime.Minute;
   }
@@ -1283,6 +1277,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       }
       send_alarmInfo(0);
       send_displayInfo();
+      send_modeInfo();
 #ifdef MUSIC
       sprintf(buf, "MUSIC");
       Serial.println();
@@ -1358,12 +1353,35 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         webSocket.sendTXT(num, buf);
 
       } else if (payload[0] == 'J') {   // to aJust day/night
-        //        sscanf((char *) payload, "J%d %d", &AdjustMorning, &AdjustNight);
-        //        sprintf(buf, "Set day to sunrise plus %d mins, and night to civilsunset plus %d ", AdjustMorning, AdjustNight);
-        sprintf(buf, "Need to parse daysactive %s ", payload);
+        sprintf(buf, "Parse %s ", payload);
         webSocket.sendTXT(num, buf);
-        Serial.println(buf);
-
+        int ind_read = 1;
+        bool ch;
+        int H;
+        int M;
+        int D;
+        int numread;
+        for (int i = 0; i < 14; i++ ) {
+          // must use payload + ind_read, BLOWS UP if use payload[ind_read]
+          if (sscanf((char *) payload + ind_read, "%d %2d:%2d %d,%n", &ch, &H, &M, &D, &numread) != 4) {
+            Serial.println("ERROR");
+            break;
+          };
+          //Serial.println(numread);
+          mode_change[i].useSun = ch;
+          mode_change[i].specificTime.Hour = H;
+          mode_change[i].specificTime.Minute = M;
+          mode_change[i].sunDeviation = D;
+          ind_read += numread;
+        }
+        for (int ind = 1; ind < 8; ind++) {
+          int mode_night_ind = 2 * ind - 1;
+          int mode_day_ind = mode_night_ind - 1;
+          sprintf(buf, "Mode %s  Day: useSun[%d] dev=%d, %d:%02d, Night: useSun[%d] dev=%d, %d:%02d, ",
+                  daysOfWeek[ind], mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
+                  mode_change[mode_night_ind].useSun, mode_change[mode_night_ind].sunDeviation ,  mode_change[mode_night_ind].specificTime.Hour, mode_change[mode_night_ind].specificTime.Minute);
+          Serial.println(buf);
+        }
       } else if (payload[0] == 'A' or payload[0] == 'R') {  // the browser sends an A to set alarm, R to reset
         bool makeset = payload[0] == 'A';
         payload[0] = 'A';
@@ -1441,6 +1459,17 @@ void send_alarmInfo(int alarm_ind) {
           year(makeTime(alarmInfo[alarm_ind].alarmTime)),
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
           second(makeTime(alarmInfo[alarm_ind].alarmTime)));
+  webSocket.sendTXT(websocketId_num, buf);
+}
+
+void send_modeInfo() {
+  // send back info same order as payload when modes defined
+  sprintf(buf, "MODEINFO:,");
+  for (int i = 0; i < 14; i++ ) {
+    // must use %02d:%02d for hour:min as blanks confuse js
+    sprintf(buf + strlen(buf), "%d,%02d:%02d,%d,", mode_change[i].useSun, mode_change[i].specificTime.Hour, mode_change[i].specificTime.Minute, mode_change[i].sunDeviation);
+  };
+  Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
 
