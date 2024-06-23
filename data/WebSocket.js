@@ -68,7 +68,6 @@ connection.onmessage = function (e) {
       var modeinfo = e.data.split(',');
       console.log(modeinfo);
       fillTable(modeinfo);
-      //fillTable1(exampleData);
     } else if (e.data.startsWith('WHATTIME')) {
       document.getElementById('whattime').innerHTML = e.data.substring(8);
     }
@@ -308,65 +307,9 @@ function toggleInputs(checkbox) {
     }
 }
 
-// Example data structure where each inner array represents [checkbox checked (boolean), time (string), text (number)]
-var exampleData = [
-    [true, '08:00', 0],
-    [false, '14:30', 10],
-    [true, '08:30', 20],
-    [false, '15:30', 30],
-    [true, '08:01', 40],
-    [false, '16:30', -120],
-    [true, '08:00', 10],
-    [true, '08:00', 20],
-    [false, '14:30', 30],
-    [true, '08:00', 40],
-    [false, '14:30', 44],
-    [true, '08:00',55],
-    [false, '14:30', 10],
-    [true, '08:00', 11]
-];
-
-
-// fills an existing table by from exampleData
-function fillTable1(data) {
-    var table = document.getElementById('ModeTimesTable');
-    var tbody = table.querySelector('tbody');
-    var rows = tbody.getElementsByTagName('tr');
-    console.log("ROWS " + rows)
-
-    var irow = 0;
-    for (var i = 0; i < data.length; i += 2) {
-        var row = rows[irow];
-        var cells = row.getElementsByTagName('td');
-        var jcell = 1;
-        for (var j = 0; j < 2; j++) {
-            var cellData = data[i + j];
-            var checkbox = cells[jcell].querySelector('input[type="checkbox"]');
-            var timeInput = cells[jcell].querySelector('input[type="time"]');
-            var textInput = cells[jcell].querySelector('input[type="text"]');
-            checkbox.checked = cellData[0];
-            timeInput.value = cellData[1];
-            textInput.value = cellData[2];
-            console.log('working ' + cellData + " " + cellData[0]+ " " + cellData[1]+ " " + cellData[2])
-            checkbox.addEventListener('change', function() {
-                toggleInputs(this);
-            });
-            if (checkbox.checked) {
-                textInput.style.display = 'inline-block'; // Show text input if checkbox is checked
-                timeInput.style.display = 'none'; // Hide time input initially
-            } else {
-                textInput.style.display = 'none'; // Hide text input initially
-                timeInput.style.display = 'inline-block'; // Show time input if checkbox is unchecked
-            }
-            jcell ++;
-        }
-        irow++;
-    }
-}
-
 
 // fills an existing table by over writing data
-// data[0] ignored, data[1] is check, data[2] is hour, data[3] is min, data[4] is deviation, etc
+// data[0] ignored, data[1] is check, data[2] is hour:min, data[3] is deviation, etc
 function fillTable(data) {
     var table = document.getElementById('ModeTimesTable');
     var tbody = table.querySelector('tbody');
@@ -383,11 +326,8 @@ function fillTable(data) {
             var textInput = cells[jcell].querySelector('input[type="text"]');
             checkbox.checked = data[dataind]==1;
             timeInput.value =  data[dataind+1];
-            //timeInput.value = data[dataind+1]+":"+data[dataind+2];
-            //textInput.value = data[dataind+3];
             textInput.value = data[dataind+2];
             console.log(dataind + " " + (data[dataind]==1) + " " + data[dataind+1] + " " + data[dataind+2])
-            //dataind += 4;
             dataind += 3;
             checkbox.addEventListener('change', function() {
                 toggleInputs(this);
