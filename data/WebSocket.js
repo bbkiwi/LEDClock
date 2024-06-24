@@ -64,6 +64,8 @@ connection.onmessage = function (e) {
       document.getElementById('widthminute').value = Number(displayinfo[3]);
       document.getElementById('blinkminute').checked = 1 === Number(displayinfo[4]);
       document.getElementById('widthsecond').value = Number(displayinfo[5]);
+      document.getElementById('nightbright').value = Number(displayinfo[6]);
+      document.getElementById('daybright').value = Number(displayinfo[7]);
     } else if (e.data.startsWith('MODEINFO:')) {
       var modeinfo = e.data.split(',');
       console.log(modeinfo);
@@ -175,6 +177,13 @@ function AlarmrepeatChanged() {
   } else {
     document.getElementById('othervalue').hidden =  true;
   }
+}
+
+function setbright() {
+  var daybright = document.getElementById('daybright').value;
+  var nightbright = document.getElementById('nightbright').value;
+  console.log('Set bright night ' + nightbright + ' day ' + daybright);
+  connection.send("b" + nightbright + " " + daybright);
 }
 
 function setalarm() {

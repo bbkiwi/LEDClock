@@ -8,18 +8,21 @@
    Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
-//TODO starting to put in features request by Colin
+//features request by Colin
 //22 June 2024
-//TODO fix isDay to be implement like an alarm eg. use time of
-//     night begins and day begins to turn on and off IsDay
-//     then can have time before day begins and night begins to fade
-//     in or out display
-//
+
 // Daily mode_changes either specify directly or as ajustments to sun rise/set
 // Now saved in config and  gui to flash
 // Alarms  specify days now in config
+// Brightness day/night can be changed
 
-// TODO have some very soothing displays
+//isDay to be implement like an alarm eg. use time of
+//     night begins and day begins to turn on and off IsDay
+
+// TODO
+//have some very soothing displays
+//     then can have time before day begins and night begins to fade
+//     in or out display
 
 //NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
 /************* Declare included libraries ******************************/
@@ -175,13 +178,15 @@ TIME WeekMorning = {6, 46}; //Morning time to go bright
 TIME WeekendNight = {21, 00}; // Night time to go dim
 TIME WeekendMorning = {9, 15}; //Morning time to go bright
 
-byte day_brightness = 127; // keep below 127 to limit power use
-byte night_brightness = 16;
+#define MAX_BRIGHTNESS (uint8_t)127
+// keep below 127 to limit power use
+uint8_t day_brightness = MAX_BRIGHTNESS;
+uint8_t night_brightness = 16;
 
 // if setting day and night by the sun can adjust
 // The following indexed by weekday(now()) eg 1 Sun, 2 Mon, ... 7 Sat
 
-//Default 1,2 for Sunday day,night; 3,4 for Monday etc
+//Default 0,1 for Sunday day,night; 2,3 for Monday etc
 MODE_CHANGE mode_change[14] = {
   {false, 0, WeekendMorning}, {false, 0, WeekendNight},
   {false, 0, WeekMorning}, {false, 0, WeekNight},
@@ -192,19 +197,10 @@ MODE_CHANGE mode_change[14] = {
   {false, 0, WeekendMorning}, {false, 0, WeekendNight}
 };
 
-TIME Sunrise;
-TIME Sunset;
-TIME CivilSunrise;
-TIME CivilSunset;
-TIME NauticalSunrise;
-TIME NauticalSunset;
-TIME AstroSunrise;
-TIME AstroSunset;
-
-
 // Can force night mode during day and day mode during night
 bool isDay = true; // gets set in main loop and also toggled by gui
 bool nextModeIsDay = false; // used when scheduling next mode
+bool needInitIsDay = true;
 
 //Set your timezone in hours difference rom GMT
 int hours_Offset_From_GMT = 12;
@@ -315,6 +311,8 @@ Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_
 bool ClockInitialized = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
+time_t nextModeTime;
+
 unsigned long prev_sound_time = 0;
 const int ESP_BUILTIN_LED = 2;
 
@@ -338,6 +336,8 @@ void setup() {
     }
   } else {
     // will have loaded the saved parameters
+    // note: if key not in config.json will use
+    // defaults.
     Serial.println("Config loaded");
   }
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
@@ -370,7 +370,6 @@ void setup() {
   colorAll(strip.Color(127, 0, 0), 1000, now());
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
-  calcSun();
   randomSeed(now());
   //pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
@@ -399,21 +398,17 @@ void loop() {
   if (sound_alarm_flag) {
     Serial.println("sound flag on\n");
     playsong(melody, noteDurations, whole_note_duration, PIEZO_PIN);
-    //BUG? if use below generates tone, but then clock produces spurious leds
-    // lighting up on ring (obvious in night mode)
-    // something to do with timer2 changed???
-    //tone(PIEZO_PIN, 300, 1000);
-    // This code does seem to cause the problem
-    //  will try implementing playsong to use noTone as
-    // below which is not causeing spurious leds lighting
-    //tone(PIEZO_PIN, 300);
-    //delay(1000);
-    //noTone(PIEZO_PIN);
     sound_alarm_flag = false;
   }
 #endif
 
   // Check for mode_change and update isDay when change occures
+  if (prevDisplay >= nextModeTime) {
+    isDay = nextModeIsDay;
+    calcSun();
+    sprintf(buf, "\nIn loop modechange at %d to %d of %d\n", prevDisplay, nextModeTime, nextModeIsDay );
+    Serial.println(buf);
+  }
 
   // Check for alarms
   // Note if multiple alarms scheduled for same time they will go consecutively
@@ -501,9 +496,16 @@ void loop() {
   }
 
   // Check if new day and recalculate sunSet etc.
+  //   will get called when clock boots up and
+  //   will set isDay appropriately
   if (prevDisplay >= makeTime(calcTime))
   {
+    Serial.println("\nfinding new day");
     calcSun(); // computes sun rise and sun set, updates calcTime  night and day mode times
+    if (needInitIsDay) {
+      needInitIsDay = false;
+      isDay = not nextModeIsDay;
+    }
   }
   delay(10); // needed to keep wifi going
 }
@@ -732,11 +734,23 @@ bool loadConfig() {
     return false;
   }
 
+  // Deserialize and if key absent use default
+
   // Deserialize day_disp_ind
-  day_disp_ind = doc["day_disp_ind"];
-  // Deserialize night_brightness
-  night_brightness = doc["night_brightness"];
-  night_brightness = min(night_brightness, day_brightness);
+  day_disp_ind = doc["day_disp_ind"]; // will give 0 if key not exist
+  // Deserialize day_brightness (use default if key not exist)
+  if (doc.containsKey("day_brightness")) {
+    day_brightness = doc["day_brightness"];
+    day_brightness = min(MAX_BRIGHTNESS, day_brightness);
+  }
+  // Deserialize night_brightness (use default if key not exist)
+  if (doc.containsKey("night_brightness")) {
+    night_brightness = doc["night_brightness"];
+    night_brightness = min(night_brightness, day_brightness);
+  }
+
+  // The rest of the keys should be arrays, so if key missing will
+  //   just use the defaults
   int mode_ind = 0;
   for (JsonObject mode_change_item : doc["mode_change"].as<JsonArray>()) {
     mode_change[mode_ind].useSun = mode_change_item["useSun"];
@@ -746,8 +760,6 @@ bool loadConfig() {
     mode_change[mode_ind].specificTime.Minute = mode_change_specificTime["Minute"];
     mode_ind++;
   }
-
-
 
   int alarm_ind = 0;
   for (JsonObject alarm : doc["alarms"].as<JsonArray>()) {
@@ -841,8 +853,6 @@ bool loadConfig() {
     Second[i].b = rgbObj["b"];
     second_width[i] = rgbObj["width"];
   }
-
-
   return true;
 }
 
@@ -853,6 +863,8 @@ bool saveConfig() {
 
   // Serialize day_disp_ind
   doc["day_disp_ind"] = day_disp_ind;
+  // Serialize day_brightness
+  doc["day_brightness"] = day_brightness;
   // Serialize night_brightness
   doc["night_brightness"] = night_brightness;
 
@@ -1264,6 +1276,87 @@ void handleFileList() {
 }
 
 
+void setalarmurl()
+{
+
+  String numstr = server.arg("number");
+  int alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 0;
+
+  if (alarm_num >= NUM_ALARMS) return;
+  if (alarm_num < 0) return;
+
+  alarmInfo[alarm_num].alarmSet = true;
+  String type = server.arg("type");
+  String p1 = server.arg("parm1");
+  String p2 = server.arg("parm2");
+  String p3 = server.arg("parm3");
+  String p4 = server.arg("parm4");
+  String p5 = server.arg("parm5");
+  String p6 = server.arg("parm6");
+  String t = server.arg("duration"); // in ms
+  String r = server.arg("repeat"); // in seconds
+  String da = server.arg("active"); // days active coded as binary
+  String h = server.arg("hour");
+  String m = server.arg("min");
+  String s = server.arg("sec");
+  String d = server.arg("day");
+  String mth = server.arg("month");
+  String y = server.arg("year");
+
+  breakTime(now(), alarmInfo[alarm_num].alarmTime);
+
+  setalarm(alarm_num,
+           (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
+           (strlen(p1.c_str()) > 0) ? p1.toInt() : alarmInfo[alarm_num].parm1,
+           (strlen(p2.c_str()) > 0) ? p2.toInt() : alarmInfo[alarm_num].parm2,
+           (strlen(p3.c_str()) > 0) ? p3.toInt() : alarmInfo[alarm_num].parm3,
+           (strlen(p4.c_str()) > 0) ? p4.toInt() : alarmInfo[alarm_num].parm4,
+           (strlen(p5.c_str()) > 0) ? p5.toInt() : alarmInfo[alarm_num].parm5,
+           (strlen(p6.c_str()) > 0) ? p6.toInt() : alarmInfo[alarm_num].parm6,
+           (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
+           (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
+           (strlen(da.c_str()) > 0) ? da.toInt() : alarmInfo[alarm_num].daysactive,
+           (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
+           (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo[alarm_num].alarmTime.Minute,
+           (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo[alarm_num].alarmTime.Hour,
+           (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo[alarm_num].alarmTime.Day,
+           (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
+           (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
+}
+
+
+void settime()
+// if connected to time server, it will overwrite asap
+{
+  String h = server.arg("hour");
+  String m = server.arg("min");
+  String s = server.arg("sec");
+  String d = server.arg("day");
+  String mth = server.arg("month");
+  String y = server.arg("year");
+  setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
+  ClockInitialized = false;
+  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(),
+          daysOfWeek[d.toInt()].c_str(), d.toInt(), monthNames[mth.toInt()].c_str(),  y.toInt());
+  server.send(200, "text/plain", buf);
+  Serial.println(buf);
+}
+
+
+void setBright()
+{
+  String db = server.arg("day");
+  String nb = server.arg("night");
+  if (strlen(db.c_str()) > 0) day_brightness = db.toInt();
+  if (strlen(nb.c_str()) > 0) night_brightness = nb.toInt();
+  day_brightness = min(MAX_BRIGHTNESS, day_brightness);
+  night_brightness = min(night_brightness, day_brightness);
+  String rsp = "daybrightness set to: " + db + ", nightbrightness to  " + nb;
+  server.send(200, "text/plain", rsp);
+}
+
+/*---------------------------------------- WEBSOCKETS -----------------------------------*/
+
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) { // When a WebSocket message is received
   //NOTE messages get queued up
   websocketId_num = num; // save so can send to websock from other places
@@ -1336,6 +1429,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         second_width[day_disp_ind] = payload[2] - '0';
       } else if (payload[0] == 'D') {                      // browser sent D to set disp_ind for daytime use
         day_disp_ind = payload[2] - '0';
+        send_displayInfo();
+      } else if (payload[0] == 'b') {                      // browser sent b to set night and day brightness
+        sscanf((char *) payload, "b%hhd %hhd", &night_brightness, &day_brightness); //note %hhd for unint8_t %d gives error
+        day_brightness = min(MAX_BRIGHTNESS, day_brightness);
+        night_brightness = min(night_brightness, day_brightness);
         send_displayInfo();
       } else if (payload[0] == 'F') {                      // browser sent F to force_day
         isDay = true;
@@ -1442,8 +1540,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 }
 
 void send_displayInfo() {
-  sprintf(buf, "DISPLAYINFO:,%d,%d,%d,%d,%d",
-          day_disp_ind, hour_width[day_disp_ind], minute_width[day_disp_ind], minute_blink[day_disp_ind], second_width[day_disp_ind]);
+  sprintf(buf, "DISPLAYINFO:,%d,%d,%d,%d,%d,%d,%d",
+          day_disp_ind, hour_width[day_disp_ind], minute_width[day_disp_ind], minute_blink[day_disp_ind], second_width[day_disp_ind], night_brightness, day_brightness);
+  Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
 
@@ -1459,6 +1558,7 @@ void send_alarmInfo(int alarm_ind) {
           year(makeTime(alarmInfo[alarm_ind].alarmTime)),
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
           second(makeTime(alarmInfo[alarm_ind].alarmTime)));
+  Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
 
@@ -1473,6 +1573,7 @@ void send_modeInfo() {
   webSocket.sendTXT(websocketId_num, buf);
 }
 
+/*------------------------------------------------------ Utilities ------------------------------------------------------*/
 void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6,  uint16_t t, uint32_t r, int da, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   alarmInfo[alarm_ind].alarmType = alarmtype;
   alarmInfo[alarm_ind].parm1 = p1;
@@ -1502,82 +1603,6 @@ void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int 
   Serial.println(buf);
 }
 
-void setalarmurl()
-{
-
-  String numstr = server.arg("number");
-  int alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 0;
-
-  if (alarm_num >= NUM_ALARMS) return;
-  if (alarm_num < 0) return;
-
-  alarmInfo[alarm_num].alarmSet = true;
-  String type = server.arg("type");
-  String p1 = server.arg("parm1");
-  String p2 = server.arg("parm2");
-  String p3 = server.arg("parm3");
-  String p4 = server.arg("parm4");
-  String p5 = server.arg("parm5");
-  String p6 = server.arg("parm6");
-  String t = server.arg("duration"); // in ms
-  String r = server.arg("repeat"); // in seconds
-  String da = server.arg("active"); // days active coded as binary
-  String h = server.arg("hour");
-  String m = server.arg("min");
-  String s = server.arg("sec");
-  String d = server.arg("day");
-  String mth = server.arg("month");
-  String y = server.arg("year");
-
-  breakTime(now(), alarmInfo[alarm_num].alarmTime);
-
-  setalarm(alarm_num,
-           (strlen(type.c_str()) > 0) ? type.toInt() : alarmInfo[alarm_num].alarmType,
-           (strlen(p1.c_str()) > 0) ? p1.toInt() : alarmInfo[alarm_num].parm1,
-           (strlen(p2.c_str()) > 0) ? p2.toInt() : alarmInfo[alarm_num].parm2,
-           (strlen(p3.c_str()) > 0) ? p3.toInt() : alarmInfo[alarm_num].parm3,
-           (strlen(p4.c_str()) > 0) ? p4.toInt() : alarmInfo[alarm_num].parm4,
-           (strlen(p5.c_str()) > 0) ? p5.toInt() : alarmInfo[alarm_num].parm5,
-           (strlen(p6.c_str()) > 0) ? p6.toInt() : alarmInfo[alarm_num].parm6,
-           (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
-           (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
-           (strlen(da.c_str()) > 0) ? da.toInt() : alarmInfo[alarm_num].daysactive,
-           (strlen(s.c_str()) > 0) ?  s.toInt() : alarmInfo[alarm_num].alarmTime.Second,
-           (strlen(m.c_str()) > 0) ?  m.toInt() : alarmInfo[alarm_num].alarmTime.Minute,
-           (strlen(h.c_str()) > 0) ?  h.toInt() : alarmInfo[alarm_num].alarmTime.Hour,
-           (strlen(d.c_str()) > 0) ?  d.toInt() : alarmInfo[alarm_num].alarmTime.Day,
-           (strlen(mth.c_str()) > 0) ? mth.toInt() : alarmInfo[alarm_num].alarmTime.Month,
-           (strlen(y.c_str()) > 0) ?  y.toInt() : alarmInfo[alarm_num].alarmTime.Year + 1970);
-}
-
-
-void settime()
-// if connected to time server, it will overwrite asap
-{
-  String h = server.arg("hour");
-  String m = server.arg("min");
-  String s = server.arg("sec");
-  String d = server.arg("day");
-  String mth = server.arg("month");
-  String y = server.arg("year");
-  setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
-  ClockInitialized = false;
-  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(),
-          daysOfWeek[d.toInt()].c_str(), d.toInt(), monthNames[mth.toInt()].c_str(),  y.toInt());
-  server.send(200, "text/plain", buf);
-  Serial.println(buf);
-}
-
-
-void setBright()
-{
-  String db = server.arg("day");
-  String nb = server.arg("night");
-  if (strlen(db.c_str()) > 0) day_brightness = db.toInt();
-  if (strlen(nb.c_str()) > 0) night_brightness = nb.toInt();
-  String rsp = "daybrightness set to: " + db + ", nightbrightness to  " + nb;
-  server.send(200, "text/plain", rsp);
-}
 
 void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
 {
@@ -1590,9 +1615,31 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   double nauticalsunrise;
   double nauticalsunset;
 
+  TIME Sunrise;
+  TIME Sunset;
+  TIME CivilSunrise;
+  TIME CivilSunset;
+  TIME NauticalSunrise;
+  TIME NauticalSunset;
+  TIME AstroSunrise;
+  TIME AstroSunset;
+
+  time_t todaySunrise;
+  time_t tomorrowSunrise;
+  time_t todayCivilSunset;
+  time_t todayModeDay;
+  time_t todayModeNight = 0;
+  time_t tomorrowModeDay = 0;
+  time_t todayMidnight;
+
   /* Get the current time, and set the Sunrise code to use the current date */
   currentTime = now();
 
+  Serial.print("\ncalcSun called at ");
+  Serial.println(currentTime);
+
+  int todayWeekday = weekday(currentTime);
+  int tomorrowWeekday = weekday(currentTime + 24 * 3600);
   sprintf(buf, "calcSun at %d:%02d:%02d %s %d %s %d", hour(currentTime), minute(currentTime),
           second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),
           monthNames[month(currentTime)].c_str(), year(currentTime));
@@ -1619,17 +1666,12 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   Sunset.Minute = sunset - 60 * Sunset.Hour + 0.5;
   CivilSunset.Hour = civilsunset / 60;
   CivilSunset.Minute = civilsunset - 60 * CivilSunset.Hour + 0.5;
-  //WeekNight.Hour = (civilsunset + AdjustNight) / 60;
-  //WeekNight.Minute = (civilsunset + AdjustNight) - 60 * WeekNight.Hour + 0.5;
-
   NauticalSunset.Hour = nauticalsunset / 60;
   NauticalSunset.Minute = nauticalsunset - 60 * NauticalSunset.Hour + 0.5;
   AstroSunset.Hour = astrosunset / 60;
   AstroSunset.Minute = astrosunset - 60 * AstroSunset.Hour + 0.5;
   Sunrise.Hour = sunrise / 60;
   Sunrise.Minute = sunrise - 60 * Sunrise.Hour + 0.5;
-  //WeekMorning.Hour = (sunrise + AdjustMorning) / 60;
-  //WeekMorning.Minute = (sunrise + AdjustMorning) - 60 * WeekMorning.Hour + 0.5;
   CivilSunrise.Hour = civilsunrise / 60;
   CivilSunrise.Minute = civilsunrise - 60 * CivilSunrise.Hour + 0.5;
   NauticalSunrise.Hour = nauticalsunrise / 60;
@@ -1637,16 +1679,13 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   AstroSunrise.Hour = astrosunrise / 60;
   AstroSunrise.Minute = astrosunrise - 60 * AstroSunrise.Hour + 0.5;
 
-  //WeekendNight = WeekNight;
-  //WeekendMorning = WeekMorning;
-
   nextCalcTime = currentTime;
   nextCalcTime += 24 * 3600;
   breakTime(nextCalcTime, calcTime);
   calcTime.Hour = 0;
   calcTime.Minute = 0;
   calcTime.Second = 1;
-
+  todayMidnight = makeTime(calcTime) - 1 - 24 * 3600;
 
   Serial.print("Sunrise is ");
   Serial.print(sunrise);
@@ -1654,7 +1693,6 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
   Serial.print("Sunset is ");
   Serial.print(sunset);
   Serial.print(" minutes past midnight.");
-
 
   sprintf(buf, "Sunset at %d:%02d, Sunrise at %d:%02d", Sunset.Hour, Sunset.Minute, Sunrise.Hour, Sunrise.Minute);
   webSocket.sendTXT(websocketId_num, buf);
@@ -1673,16 +1711,66 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
           monthNames[month(makeTime(calcTime))].c_str(), year(makeTime(calcTime)));
   webSocket.sendTXT(websocketId_num, buf);
 
-  //  if (UseSun) {
-  //    int ind = weekday(now());
-  //    Night[ind].Hour = (civilsunset + AdjustNight) / 60;
-  //    Night[ind].Minute = (civilsunset + AdjustNight) - 60 * Night[ind].Hour + 0.5;
-  //    Morning[ind].Hour = (sunrise + AdjustMorning) / 60;
-  //    Morning[ind].Minute = (sunrise + AdjustMorning) - 60 * Morning[ind].Hour + 0.5;
-  //  }
+  if (mode_change[2 * todayWeekday - 2].useSun) {
+    todayModeDay = todayMidnight + 60 * sunrise + 60 * mode_change[2 * todayWeekday - 2].sunDeviation;
+  } else {
+    todayModeDay = todayMidnight + mode_change[2 * todayWeekday - 2].specificTime.Hour * 3600
+                   + mode_change[2 * todayWeekday - 2].specificTime.Minute * 60;
+  }
 
-  sprintf(buf, "dim at %d:%02d, brighten at %d:%02d", WeekNight.Hour, WeekNight.Minute, WeekMorning.Hour, WeekMorning.Minute);
+  if (todayModeDay > now()) {
+    nextModeIsDay = true;
+    nextModeTime = todayModeDay;
+    sprintf(buf, "Use Todays Day");
+  } else {
+    if (mode_change[2 * todayWeekday - 1].useSun) {
+      todayModeNight = todayMidnight + 60 * civilsunset + 60 * mode_change[2 * todayWeekday - 1].sunDeviation;
+    } else {
+      todayModeNight = todayMidnight + mode_change[2 * todayWeekday - 1].specificTime.Hour * 3600
+                       + mode_change[2 * todayWeekday - 1].specificTime.Minute * 60;
+    }
+
+    if (todayModeNight > now()) {
+      nextModeIsDay = false;
+      nextModeTime = todayModeNight;
+      sprintf(buf, "Use Todays Night");
+    } else {
+      if (mode_change[2 * tomorrowWeekday - 2].useSun) {
+        //recalc for next day
+        sun.setCurrentDate(year(nextCalcTime), month(nextCalcTime), day(nextCalcTime));
+        tomorrowModeDay = todayMidnight + 24 * 3600 + 60 * sun.calcSunrise() + 60 * mode_change[2 * tomorrowWeekday - 2].sunDeviation;
+      } else {
+        tomorrowModeDay = todayMidnight + 24 * 3600 + mode_change[2 * tomorrowWeekday - 2].specificTime.Hour * 3600
+                          + mode_change[2 * tomorrowWeekday - 2].specificTime.Minute * 60;
+      }
+      nextModeIsDay = true;
+      nextModeTime = tomorrowModeDay;
+      sprintf(buf, "Use Tomorrows Day");
+    }
+  }
+
   webSocket.sendTXT(websocketId_num, buf);
+  sprintf(buf, "todayModeDay %d:%02d:%02d %s %d %s %d", hour(todayModeDay), minute(todayModeDay),
+          second(todayModeDay), daysOfWeek[weekday(todayModeDay)].c_str(), day(todayModeDay),
+          monthNames[month(todayModeDay)].c_str(), year(todayModeDay));
+  webSocket.sendTXT(websocketId_num, buf);
+  if (todayModeNight != 0) {
+    sprintf(buf, "todayModeNight %d:%02d:%02d %s %d %s %d", hour(todayModeNight), minute(todayModeNight),
+            second(todayModeNight), daysOfWeek[weekday(todayModeNight)].c_str(), day(todayModeNight),
+            monthNames[month(todayModeNight)].c_str(), year(todayModeNight));
+  } else {
+    sprintf(buf, "todayModeNight not calculated");
+  }
+  webSocket.sendTXT(websocketId_num, buf);
+  if (tomorrowModeDay != 0) {
+    sprintf(buf, "tomorrowModeDay %d:%02d:%02d %s %d %s %d", hour(tomorrowModeDay), minute(tomorrowModeDay),
+            second(tomorrowModeDay), daysOfWeek[weekday(tomorrowModeDay)].c_str(), day(tomorrowModeDay),
+            monthNames[month(tomorrowModeDay)].c_str(), year(tomorrowModeDay));
+  } else {
+    sprintf(buf, "tomorrowModeDay not calculated");
+  }
+  webSocket.sendTXT(websocketId_num, buf);
+
 }
 
 
@@ -1814,28 +1902,6 @@ void Draw_Clock(time_t t, byte Phase)
   strip.show(); // show all the pixels
 }
 
-//bool IsDay(time_t t)
-//{
-//  // return false; // for debug if want to test night behaviour
-//  int NowHour = hour(t);
-//  int NowMinute = minute(t);
-//  int NowDay = weekday();
-//
-//  if ((NowHour > Night[NowDay].Hour) || ((NowHour == Night[NowDay].Hour) && (NowMinute >= Night[NowDay].Minute)) || ((NowHour == Morning[NowDay].Hour) && (NowMinute <= Morning[NowDay].Minute)) || (NowHour < Morning[NowDay].Hour))
-//    return false;
-//  else
-//    return true;
-//
-//  //  if ((weekday() >= 2) && (weekday() <= 6))
-//  //    if ((NowHour > WeekNight.Hour) || ((NowHour == WeekNight.Hour) && (NowMinute >= WeekNight.Minute)) || ((NowHour == WeekMorning.Hour) && (NowMinute <= WeekMorning.Minute)) || (NowHour < WeekMorning.Hour))
-//  //      return false;
-//  //    else
-//  //      return true;
-//  //  else if ((NowHour > WeekendNight.Hour) || ((NowHour == WeekendNight.Hour) && (NowMinute >= WeekendNight.Minute)) || ((NowHour == WeekendMorning.Hour) && (NowMinute <= WeekendMorning.Minute)) || (NowHour < WeekendMorning.Hour))
-//  //    return false;
-//  //  else
-//  //    return true;
-//}
 
 //************* Function to set the clock brightness ******************************
 void SetBrightness() {
@@ -1863,7 +1929,7 @@ int ClockCorrect(int Pixel)
     return (Pixel);
 }
 
-
+/* ----------------------------------------- LED ANIMATIONS ------------------------------------*/
 void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w6, int w7, int w8, time_t t)
 {
   time_elapsed = 0;
