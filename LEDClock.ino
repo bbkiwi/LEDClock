@@ -296,8 +296,8 @@ bool SetClockFromNTP();
 bool IsDst();
 void limited_delay(int d);
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
-void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 0 );
-void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 0);
+void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 255 );
+void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 255);
 
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
@@ -1982,10 +1982,10 @@ void colorAll(uint32_t color, int duration, time_t t) {
   limited_delay(duration);                           //  Pause for a moment
 }
 
-void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int nodepix, time_t t, long firstPixelHue, int firstPixelVal, int ncolorloop, int ncolorfrac, int nbrightloop, int nbrightfrac) {
+void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int nodepix, time_t t,
+                    long firstPixelHue, int firstPixelVal,
+                    int nredfrac, int ngreenfrac, int nbluefrac, int nbrightfrac) {
   int pixelHue;
-#define SEPARATE_RGB
-#ifdef SEPARATE_RGB
   int pixelHueR;
   int pixelHueG;
   int pixelHueB;
@@ -1995,50 +1995,22 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
   uint32_t pixelRcol;
   uint32_t pixelGcol;
   uint32_t pixelBcol;
-  int nredloop  = 120;
-  int ngreenloop = 120;
-  int nblueloop = 120;
-  int nredfrac = ncolorloop;
-  int ngreenfrac = ncolorfrac;
-  int nbluefrac = nbrightloop;
-#endif
-  uint8_t pixelVal = 255;
+#define NREDLOOP 120
+#define NGREENLOOP 120
+#define NBLUELOOP 120
+#define NBRIGHTLOOP 120
+
+  uint8_t pixelVal = firstPixelVal; // default should be 255
   uint8_t pixelSat = 255;
+
   int j = piecewise_linear(i, points);
 
-#ifdef SEPARATE_RGB
-  if (nredfrac != 0) {
-    pixelHueR = firstPixelHue + (j * nredloop * 65536L / strip.numPixels() / nredfrac);
-  } else {
-    pixelHueR = firstPixelHue + (j * nredloop * 65536L / strip.numPixels());
-  }
-  if (ngreenfrac != 0) {
-    pixelHueG = firstPixelHue + (j * ngreenloop * 65536L / strip.numPixels() / ngreenfrac);
-  } else {
-    pixelHueG = firstPixelHue + (j * ngreenloop * 65536L / strip.numPixels());
-  }
-  if (nbluefrac != 0) {
-    pixelHueB = firstPixelHue + (j * nblueloop * 65536L / strip.numPixels() / nbluefrac);
-  } else {
-    pixelHueB = firstPixelHue + (j * nblueloop * 65536L / strip.numPixels());
-  }
-#else
-  // Offset pixel hue by an amount to make ncolorloop/ ncolorfrac  revolutions of the
-  // color wheel (range of 65536) along the length of the strip
-  // (strip.numPixels() steps):
-  if (ncolorfrac != 0) {
-    pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels() / ncolorfrac);
-  } else {
-    pixelHue = firstPixelHue + (j * ncolorloop * 65536L / strip.numPixels());
-  }
-#endif
 
-  if (nbrightloop != 0) { // will change Value (brightness)
-    // Offset pixel val by an amount to make nbrightloop/ nbrightfrac  revolutions of the
-    // brightness wheel (range of 256) along the length of the strip
-    if (nbrightfrac != 0) {
-      pixelVal = strip.sine8(firstPixelVal / 256 + j * nbrightloop * 256 / strip.numPixels() / nbrightfrac);
-    }
+
+  // Offset pixel val by an amount to make NBRIGHTLOOP/ nbrightfrac  revolutions of the
+  // brightness wheel (range of 256) along the length of the strip
+  if (nbrightfrac != 0) {
+    pixelVal = firstPixelVal - 128  + strip.sine8(j * NBRIGHTLOOP * 256 / strip.numPixels() / nbrightfrac);
     // need empirical adjustment as for too low value LEDs don't shine at all
     if (isDay) {
       // day brightness
@@ -2049,36 +2021,51 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
     }
   }
 
-#ifdef SEPARATE_RGB
   if (nredfrac == 0) {
-    pixelR = 0;
+    pixelR = firstPixelHue >> 16;
   } else {
+    pixelHueR = firstPixelHue + (j * NREDLOOP * 65536L / strip.numPixels() / nredfrac);
     pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
     pixelR = pixelRcol >> 16;
   }
+
+
   if (ngreenfrac == 0) {
-    pixelG = 0;
+    pixelG = firstPixelHue >> 8;
   } else {
+    //TODO would compiler optimize so that would not recompute same value?
+    if (ngreenfrac == nredfrac) {
+      pixelHueG = pixelHueR;
+      pixelHueG = firstPixelHue + (j * NGREENLOOP * 65536L / strip.numPixels() / ngreenfrac);
+
+    } else {
+      pixelHueG = firstPixelHue + (j * NGREENLOOP * 65536L / strip.numPixels() / ngreenfrac);
+    }
     pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
     pixelG = pixelGcol >> 8;
   }
+
+
   if (nbluefrac == 0) {
-    pixelB = 0;
+    pixelB = firstPixelHue;
   } else {
+    //TODO would compiler optimize so that would not recompute same value?
+    if (nbluefrac == nredfrac) {
+      pixelHueB = pixelHueR;
+    } else if (nbluefrac == ngreenfrac) {
+      pixelHueB = pixelHueG;
+    } else {
+      pixelHueB = firstPixelHue + (j * NBLUELOOP * 65536L / strip.numPixels() / nbluefrac);
+    }
     pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
     pixelB = pixelBcol;
   }
+
+
   strip.setPixelColor(ClockCorrect(i + nodepix), pixelR, pixelG, pixelB);
+
 #ifdef HAS_24_RING
   stripinner.setPixelColor(ClockCorrect(i + nodepix) * 2 / 5, pixelR, pixelG, pixelB);
-#endif
-#else
-  // Using 3 argument strip.ColorHSV(): a hue (0 to 65535),saturation and value (brightness) (each 0 to 255).
-  // Passed through strip.gamma32() to provide 'truer' colors before assigning to each pixel:
-  strip.setPixelColor(ClockCorrect(i + nodepix), strip.gamma32(strip.ColorHSV(pixelHue, pixelSat, pixelVal)));
-#ifdef HAS_24_RING
-  stripinner.setPixelColor(ClockCorrect(i + nodepix) * 2 / 5, stripinner.gamma32(stripinner.ColorHSV(pixelHue, pixelSat, pixelVal)));
-#endif
 #endif
   yield();
 }
