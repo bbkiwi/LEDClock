@@ -8,8 +8,11 @@
    Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
-//features request by Colin
-//22 June 2024
+
+//28 June 2024
+//TODO time_t t NEVER used anywhere, remove from all fcns etc.
+//color_wipe and rainbow can be combined.
+//need more parameters
 
 // Daily mode_changes either specify directly or as ajustments to sun rise/set
 // Now saved in config and  gui to flash
@@ -217,6 +220,15 @@ int light_alarm_parm3 = 0;
 int light_alarm_parm4 = 0;
 int light_alarm_parm5 = 0;
 int light_alarm_parm6 = 0;
+// extra test parameters
+int light_alarm_parm7 = 0;
+int light_alarm_parm8 = 0;
+int light_alarm_parm9 = 0;
+int light_alarm_parm10 = 0;
+
+
+
+
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
 //tmElements_t alarmTime;
@@ -295,9 +307,13 @@ void SetBrightness();
 bool SetClockFromNTP();
 bool IsDst();
 void limited_delay(int d);
+
+
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
-void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 255 );
-void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration, int nbrightloop = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 255);
+void rainbow(int wait, int embedding, long firsthue, int hueinc,  int nredfrac, int ngreenfrac, int nodepix, time_t t, uint16_t duration, int nbluefrac = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 255 );
+// embedding, firstRhue, firstGhue, firstBhue, firstval, nredfrac, ngreenfrac, nbluefrac, nbrightfrac,  hueRinc, hueGinc, hueBinc, valinc, nodepix, nodepix1, nodepix2,    wait, duration, t
+void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int nredfrac, int blocksize, int nodepix, time_t t, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int valinc = 0, int firstval = 255);
+void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7 = 0, int parm8 = 0, int parm9 = 0, int parm10 = 0);
 
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
@@ -385,7 +401,8 @@ void loop() {
 
   if (light_alarm_num)  {
     light_alarm_parm1 = max(light_alarm_parm1, 1);
-    show_alarm_pattern(light_alarm_num, 10000, light_alarm_parm1, light_alarm_parm2, light_alarm_parm3, light_alarm_parm4, light_alarm_parm5, light_alarm_parm6);
+    show_alarm_pattern(light_alarm_num, 10000, light_alarm_parm1, light_alarm_parm2, light_alarm_parm3, light_alarm_parm4, light_alarm_parm5,
+                       light_alarm_parm6, light_alarm_parm7, light_alarm_parm8, light_alarm_parm9, light_alarm_parm10);
     light_alarm_num = 0;
   }
 
@@ -514,8 +531,9 @@ void limited_delay(int d) {
   delay(min(abs(d), 10000));
 }
 
-void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6) {
-  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d", light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6);
+void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7, int parm8, int parm9, int parm10) {
+  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d, p7 = %d, p8 = %d, p9 = %d, p10 = %d",
+          light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6, parm7, parm8, parm9, parm10);
   Serial.println(buf);
 
   int isecond = second(now());
@@ -530,16 +548,15 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       firefly(parm1, parm2, 0, 65535, parm3, 255, 256,  255, 256, now(), duration);
       break;
     case 3:
-      //void rainbow(wait, embedding, long firsthue, hueinc,  ncolorloop, ncolorfrac, nodepix, time_t t, uint16_t duration, nbrightloop = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
+      //void rainbow(wait, embedding, long firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, time_t t, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
       // rgb sep                                                 nrfrac     ngfrac                                           nbfrac
       //          emb  firsthue,hueinc nrfra ngfrac                        nbrfrac   brightfrac valinc
       rainbow(0, parm1, 0,     parm2, parm3, parm4, ihour, now(), duration, parm5,   parm6); // full rainbow ring rotating
       //rainbow(0, 1, 0, 256, 1, 1, ihour, now(), duration); // full rainbow ring rotating
       break;
     case 4:
-      color_wipe(parm1, parm2, parm3, parm4, parm5, parm6, ihour, now(), duration, 120, 0); // color_wipe
-      // old color_wipe(20, parm1, 0, parm2 == 0 ? 0 : 65336 / parm2 , parm3 == 0 ? 0 : 100 / parm3 , 0, ihour, now(), duration); // color_wipe
-      //rainbow(0, 1, 0, 32, 1, 1, ihour, now(), duration);  // full rainbox ring rotating 8 times slower
+      //color_wipe(int wait, int embedding, long firsthue, int hueinc,  int nredfrac, int blocksize, int nodepix, time_t t, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int valinc = 0, int firstval = 255);
+      color_wipe(     parm1,        parm2,        parm3,        parm4,         parm5,       parm6,          ihour,     now(),       duration,            parm7,             parm8); // color_wipe
       break;
     case 5: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
       showlights(duration, parm1, parm2, parm3, -1, -1, -1, -1, -1, now());
@@ -1441,7 +1458,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         isDay = false;
       } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm6
         //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "P%d %d %d %d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5, &light_alarm_parm6);
+        sscanf((char *) payload, "P%d %d %d %d %d %d %d %d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5,
+               &light_alarm_parm6, &light_alarm_parm7, &light_alarm_parm8, &light_alarm_parm9, &light_alarm_parm10);
         //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -1548,7 +1566,7 @@ void send_displayInfo() {
 
 void send_alarmInfo(int alarm_ind) {
   // send back info same order as payload when alarm defined
-  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %2d:%2d:%2d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %02d:%02d:%02d,%d,%d,%d,%d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
           alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
           alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive, alarmInfo[alarm_ind].duration,
@@ -1557,7 +1575,7 @@ void send_alarmInfo(int alarm_ind) {
           day(makeTime(alarmInfo[alarm_ind].alarmTime)),
           year(makeTime(alarmInfo[alarm_ind].alarmTime)),
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-          second(makeTime(alarmInfo[alarm_ind].alarmTime)));
+          second(makeTime(alarmInfo[alarm_ind].alarmTime)), light_alarm_parm7, light_alarm_parm8, light_alarm_parm9, light_alarm_parm10);
   Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
@@ -1982,6 +2000,7 @@ void colorAll(uint32_t color, int duration, time_t t) {
   limited_delay(duration);                           //  Pause for a moment
 }
 
+//TODO make i and array of indeces to change
 void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int nodepix, time_t t,
                     long firstPixelHue, int firstPixelVal,
                     int nredfrac, int ngreenfrac, int nbluefrac, int nbrightfrac) {
@@ -2022,7 +2041,7 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
   }
 
   if (nredfrac == 0) {
-    pixelR = firstPixelHue >> 16;
+    pixelR = 0; //firstPixelHue >> 16;
   } else {
     pixelHueR = firstPixelHue + (j * NREDLOOP * 65536L / strip.numPixels() / nredfrac);
     pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
@@ -2031,13 +2050,11 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
 
 
   if (ngreenfrac == 0) {
-    pixelG = firstPixelHue >> 8;
+    pixelG = 0; //firstPixelHue >> 8;
   } else {
     //TODO would compiler optimize so that would not recompute same value?
     if (ngreenfrac == nredfrac) {
       pixelHueG = pixelHueR;
-      pixelHueG = firstPixelHue + (j * NGREENLOOP * 65536L / strip.numPixels() / ngreenfrac);
-
     } else {
       pixelHueG = firstPixelHue + (j * NGREENLOOP * 65536L / strip.numPixels() / ngreenfrac);
     }
@@ -2047,7 +2064,7 @@ void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int no
 
 
   if (nbluefrac == 0) {
-    pixelB = firstPixelHue;
+    pixelB = 0; //firstPixelHue;
   } else {
     //TODO would compiler optimize so that would not recompute same value?
     if (nbluefrac == nredfrac) {
@@ -2112,15 +2129,10 @@ std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding) {
 
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int ncolorfrac, int nodepix, time_t t, uint16_t duration, int nbrightloop, int nbrightfrac, int valinc, int firstval) {
-  sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, ncolorfrac = %d, nodepix = %d, duration = %d, nbrightloop = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
-          wait, embedding, firsthue, hueinc, ncolorloop, ncolorfrac, nodepix, duration, nbrightloop, nbrightfrac, valinc, firstval);
+void rainbow(int wait, int embedding, long firsthue, int hueinc,  int nredfrac, int ngreenfrac, int nodepix, time_t t, uint16_t duration, int nbluefrac, int nbrightfrac, int valinc, int firstval) {
+  sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, nredfrac = %d, ngreenfrac = %d, nodepix = %d, duration = %d, nbluefrac = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
+          wait, embedding, firsthue, hueinc, nredfrac, ngreenfrac, nodepix, duration, nbluefrac, nbrightfrac, valinc, firstval);
   Serial.println(buf);
-  // Hue of first pixel runs ncolorloop complete loops through the color wheel.
-  // Color wheel has a range of 65536 but it's OK if we roll over, so
-  // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
-  // means we'll make ncolorloop*65536/256   passes through this outer loop:
-  // sine8 provides a 'brightness wheel'
   time_elapsed = 0;
   uint16_t time_start = millis();
   int firstPixelVal = firstval;
@@ -2131,17 +2143,13 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
     // For each frame, the colorwheel and brightness wheel shift
     // This gives apparent motion. If values are same both move
     // at same rate.
+    // sets all leds (pixels) for one frame of the animation
+    // MUST have yield() in loop - it is in pattern_helper
+    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
+      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, nredfrac, ngreenfrac, nbluefrac, nbrightfrac);
+    }
     firstPixelHue += hueinc;
     firstPixelVal += valinc;
-    // routine setting all leds (pixels) for one frame of the animation
-    // where ncolorloop/ncolorfrac of colorwheel
-    //   and nbrightloop/nbrightfrac of brightness wave from min to max is mapped
-    // is mapped to LEDs via embedding
-    // MUST have yield() in loop
-    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, ncolorfrac, nbrightloop, nbrightfrac);
-    }
-
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING
@@ -2152,15 +2160,10 @@ void rainbow(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop
   }
 }
 
-void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorloop, int blocksize, int nodepix, time_t t, uint16_t duration, int nbrightloop, int nbrightfrac, int valinc, int firstval) {
-  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, ncolorloop = %d, blocksize = %d, nodepix = %d, duration = %d, nbrightloop = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
-          wait, embedding, firsthue, hueinc, ncolorloop, blocksize, nodepix, duration, nbrightloop, nbrightfrac, valinc, firstval);
+void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int nredfrac, int blocksize, int nodepix, time_t t, uint16_t duration, int nbluefrac, int ngreenfrac, int valinc, int firstval) {
+  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, nredfrac = %d, blocksize = %d, nodepix = %d, duration = %d, nbluefrac = %d, ngreenfrac = %d, valinc = %d, firstval = %d",
+          wait, embedding, firsthue, hueinc, nredfrac, blocksize, nodepix, duration, nbluefrac, ngreenfrac, valinc, firstval);
   Serial.println(buf);
-
-  // Hue of first pixel runs ncolorloop complete loops through the color wheel.
-  // Color wheel has a range of 65536 but it's OK if we roll over, so
-  // just count from 0 to ncolorloop*65536. Adding 256 to firstPixelHue each time
-  // means we'll make ncolorloop*65536/256   passes through this outer loop:
   int pixelHue;
   time_elapsed = 0;
   uint16_t time_start = millis();
@@ -2168,7 +2171,7 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
   long firstPixelHue = firsthue;
   int i = 0; // starting index
   std::vector<std::pair<int8_t, int8_t>> points;
-  int j;
+  //TODO check not needed int j;
   int maxcnt;
   points = points_for_embedding(embedding);
   strip.fill(); // clear
@@ -2181,26 +2184,32 @@ void color_wipe(int wait, int embedding, long firsthue, int hueinc,  int ncolorl
     } else {
       maxcnt = random(1, 1 - blocksize);
     }
+    // make a frame by updating maxnt more leds (pixels)
     for (int cnt = 0; cnt < maxcnt; cnt++) {
-      // routine setting all leds (pixels) for one frame of the animation
-      // must have yield() in loop
-      if (ncolorloop >= 0) {
+      //TODO fix this, determins direction of fill
+      // new parameter?
+      //TODO if maxcnt = NUM_LEDS does this become rainbow?
+      //if (nredfrac >= 0) {
+      if (true) {
         i++;
         if (i  >= strip.numPixels()) {
           i = 0;
-          firstPixelVal += valinc;
-          firstPixelHue += hueinc;
+          //firstPixelVal += valinc;
+          //firstPixelHue += hueinc;
         }
       } else {
         i --;
         if (i  < 0) {
           i =   - 1 + strip.numPixels();
-          firstPixelVal += valinc;
-          firstPixelHue += hueinc;
+          //firstPixelVal += valinc;
+          //firstPixelHue += hueinc;
         }
       }
-      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, ncolorloop, nbrightfrac, nbrightloop, 0);
+      pattern_helper(i, points, nodepix, t, firstPixelHue, firstPixelVal, nredfrac, ngreenfrac, nbluefrac, 0);
     }
+
+    firstPixelVal += valinc;
+    firstPixelHue += hueinc;
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING

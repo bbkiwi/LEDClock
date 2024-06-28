@@ -26,6 +26,10 @@ connection.onmessage = function (e) {
       document.getElementById('pat_parm4').value = Number(alarminfo[7]);
       document.getElementById('pat_parm5').value = Number(alarminfo[8]);
       document.getElementById('pat_parm6').value = Number(alarminfo[9]);
+      document.getElementById('pat_parm7').value = Number(alarminfo[14]);
+      document.getElementById('pat_parm8').value = Number(alarminfo[15]);
+      document.getElementById('pat_parm9').value = Number(alarminfo[16]);
+      document.getElementById('pat_parm10').value = Number(alarminfo[17]);
       document.getElementById('alarmrepeat').value = alarminfo[10];
       if (document.getElementById('alarmrepeat').value === '') {
         document.getElementById('alarmrepeat').value = 'other';
@@ -199,6 +203,10 @@ function setalarm() {
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
+  var parm7 = document.getElementById('pat_parm7').value;
+  var parm8 = document.getElementById('pat_parm8').value;
+  var parm9 = document.getElementById('pat_parm9').value;
+  var parm10 = document.getElementById('pat_parm10').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
   var daysactive = ((document.getElementById('dayactive1').checked) ? 2: 0) +
                    ((document.getElementById('dayactive2').checked) ? 4: 0) +
@@ -221,7 +229,8 @@ function setalarm() {
   }
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
-	connection.send(cmd + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
+	connection.send(cmd + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " "
+	 +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate + " " + parm7 + " " + parm8 + " " + parm9 + " " + parm10);
 	//connection.send("J" + adjmorn + " " + adjnight + " " + daystart + " " + nightstart);
 }
 
@@ -249,10 +258,14 @@ function patternEffect(){
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
+  var parm7 = document.getElementById('pat_parm7').value;
+  var parm8 = document.getElementById('pat_parm8').value;
+  var parm9 = document.getElementById('pat_parm9').value;
+  var parm10 = document.getElementById('pat_parm10').value;
   if (num == 43) {
     num = getRandomIntInclusive(1, 42);
   }
-  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6);
+  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " " + parm9 + " " + parm10);
     //document.getElementById('rainbow').style.backgroundColor = '#00878F';
 }
 
