@@ -26,10 +26,10 @@ connection.onmessage = function (e) {
       document.getElementById('pat_parm4').value = Number(alarminfo[7]);
       document.getElementById('pat_parm5').value = Number(alarminfo[8]);
       document.getElementById('pat_parm6').value = Number(alarminfo[9]);
-      document.getElementById('pat_parm7').value = Number(alarminfo[14]);
-      document.getElementById('pat_parm8').value = Number(alarminfo[15]);
-      document.getElementById('pat_parm9').value = Number(alarminfo[16]);
-      document.getElementById('pat_parm10').value = Number(alarminfo[17]);
+      document.getElementById('green_nfrac').value = Number(alarminfo[14]);
+      document.getElementById('blue_nfrac').value = Number(alarminfo[15]);
+      document.getElementById('pat_parm7').value = Number(alarminfo[16]);
+      document.getElementById('pat_parm8').value = Number(alarminfo[17]);
       document.getElementById('alarmrepeat').value = alarminfo[10];
       if (document.getElementById('alarmrepeat').value === '') {
         document.getElementById('alarmrepeat').value = 'other';
@@ -77,7 +77,7 @@ connection.onmessage = function (e) {
     } else if (e.data.startsWith('WHATTIME')) {
       document.getElementById('whattime').innerHTML = e.data.substring(8);
     }
-	$eventLog.innerHTML =  e.data + '\n' + $eventLog.innerHTML;
+	$eventLog.innerHTML =  e.data + ' <br> ' + $eventLog.innerHTML;
 };
 connection.onclose = function(){
     console.log('WebSocket connection closed');
@@ -203,10 +203,10 @@ function setalarm() {
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
-  var parm7 = document.getElementById('pat_parm7').value;
-  var parm8 = document.getElementById('pat_parm8').value;
-  var parm9 = document.getElementById('pat_parm9').value;
-  var parm10 = document.getElementById('pat_parm10').value;
+  var parm9 = document.getElementById('pat_parm7').value;
+  var parm10 = document.getElementById('pat_parm8').value;
+  var parm7 = document.getElementById('green_nfrac').value;
+  var parm8 = document.getElementById('blue_nfrac').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
   var daysactive = ((document.getElementById('dayactive1').checked) ? 2: 0) +
                    ((document.getElementById('dayactive2').checked) ? 4: 0) +
@@ -250,7 +250,7 @@ function getRandomIntInclusive(min, max) {
 }
 
 
-function patternEffect(){
+function patternEffect() {
   var num = document.getElementById('numpattern').value;
   var parm1 = document.getElementById('pat_parm1').value;
   var parm2 = document.getElementById('pat_parm2').value;
@@ -258,15 +258,14 @@ function patternEffect(){
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
-  var parm7 = document.getElementById('pat_parm7').value;
-  var parm8 = document.getElementById('pat_parm8').value;
-  var parm9 = document.getElementById('pat_parm9').value;
-  var parm10 = document.getElementById('pat_parm10').value;
+  var parm9 = document.getElementById('pat_parm7').value;
+  var parm10 = document.getElementById('pat_parm8').value;
+  var parm7= document.getElementById('green_nfrac').value;
+  var parm8 = document.getElementById('blue_nfrac').value;
   if (num == 43) {
     num = getRandomIntInclusive(1, 42);
   }
-  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " " + parm9 + " " + parm10);
-    //document.getElementById('rainbow').style.backgroundColor = '#00878F';
+  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " " + parm9 + " " + parm10 + " " + sendRGBBparms());
 }
 
 function togForceDay(){
@@ -298,7 +297,7 @@ function hideDiv(elementId) {
 
 function toggleShowHide(elementId) {
 	var ledControl = document.getElementById(elementId);
-	var els = ["Clock-Control", "Display-Control", "Alarm-Control", "Mode-Control"];
+	var els = ["Clock-Control", "Pattern-Control", "Display-Control", "Alarm-Control", "Mode-Control"];
 	  els.forEach(function(el){
 	    if (el != elementId) {
 	      hideDiv(el);
@@ -365,6 +364,25 @@ function fillTable(data) {
         }
     }
 }
+
+
+// Return string (blank separated) of  Red, Green, Blue, Bright parms
+function sendRGBBparms() {
+  var RGBBparms = document.getElementById('RGBBparms');
+  var inputs = RGBBparms.getElementsByTagName('input');
+  var values = "";
+  for (var i = 0; i < inputs.length; i++) {
+    var input = inputs[i];
+    //console.log(input.id + ":" + input.value);
+    if (input.id) {
+    values += input.value + " ";
+    }
+  }
+  //console.log("Returned String " + values);
+  return values;
+}
+
+
 
 // Send  table data back create a string in the format of exampleData
 function sendTableData() {

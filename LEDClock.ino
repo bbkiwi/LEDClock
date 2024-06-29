@@ -225,8 +225,9 @@ int light_alarm_parm9 = 0;
 int light_alarm_parm10 = 0;
 
 struct PATTERN {
-  int first = 0;
-  int nfrac = 0;
+  uint16_t first = 0;
+  int16_t inc = 0;
+  int16_t nfrac = 0;
   uint8_t embedding = 1;
 };
 
@@ -237,6 +238,8 @@ struct HELPER_PARAM {
   PATTERN Blue;
   PATTERN Bright;
 };
+
+HELPER_PARAM global_hparam;
 
 bool led_color_alarm_flag = false;
 uint32_t led_color_alarm_rgb;
@@ -319,9 +322,9 @@ void limited_delay(int d);
 
 
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
-void rainbow(int wait, uint8_t embedding, int firsthue, int hueinc,  int nredfrac, int ngreenfrac, int nodepix, uint16_t duration, int nbluefrac = 0, int nbrightfrac = 0, int valinc = 0, int firstval = 255 );
+void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t nbrightfrac = 0, int16_t valinc = 0, uint16_t firstval = 255 );
 // embedding, firstRhue, firstGhue, firstBhue, firstval, nredfrac, ngreenfrac, nbluefrac, nbrightfrac,  hueRinc, hueGinc, hueBinc, valinc, nodepix, nodepix1, nodepix2,    wait, duration, t
-void color_wipe(int wait, uint8_t embedding, int firsthue, int hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int valinc = 0, int firstval = 255);
+void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 255);
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7 = 0, int parm8 = 0, int parm9 = 0, int parm10 = 0);
 
 //************* Declare NeoPixel ******************************
@@ -557,15 +560,19 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       firefly(parm1, parm2, 0, 65535, parm3, 255, 256,  255, 256, duration);
       break;
     case 3:
-      //void rainbow(wait, embedding, int firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
+      //void rainbow(wait, embedding, uint16_t firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
       // rgb sep                                                 nrfrac     ngfrac                                           nbfrac
       //          emb  firsthue,hueinc nrfra ngfrac                        nbrfrac   brightfrac valinc
       rainbow(0, parm1, 0,     parm2, parm3, parm4, ihour, duration, parm5,   parm6); // full rainbow ring rotating
       //rainbow(0, 1, 0, 256, 1, 1, ihour, duration); // full rainbow ring rotating
       break;
     case 4:
-      //color_wipe(int wait, int embedding, int firsthue, int hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int valinc = 0, int firstval = 255);
-      color_wipe(     parm1,        parm2,        parm3,        parm4,         parm5,       parm6,          ihour,       duration,            parm7,             parm8); // color_wipe
+      //color_wipe(int wait, int embedding, uint16_t firsthue, int16_t hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 255);
+      //color_wipe(     parm1,        parm2,        parm3,        parm4,         parm5,       parm6,          ihour,       duration,            parm7,             parm8); // color_wipe
+
+      global_hparam.nodepix = ihour;
+      color_wipe(global_hparam, parm1, parm2, duration);
+
       break;
     case 5: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
       showlights(duration, parm1, parm2, parm3, -1, -1, -1, -1, -1);
@@ -1466,9 +1473,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'G') {                      // browser sent G to  force_night
         isDay = false;
       } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm6
-        //TODO why if light_alarm_num was declared byte did this blow up had to make int
-        sscanf((char *) payload, "P%d %d %d %d %d %d %d %d %d %d %d", &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5,
-               &light_alarm_parm6, &light_alarm_parm7, &light_alarm_parm8, &light_alarm_parm9, &light_alarm_parm10);
+        //Carefull with sscanf %d %hd %hhd must match type!
+        sscanf((char *) payload,
+               "P%d %d %d %d %d %d %d %d %d %d %d %hd %hd %hd %hhd 0 0 0 %hd %hd %hd %hhd 0 0 0 %hd %hd %hd %hhd 0 0 0 %hd %hd %hd %hhd 0 0 0",
+               &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5,
+               &light_alarm_parm6, &light_alarm_parm7, &light_alarm_parm8, &light_alarm_parm9, &light_alarm_parm10,
+               &global_hparam.Red.first, &global_hparam.Red.inc, &global_hparam.Red.nfrac, &global_hparam.Red.embedding,
+               &global_hparam.Green.first, &global_hparam.Green.inc, &global_hparam.Green.nfrac, &global_hparam.Green.embedding,
+               &global_hparam.Blue.first, &global_hparam.Blue.inc, &global_hparam.Blue.nfrac, &global_hparam.Blue.embedding,
+               &global_hparam.Bright.first, &global_hparam.Bright.inc, &global_hparam.Bright.nfrac, &global_hparam.Bright.embedding);
         //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -2070,7 +2083,7 @@ void pattern_helper(int i, HELPER_PARAM Param) {
 #define NGREENLOOP 120
 #define NBLUELOOP 120
 #define NBRIGHTLOOP 120
-  int pixelVal = Param.Bright.first; // default should be 255
+  uint16_t pixelVal = Param.Bright.first; // default should be 255
   uint8_t pixelSat = 255;
 
   std::vector<std::pair<int8_t, int8_t>> points;
@@ -2133,16 +2146,18 @@ void pattern_helper(int i, HELPER_PARAM Param) {
 
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait, uint8_t embedding, int firsthue, int hueinc,  int nredfrac, int ngreenfrac, int nodepix, uint16_t duration, int nbluefrac, int nbrightfrac, int valinc, int firstval) {
+void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac, int16_t nbrightfrac, int16_t valinc, uint16_t firstval) {
   sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, nredfrac = %d, ngreenfrac = %d, nodepix = %d, duration = %d, nbluefrac = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
           wait, embedding, firsthue, hueinc, nredfrac, ngreenfrac, nodepix, duration, nbluefrac, nbrightfrac, valinc, firstval);
   Serial.println(buf);
+  HELPER_PARAM Param = {nodepix, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding } };
+  rainbow(Param, wait, duration);
+}
+void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   time_elapsed = 0;
   uint16_t time_start = millis();
-  int firstPixelVal = firstval;
-  int firstPixelHue = firsthue;
-  HELPER_PARAM Param = {nodepix, {firstPixelHue, nredfrac, embedding }, {firstPixelHue, ngreenfrac, embedding }, {firstPixelHue, nbluefrac, embedding }, {firstPixelVal, nbrightfrac, embedding } };
-
+  //  HELPER_PARAM Param = {nodepix, {firstPixelHue, 0, nredfrac, embedding }, {firstPixelHue, 0, ngreenfrac, embedding }, {firstPixelHue, 0, nbluefrac, embedding }, {firstPixelVal, 0, nbrightfrac, embedding } };
+  //  Serial.println(Param.Red.nfrac);
   while (time_elapsed < duration) {
     // For each frame, the colorwheel and brightness wheel shift
     // This gives apparent motion. If values are same both move
@@ -2152,9 +2167,11 @@ void rainbow(int wait, uint8_t embedding, int firsthue, int hueinc,  int nredfra
     for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
       pattern_helper(i, Param);
     }
-    firstPixelHue += hueinc;
-    firstPixelVal += valinc;
-    Param = {nodepix, {firstPixelHue, nredfrac, embedding }, {firstPixelHue, ngreenfrac, embedding }, {firstPixelHue, nbluefrac, embedding }, {firstPixelVal, nbrightfrac, embedding } };
+
+    Param.Bright.first += Param.Bright.inc;
+    Param.Red.first += Param.Red.inc;
+    Param.Green.first += Param.Green.inc;
+    Param.Blue.first += Param.Blue.inc;
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING
@@ -2165,16 +2182,21 @@ void rainbow(int wait, uint8_t embedding, int firsthue, int hueinc,  int nredfra
   }
 }
 
-void color_wipe(int wait, uint8_t embedding, int firsthue, int hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int ngreenfrac, int nbluefrac, int valinc, int firstval) {
+void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t ngreenfrac, int16_t nbluefrac, int16_t valinc, uint16_t firstval) {
   sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, nredfrac = %d, blocksize = %d, nodepix = %d, duration = %d, ngreenfrac = %d, nbluefrac = %d, valinc = %d, firstval = %d",
           wait, embedding, firsthue, hueinc, nredfrac, blocksize, nodepix, duration, ngreenfrac, nbluefrac, valinc, firstval);
   Serial.println(buf);
-  int pixelHue;
+  HELPER_PARAM Param = {nodepix, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding } };
+  color_wipe(Param, blocksize,  wait, duration);
+}
+
+void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration) {
+  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %d, hueinc = %d, nredfrac = %d, blocksize = %d, nodepix = %d, duration = %d, ngreenfrac = %d, nbluefrac = %d, valinc = %d, firstval = %d",
+          wait, Param.Red.embedding, Param.Red.first, Param.Red.inc, Param.Red.nfrac, blocksize, Param.nodepix, duration, Param.Green.nfrac, Param.Blue.nfrac, Param.Bright.inc, Param.Bright.first);
+  Serial.println(buf);
+  //TODO not needed? int pixelHue;
   time_elapsed = 0;
   uint16_t time_start = millis();
-  int firstPixelVal = firstval;
-  int firstPixelHue = firsthue;
-  HELPER_PARAM Param = {nodepix, {firstPixelHue, nredfrac, embedding }, {firstPixelHue, ngreenfrac, embedding }, {firstPixelHue, nbluefrac, embedding }, {firstPixelVal, 0, embedding } };
   int i = 0; // starting index
   int maxcnt;
   strip.fill(); // clear
@@ -2211,9 +2233,10 @@ void color_wipe(int wait, uint8_t embedding, int firsthue, int hueinc,  int nred
       pattern_helper(i, Param);
     }
 
-    firstPixelVal += valinc;
-    firstPixelHue += hueinc;
-    Param = {nodepix, {firstPixelHue, nredfrac, embedding }, {firstPixelHue, ngreenfrac, embedding }, {firstPixelHue, nbluefrac, embedding }, {firstPixelVal, 0, embedding } };
+    Param.Bright.first += Param.Bright.inc;
+    Param.Red.first += Param.Red.inc;
+    Param.Green.first += Param.Green.inc;
+    Param.Blue.first += Param.Blue.inc;
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_24_RING
