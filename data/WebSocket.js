@@ -26,10 +26,8 @@ connection.onmessage = function (e) {
       document.getElementById('pat_parm4').value = Number(alarminfo[7]);
       document.getElementById('pat_parm5').value = Number(alarminfo[8]);
       document.getElementById('pat_parm6').value = Number(alarminfo[9]);
-      document.getElementById('green_nfrac').value = Number(alarminfo[14]);
-      document.getElementById('blue_nfrac').value = Number(alarminfo[15]);
-      document.getElementById('pat_parm7').value = Number(alarminfo[16]);
-      document.getElementById('pat_parm8').value = Number(alarminfo[17]);
+      document.getElementById('pat_parm7').value = Number(alarminfo[14]);
+      document.getElementById('pat_parm8').value = Number(alarminfo[15]);
       document.getElementById('alarmrepeat').value = alarminfo[10];
       if (document.getElementById('alarmrepeat').value === '') {
         document.getElementById('alarmrepeat').value = 'other';
@@ -60,6 +58,10 @@ connection.onmessage = function (e) {
         document.getElementById('dayonly').innerHTML = "Off or Unset";
         //document.getElementById('saveddatetime').innerHTML = 'NOT SET MUST CHOOSE WHEN';
       }
+    } else if (e.data.startsWith('PATTERNINFO:')) {
+      var patterninfo = e.data.split(',');
+      console.log(patterninfo);
+      fillRGBBparms(patterninfo);
     } else if (e.data.startsWith('DISPLAYINFO:')) {
       var displayinfo = e.data.split(',');
       console.log(displayinfo);
@@ -203,10 +205,8 @@ function setalarm() {
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
-  var parm9 = document.getElementById('pat_parm7').value;
-  var parm10 = document.getElementById('pat_parm8').value;
-  var parm7 = document.getElementById('green_nfrac').value;
-  var parm8 = document.getElementById('blue_nfrac').value;
+  var parm7 = document.getElementById('pat_parm7').value;
+  var parm8 = document.getElementById('pat_parm8').value;
   var alarmrepeat = document.getElementById('alarmrepeat').value;
   var daysactive = ((document.getElementById('dayactive1').checked) ? 2: 0) +
                    ((document.getElementById('dayactive2').checked) ? 4: 0) +
@@ -230,7 +230,7 @@ function setalarm() {
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
 	connection.send(cmd + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " "
-	 +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate + " " + parm7 + " " + parm8 + " " + parm9 + " " + parm10);
+	 +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate + " " + parm7 + " " + parm8);
 	//connection.send("J" + adjmorn + " " + adjnight + " " + daystart + " " + nightstart);
 }
 
@@ -258,14 +258,12 @@ function patternEffect() {
   var parm4 = document.getElementById('pat_parm4').value;
   var parm5 = document.getElementById('pat_parm5').value;
   var parm6 = document.getElementById('pat_parm6').value;
-  var parm9 = document.getElementById('pat_parm7').value;
-  var parm10 = document.getElementById('pat_parm8').value;
-  var parm7= document.getElementById('green_nfrac').value;
-  var parm8 = document.getElementById('blue_nfrac').value;
-  if (num == 43) {
+  var parm7 = document.getElementById('pat_parm7').value;
+  var parm8 = document.getElementById('pat_parm8').value;
+  if (num == 46) {
     num = getRandomIntInclusive(1, 42);
   }
-  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " " + parm9 + " " + parm10 + " " + sendRGBBparms());
+  connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " " + sendRGBBparms());
 }
 
 function togForceDay(){
@@ -364,6 +362,22 @@ function fillTable(data) {
         }
     }
 }
+
+
+// Fill input fields corresonding to  Red, Green, Blue, Bright parms
+function fillRGBBparms(patterninfo) {
+  var RGBBparms = document.getElementById('RGBBparms');
+  var inputs = RGBBparms.getElementsByTagName('input');
+  var j = 0;
+  for (var i = 1; i < patterninfo.length; i++) {
+    if  (inputs[j].disabled) {
+      j +=1;
+    }
+    inputs[j].value = patterninfo[i];
+    j += 1;
+  }
+}
+
 
 
 // Return string (blank separated) of  Red, Green, Blue, Bright parms
