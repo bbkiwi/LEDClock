@@ -9,10 +9,10 @@
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
 
-//28 June 2024
+//1 Nov 2024
 
 //color_wipe and rainbow can be combined.
-//need more parameters
+//add coef0, coef1, coef2 paramters to HELPER_PARAM
 
 // Daily mode_changes either specify directly or as ajustments to sun rise/set
 // Now saved in config and  gui to flash
@@ -84,6 +84,7 @@
 #define LONGITUDE       172.689831
 #define CST_OFFSET      12
 #define DST_OFFSET      13
+
 
 SunSet sun;
 
@@ -164,6 +165,7 @@ bool ClockGoBackwards = false;
 #endif
 
 
+
 int day_disp_ind = 0;
 bool minute_blink[NUM_DISP_OPTIONS] = {true, true};
 int minute_width[NUM_DISP_OPTIONS] = {2, 4, 2, 2, -1}; //-1 means don't show
@@ -235,6 +237,9 @@ struct PATTERN {
 
 struct HELPER_PARAM {
   int nodepix = 0;
+  int coef0 = 0;
+  int coef1 = 0;
+  int coef2 = 0;
   PATTERN Red;
   PATTERN Green;
   PATTERN Blue;
@@ -694,6 +699,8 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       send_patternInfo();
       break;
     case 44:
+      global_hparam.nodepix = ihour;
+      global_hparam.coef2 = 1;
       rainbow(global_hparam, parm1, duration);
       break;
     case 45:
@@ -2086,7 +2093,10 @@ std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding) {
 //                    int firstPixelHue, int firstPixelVal,
 //                    int nredfrac, int ngreenfrac, int nbluefrac, int nbrightfrac) {
 
-void pattern_helper(int i, HELPER_PARAM Param) {
+//TODO if use protects Param being changes, but uses more space
+void pattern_helper(int i, const HELPER_PARAM& Param) {
+  // This passes by ref but the function does not change any fields
+  //void pattern_helper(int i, HELPER_PARAM& Param) {
   int pixelHueR;
   int pixelHueG;
   int pixelHueB;
@@ -2161,27 +2171,46 @@ void pattern_helper(int i, HELPER_PARAM Param) {
   yield();
 }
 
+void print_Param(HELPER_PARAM& Param) {
+  sprintf(buf, "nodepix = %d, coef0 = %d, coef1 = %d, coef2 = %d\nRed first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Green first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Blue first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Bright first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n",
+          Param.nodepix, Param.coef0, Param.coef1, Param.coef2,
+          Param.Red.first, Param.Red.inc, Param.Red.nfrac, Param.Red.embedding, Param.Red.n0, Param.Red.n1, Param.Red.n2,
+          Param.Green.first, Param.Green.inc, Param.Green.nfrac, Param.Green.embedding, Param.Green.n0, Param.Green.n1, Param.Green.n2,
+          Param.Blue.first, Param.Blue.inc, Param.Blue.nfrac, Param.Blue.embedding, Param.Blue.n0, Param.Blue.n1, Param.Blue.n2,
+          Param.Bright.first, Param.Bright.inc, Param.Bright.nfrac, Param.Bright.embedding, Param.Bright.n0, Param.Bright.n1, Param.Bright.n2);
+  Serial.println(buf);
+}
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
 void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac, int16_t nbrightfrac, int16_t valinc, uint16_t firstval) {
-  sprintf(buf, "Rainbow wait %d, embedding = %d, firsthue = %d, hueinc = %d, nredfrac = %d, ngreenfrac = %d, nodepix = %d, duration = %d, nbluefrac = %d, nbrightfrac = %d, valinc = %d, firstval = %d",
-          wait, embedding, firsthue, hueinc, nredfrac, ngreenfrac, nodepix, duration, nbluefrac, nbrightfrac, valinc, firstval);
+  sprintf(buf, "Rainbow old ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding } };
+  HELPER_PARAM Param = {nodepix, 0, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding } };
   rainbow(Param, wait, duration);
 }
+
+//TODO why putting template here cause no problemb but if put at start of code gets compiler errors
+template <typename T, typename U>
+T nonNegMod(T n, U d ) {
+  // computes non-negative n % d
+  // result always >= 0 and < d
+  n %= d;
+  if (n >= 0) {
+    return n;
+  }
+  return n + d;
+}
+
+
+//TODO check here Param is passed by value so will not get changed when fields are modified and passed on to pattern_helper
 void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
-  sprintf(buf, "Rainbow wait %d,  duration = %d, nodepix = %d\nRed first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n Green first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n Blue first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n Bright first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n",
-          wait, duration, Param.nodepix,
-          Param.Red.first, Param.Red.inc, Param.Red.nfrac, Param.Red.embedding,
-          Param.Green.first, Param.Green.inc, Param.Green.nfrac, Param.Green.embedding,
-          Param.Blue.first, Param.Blue.inc, Param.Blue.nfrac, Param.Blue.embedding,
-          Param.Bright.first, Param.Bright.inc, Param.Bright.nfrac, Param.Bright.embedding);
+  sprintf(buf, "rainbow wait=%d, duration=%d", wait, duration);
   Serial.println(buf);
+  print_Param(Param);
   time_elapsed = 0;
+  int nodepix0 = Param.coef0;
+  int nodepix_diff = (Param.Red.n1 + Param.Red.n2);
   uint16_t time_start = millis();
-  //  HELPER_PARAM Param = {nodepix, {firstPixelHue, 0, nredfrac, embedding }, {firstPixelHue, 0, ngreenfrac, embedding }, {firstPixelHue, 0, nbluefrac, embedding }, {firstPixelVal, 0, nbrightfrac, embedding } };
-  //  Serial.println(Param.Red.nfrac);
   while (time_elapsed < duration) {
     // For each frame, the colorwheel and brightness wheel shift
     // This gives apparent motion. If values are same both move
@@ -2191,6 +2220,13 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
       pattern_helper(i, Param);
     }
+
+    Param.nodepix = nodepix0 / 100;
+    nodepix0 += nodepix_diff;
+    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
+    //nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
+    nodepix_diff += nonNegMod(2 * Param.Red.n2, 100 * NUM_LEDS);
+
 
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
@@ -2207,22 +2243,16 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
 }
 
 void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t ngreenfrac, int16_t nbluefrac, int16_t valinc, uint16_t firstval) {
-  sprintf(buf, "Color wipe wait %d, embedding = %d, firsthue = %u, hueinc = %d, nredfrac = %d, blocksize = %d, nodepix = %d, duration = %d, ngreenfrac = %d, nbluefrac = %d, valinc = %d, firstval = %u",
-          wait, embedding, firsthue, hueinc, nredfrac, blocksize, nodepix, duration, ngreenfrac, nbluefrac, valinc, firstval);
+  sprintf(buf, "Color wipe old ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding } };
+  HELPER_PARAM Param = {nodepix, 0, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding } };
   color_wipe(Param, blocksize,  wait, duration);
 }
 
 void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration) {
-  sprintf(buf, "Color wipe wait %d,  duration = %d, nodepix = %d blocksize = %d\nRed first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n Green first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n Blue first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n Bright first: %hu, inc: %hd, nfrac: %hd, emb: %hhd \n",
-          wait, duration, Param.nodepix, blocksize,
-          Param.Red.first, Param.Red.inc, Param.Red.nfrac, Param.Red.embedding,
-          Param.Green.first, Param.Green.inc, Param.Green.nfrac, Param.Green.embedding,
-          Param.Blue.first, Param.Blue.inc, Param.Blue.nfrac, Param.Blue.embedding,
-          Param.Bright.first, Param.Bright.inc, Param.Bright.nfrac, Param.Bright.embedding);
+  sprintf(buf, "color_wipe wait=%d, duration=%d, blocksize=%d", wait, duration, blocksize);
   Serial.println(buf);
-  //TODO not needed? int pixelHue;
+  print_Param(Param);
   time_elapsed = 0;
   uint16_t time_start = millis();
   int i = 0; // starting index
