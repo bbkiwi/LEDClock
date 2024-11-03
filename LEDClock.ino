@@ -9,7 +9,9 @@
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
 
-//1 Nov 2024
+//3 Nov 2024
+//Added John, using parm7 and parm8 for coef1, coef2 shift node of patterns
+//NOTE n0, n1, n2 not used
 
 //color_wipe and rainbow can be combined.
 //add coef0, coef1, coef2 paramters to HELPER_PARAM
@@ -50,9 +52,11 @@
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-#define TEST_CLOCK
+//#define TEST_CLOCK
 //#define GBT_CLOCK
 // #define BRYN_CLOCK
+//#define JOHN_CLOCK
+#define BILL_CLOCK
 
 //#if defined BEDROOM_CLOCK || defined TEST_CLOCK
 #if defined BEDROOM_CLOCK
@@ -70,6 +74,9 @@
 #define SENSOR_HIGH_TIME 1000
 #endif
 
+#if defined BILL_CLOCK
+#define HAS_24_RING
+#endif
 #if defined TEST_CLOCK
 #define HAS_24_RING
 #define HASMIC
@@ -112,7 +119,12 @@ const char *OTAandMdnsName = "TestLEDClock";           // A name and a password 
 #ifdef GBT_CLOCK
 const char *OTAandMdnsName = "GBTLEDClock";           // A name and a password for the OTA and mDns service
 #endif
-
+#ifdef JOHN_CLOCK
+const char *OTAandMdnsName = "JOHNLEDClock";           // A name and a password for the OTA and mDns service
+#endif
+#ifdef BILL_CLOCK
+const char *OTAandMdnsName = "BILLLEDClock";           // A name and a password for the OTA and mDns service
+#endif
 const char *OTAPassword = "ledclock";
 
 // must be longer than longest message
@@ -160,7 +172,7 @@ RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 
 #if defined BEDROOM_CLOCK || defined BRYN_CLOCK
 bool ClockGoBackwards = true;
 #endif
-#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK
+#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined JOHN_CLOCK || defined BILL_CLOCK
 bool ClockGoBackwards = false;
 #endif
 
@@ -280,6 +292,8 @@ uint16_t time_elapsed = 0;
 
 #ifdef TEST_CLOCK
 int TopOfClock = 30; // to make given pixel the top
+#elif defined BILL_CLOCK
+int TopOfClock = 27;
 #else
 int TopOfClock = 15; // to make given pixel the top
 #endif
@@ -308,7 +322,7 @@ NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, up
 #if defined BEDROOM_CLOCK || defined BRYN_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin RX
 #endif
-#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK
+#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined JOHN_CLOCK || defined BILL_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
 #endif
 #ifdef HAS_24_RING
@@ -333,6 +347,7 @@ void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  in
 // embedding, firstRhue, firstGhue, firstBhue, firstval, nredfrac, ngreenfrac, nbluefrac, nbrightfrac,  hueRinc, hueGinc, hueBinc, valinc, nodepix, nodepix1, nodepix2,    wait, duration, t
 void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7 = 0, int parm8 = 0);
+void fire(uint16_t duration, uint8_t r = 255, uint8_t g = 127, uint8_t b = 0, uint8_t rd = 1, uint8_t gd = 1, uint8_t bd = 2);
 
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
@@ -633,7 +648,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       cellularAutomata(50, 110, random(65535), duration);
       break;
     case 23: // fire
-      fire(duration);
+      fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
       break;
     // fireflys
     case 24:
@@ -700,11 +715,16 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       break;
     case 44:
       global_hparam.nodepix = ihour;
-      global_hparam.coef2 = 1;
+      global_hparam.coef0 = parm6;
+      global_hparam.coef1 = parm7;
+      global_hparam.coef2 = parm8;
       rainbow(global_hparam, parm1, duration);
       break;
     case 45:
       global_hparam.nodepix = ihour;
+      global_hparam.coef0 = parm6;
+      global_hparam.coef1 = parm7;
+      global_hparam.coef2 = parm8;
       color_wipe(global_hparam, parm1, parm2, duration);
       break;
     case 46:
@@ -2055,12 +2075,18 @@ std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding) {
     case 1: // full mapping
       points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS - 1}};
       break;
-    case 2: // up, down, half peak 1/2 way
-      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS / 2 - 1}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
+    //    OLD case 2: // up, down, half peak 1/2 way
+    //      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS / 2 - 1}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
+    //      break;
+    case 2: // up, down, full peak 1/2 way BETTER
+      points = {{0, 0}, {1, 1}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 1}};
       break;
-    case 3: // up, down, full peak 1/2 way
-      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS - 2}, {NUM_LEDS / 2, NUM_LEDS - 2}, {NUM_LEDS - 1, 0}};
+    case 3: // up, down, full peak 1/2 way BETTER
+      points = {{0, 0}, {1, 1}, {NUM_LEDS / 2, NUM_LEDS - 1}, {NUM_LEDS - 1, 1}};
       break;
+    //    OLD case 3: // OLD up, down, full peak 1/2 way
+    //      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS - 2}, {NUM_LEDS / 2, NUM_LEDS - 2}, {NUM_LEDS - 1, 0}};
+    //      break;
     case 4: // up, down, up max 1/3
       points = {{0, 0}, {NUM_LEDS / 3 - 1, NUM_LEDS / 3 - 1}, {NUM_LEDS / 3, NUM_LEDS / 3 - 1 }, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS / 3 - 1}};
       break;
@@ -2166,7 +2192,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   strip.setPixelColor(ClockCorrect(i + Param.nodepix), pixelR, pixelG, pixelB);
 
 #ifdef HAS_24_RING
-  stripinner.setPixelColor(ClockCorrect(i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
+  stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
 #endif
   yield();
 }
@@ -2185,7 +2211,7 @@ void print_Param(HELPER_PARAM& Param) {
 void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac, int16_t nbrightfrac, int16_t valinc, uint16_t firstval) {
   sprintf(buf, "Rainbow old ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, 0, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding } };
+  HELPER_PARAM Param = {nodepix, nodepix, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding } };
   rainbow(Param, wait, duration);
 }
 
@@ -2208,8 +2234,9 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   Serial.println(buf);
   print_Param(Param);
   time_elapsed = 0;
-  int nodepix0 = Param.coef0;
-  int nodepix_diff = (Param.Red.n1 + Param.Red.n2);
+  int nodepix0 = Param.coef0 * 100;
+  nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
+  int nodepix_diff = (Param.coef1 + Param.coef2);
   uint16_t time_start = millis();
   while (time_elapsed < duration) {
     // For each frame, the colorwheel and brightness wheel shift
@@ -2224,9 +2251,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
     nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
-    //nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
-    nodepix_diff += nonNegMod(2 * Param.Red.n2, 100 * NUM_LEDS);
-
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
 
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
@@ -2253,6 +2278,8 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
   sprintf(buf, "color_wipe wait=%d, duration=%d, blocksize=%d", wait, duration, blocksize);
   Serial.println(buf);
   print_Param(Param);
+  int nodepix0 = Param.coef0 * 100;
+  int nodepix_diff = (Param.coef1 + Param.coef2);
   time_elapsed = 0;
   uint16_t time_start = millis();
   int i = 0; // starting index
@@ -2291,6 +2318,10 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
       pattern_helper(i, Param);
     }
 
+    Param.nodepix = nodepix0 / 100;
+    nodepix0 += nodepix_diff;
+    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
@@ -2537,17 +2568,20 @@ void SubstractColor(int position, uint32_t color)
   strip.setPixelColor(position, blended_color);
 }
 
-void fire(uint16_t duration) {
+
+void fire(uint16_t duration, uint8_t r, uint8_t g, uint8_t b, uint8_t rd, uint8_t gd, uint8_t bd) {
+  // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
   time_elapsed = 0;
-  uint32_t fire_color   = strip.Color ( 255,  127,  00);
+  uint32_t fire_color   = strip.Color ( r,  g,  b);
   uint16_t time_start = millis();
   while (time_elapsed < duration) {
     //strip.fill(); // clear
     strip.fill(fire_color);
     for (int i = 0; i < NUM_LEDS; i++) {
       //AddColor(i, fire_color);
-      int r = random(255);
-      uint32_t diff_color = strip.Color ( r, r , r / 2);
+      int rr = random(255);
+      uint8_t one  = 1;
+      uint32_t diff_color = strip.Color ( rr / max(one, rd), rr / max(one, gd) , rr / max(one, bd));
       SubstractColor(i, diff_color);
     }
     SetBrightness(); // Set the clock brightness dependant on the time
