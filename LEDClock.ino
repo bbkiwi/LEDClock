@@ -39,10 +39,10 @@
 #include "sunset.h"
 
 //  MUST have this file which defines homeSSID and homePW
-#include "localwificonfig.h"
+//#include "localwificonfig.h"
 
+#include <WiFiManager.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
 #include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
@@ -52,13 +52,12 @@
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-//#define TEST_CLOCK
+#define TEST_CLOCK
 //#define GBT_CLOCK
 // #define BRYN_CLOCK
 //#define JOHN_CLOCK
-#define BILL_CLOCK
+//#define BILL_CLOCK
 
-//#if defined BEDROOM_CLOCK || defined TEST_CLOCK
 #if defined BEDROOM_CLOCK
 #define MUSIC
 #define HASMIC
@@ -95,7 +94,6 @@
 
 SunSet sun;
 
-ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
 ESP8266WebServer server(80);       // create a web server on port 80
 WebSocketsServer webSocket(81);    // create a websocket server on port 81
 uint8_t websocketId_num = 0;
@@ -371,6 +369,7 @@ void setup() {
   delay(10);
   Serial.println("\r\n");
   sun.setPosition(LATITUDE, LONGITUDE, DST_OFFSET);
+
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
   startOTA();                  // Start the OTA service
   startSPIFFS();               // Start the SPIFFS and list all contents
@@ -1053,32 +1052,8 @@ bool saveConfig() {
 
 
 void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
-  WiFi.softAP(ssid, password);             // Start the access point
-  Serial.print("Access Point \"");
-  Serial.print(ssid);
-  Serial.println("\" started\r\n");
-
-  wifiMulti.addAP(homeSSID, homePW);  // add Wi-Fi networks you want to connect to
-  wifiMulti.addAP(homeSSID2, homePW2);
-  //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
-
-  Serial.println("Connecting");
-  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect to station or a station connects to AP
-    delay(250);
-    Serial.print('.');
-  }
-  Serial.println("\r\n");
-  if (WiFi.softAPgetStationNum() == 0) {     // If the ESP is connected to an AP
-    Serial.print("Connected to ");
-    Serial.println(WiFi.SSID());             // Tell us what network we're connected to
-    Serial.print("IP address:\t");
-    Serial.println(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
-    WiFi.softAPdisconnect(false);             // Switch off soft AP mode
-    Serial.print("So switching soft AP off");
-  } else {                                   // If a station is connected to the ESP SoftAP
-    Serial.print("Station connected to ESP8266 AP");
-  }
-  Serial.println("\r\n");
+  WiFiManager wifiManager;
+  wifiManager.autoConnect("AutoConnectAP");
   delay(100);
 }
 
