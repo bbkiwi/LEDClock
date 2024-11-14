@@ -31,6 +31,9 @@
 
 //NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
 /************* Declare included libraries ******************************/
+#include <cmath>
+#include <vector>
+#include <numeric>
 #include <NTPClient.h>
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
@@ -74,10 +77,11 @@
 #endif
 
 #if defined BILL_CLOCK
-#define HAS_24_RING
+#define HAS_INNER_RING
 #endif
 #if defined TEST_CLOCK
-#define HAS_24_RING
+#define HAS_8X8_LED_MATRIX
+#define HAS_INNER_RING
 #define HASMIC
 #define SENSOR_CUTOFF 100
 #define SENSOR_LOW_TIME 500
@@ -289,7 +293,7 @@ ALARM alarmInfo[NUM_ALARMS];
 uint16_t time_elapsed = 0;
 
 #ifdef TEST_CLOCK
-int TopOfClock = 30; // to make given pixel the top
+int TopOfClock = 44; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
 #else
@@ -323,7 +327,7 @@ NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, up
 #if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined JOHN_CLOCK || defined BILL_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
 #endif
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
 #define NEOPIXEL_INNER_PIN 5      // This is the D1 pin
 #define NUM_INNER_LEDS 24
 #endif
@@ -347,15 +351,150 @@ void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc, 
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7 = 0, int parm8 = 0);
 void fire(uint16_t duration, uint8_t r = 255, uint8_t g = 127, uint8_t b = 0, uint8_t rd = 1, uint8_t gd = 1, uint8_t bd = 2);
 
+
+//TODO why putting template here cause no problemb but if put at start of code gets compiler errors
+template <typename T, typename U>
+T nonNegMod(T n, U d ) {
+  // computes non-negative n % d
+  // result always >= 0 and < d
+  n %= d;
+  if (n >= 0) {
+    return n;
+  }
+  return n + d;
+}
+
 //************* Declare NeoPixel ******************************
 //Using 1M WS2812B 5050 RGB Non-Waterproof 60 LED Strip
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
+
+#ifndef HAS_8X8_LED_MATRIX
 #define NUM_LEDS 60
-//int LEDsegheights[NUM_LEDS]; // not implemented for worm
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
 Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_PIN, NEO_GRB + NEO_KHZ800);
 #endif
+
+#else
+#define NUM_LEDS 64
+Adafruit_NeoPixel strip_physical = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
+// Creates a virtual strip that is an embedding into a physical strip
+//   can treat is the same as Adafruit_NeoPixel strip
+class VirtualLEDStrip {
+  private:
+    Adafruit_NeoPixel& physical_containing_strip;
+    std::vector < uint8_t >path;
+    bool wrap;
+  public:
+    VirtualLEDStrip(Adafruit_NeoPixel& physical_containing_strip, std::vector < uint8_t >path, bool wrap = true)
+      : physical_containing_strip(physical_containing_strip), path(path), wrap(wrap) {
+    }
+    uint8_t lenPixels = path.size();
+
+    void begin() {
+      physical_containing_strip.begin();
+    }
+    void show() {
+      physical_containing_strip.show();
+    }
+    void setPixelColor(int n, uint32_t color) {
+      if (wrap | (n >= 0 & n < lenPixels)) {
+        physical_containing_strip.setPixelColor(path[nonNegMod(n, lenPixels)], color);
+      }
+    }
+
+    void setPixelColor(int n, uint8_t r, uint8_t g, uint8_t b) {
+      if (wrap | (n >= 0 & n < lenPixels)) {
+        physical_containing_strip.setPixelColor(path[nonNegMod(n, lenPixels)], r, g, b);
+      }
+    }
+
+    void fill(uint32_t color, int16_t stPix, uint16_t lenP) {
+      if (lenP > 0) {
+        for (int16_t n = stPix; n < stPix + lenP; n++) {
+          this->setPixelColor(n, color);
+        }
+      }
+    }
+
+    void clear() {
+      this->fill(0, 0, lenPixels);
+    }
+
+    void fill() {
+      this->fill(0, 0, lenPixels);
+    }
+
+    void fill(uint32_t color) {
+      this->fill(color, 0, lenPixels);
+    }
+
+    uint32_t getPixelColor(int n) const {
+      if (wrap | (n >= 0 & n < lenPixels)) {
+        return physical_containing_strip.getPixelColor(path[nonNegMod(n, lenPixels)]);
+      } else {
+        return 0;
+      }
+    }
+    //NOTE this affects whole physical_containing_strip
+    void setBrightness(uint8_t brightness) {
+      physical_containing_strip.setBrightness(brightness);
+    }
+
+    uint16_t numPixels() const {
+      return lenPixels;
+    }
+
+    uint32_t Color (uint8_t r, uint8_t g, uint8_t b) {
+      return physical_containing_strip.Color(r, g, b);
+    }
+
+    //TODO might be better way, these 3 following where static as they are same for all physical strips
+    uint32_t   gamma32 (uint32_t x) {
+      return physical_containing_strip.gamma32(x);
+    }
+
+    uint8_t   sine8 (uint8_t x) {
+      return physical_containing_strip.sine8(x);
+    }
+
+    uint32_t   ColorHSV (uint16_t hue, uint8_t sat = 255, uint8_t val = 255) {
+      return physical_containing_strip.ColorHSV (hue, sat, val);
+    }
+
+};
+
+
+//std::vector<uint8_t>path(NUM_LEDS);
+//TODO Why next line gives error here, but not similar in worm?
+//std::iota(path.begin(), path.end(), 0); // path will become: [0..NUM_LEDS-1]
+
+// start bottom right, scan left to right, bottom to top
+//std::vector < uint8_t >path =   {0,   1,  2,  3,  4,  5,  6,  7,       8, 9, 10, 11, 12, 13, 14, 15,    16, 17, 18, 19, 20, 21, 22, 23,    24, 25, 26, 27, 28, 29, 30, 31,     32, 33, 34, 35, 36, 37, 38, 39,     40, 41, 42, 43, 44, 45, 46, 47,    48, 49, 50, 51, 52, 53, 54, 55,      56, 57, 58, 59, 60, 61, 62, 63};
+// start bottom right, zig zag, scan left to right, then up one and right to left, etc
+//std::vector < uint8_t >path =   {0,   1,  2,  3,  4,  5,  6,  7,      15, 14, 13, 12, 11, 10, 9, 8,     16, 17, 18, 19, 20, 21, 22, 23,    31, 30, 29, 28, 27, 26, 25, 24,     32, 33, 34, 35, 36, 37, 38, 39,     47, 46, 45, 44, 43, 42, 41, 40,     48, 49, 50, 51, 52, 53, 54, 55,      63, 62, 61, 60, 59, 58, 57, 56};
+// start bottom right go clockwise around outside
+//std::vector < uint8_t >path =   {0, 1, 2, 3, 4, 5, 6, 7, 15, 23, 31, 39, 47, 55, 63, 62, 61, 60, 59, 58, 57, 56, 48, 40, 32, 24, 16, 8};
+// start bottom right spiral clockwise and inside
+//std::vector < uint8_t >path =     {0, 1, 2, 3, 4, 5, 6, 7, 15, 23, 31, 39, 47, 55, 63, 62, 61, 60, 59, 58, 57, 56, 48, 40, 32, 24, 16, 8,   9, 10, 11, 12, 13, 14,   22, 30, 38, 46,    54, 53, 52, 51, 50, 49,    41, 33, 25, 17,     18, 19, 20, 21,    29, 37,     45, 44, 43, 42,   34, 26,  27, 28, 36, 35};
+// 20 octagon
+//std::vector < uint8_t >path = {2,3,4,5,14,23,31,39,47, 54,61,60,59,58,49,40,32,24,16,9};
+// 3x20 octagon
+std::vector < uint8_t >path60 = {2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 14, 14, 14, 23, 23, 23, 31, 31, 31, 39, 39, 39, 47, 47, 47, 54, 54, 54, 61, 61, 61, 60, 60, 60, 59, 59, 59, 58, 58, 58, 49, 49, 49, 40, 40, 40, 32, 32, 32, 24, 24, 24, 16, 16, 16, 9, 9, 9};
+
+VirtualLEDStrip strip(strip_physical, path60);
+
+#ifdef HAS_INNER_RING
+//3x8
+std::vector < uint8_t >path24 = {19, 19, 19, 20, 20, 20, 29, 29, 29, 37, 37, 37, 44, 44, 44, 43, 43, 43, 34, 34, 34, 26, 26, 26};
+VirtualLEDStrip stripinner(strip_physical, path24);
+#endif
+
+#endif
+
+//int LEDsegheights[NUM_LEDS]; // not implemented for worm
+
 bool ClockInitialized = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
@@ -411,7 +550,7 @@ void setup() {
   startMDNS();                 // Start the mDNS responder
   startServer();               // Start a HTTP server with a file read handler and an upload handler
   strip.begin(); // This initializes the NeoPixel library.
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
   stripinner.begin();
   stripinner.clear();
   stripinner.show();
@@ -733,7 +872,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       break;
 
   }
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
   stripinner.fill();
   stripinner.show();
 #endif
@@ -1967,12 +2106,12 @@ void Draw_Clock(time_t t, byte Phase)
 void SetBrightness() {
   if (isDay and ClockInitialized) {
     strip.setBrightness(day_brightness);
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
     stripinner.setBrightness(day_brightness);
 #endif
   } else {
     strip.setBrightness(night_brightness);
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
     stripinner.setBrightness(night_brightness);
 #endif
   }
@@ -1982,9 +2121,9 @@ void SetBrightness() {
 //              and ajusts top of clock
 int ClockCorrect(int Pixel)
 {
-  Pixel = (Pixel + TopOfClock) % NUM_LEDS;
+  Pixel = (Pixel + TopOfClock) % strip.numPixels();
   if (ClockGoBackwards)
-    return ((NUM_LEDS - Pixel + NUM_LEDS / 2) % NUM_LEDS); // my first attempt at clock driving had it going backwards :)
+    return ((strip.numPixels() - Pixel + strip.numPixels() / 2) % strip.numPixels()); // my first attempt at clock driving had it going backwards :)
   else
     return (Pixel);
 }
@@ -2016,9 +2155,9 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 
 //********* Bills NeoPixel Routines
 
-#include <cmath>
-#include <vector>
-#include <numeric>
+//#include <cmath>
+//#include <vector>
+//#include <numeric>
 
 int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
@@ -2048,43 +2187,43 @@ std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding) {
   std::vector<std::pair<int8_t, int8_t>> points;
   switch (embedding) {
     case 1: // full mapping
-      points = {{0, 0}, {NUM_LEDS - 1, NUM_LEDS - 1}};
+      points = {{0, 0}, {strip.numPixels() - 1, strip.numPixels() - 1}};
       break;
     //    OLD case 2: // up, down, half peak 1/2 way
-    //      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS / 2 - 1}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 0}};
+    //      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() / 2 - 1}, {strip.numPixels() / 2, strip.numPixels() / 2 - 1}, {strip.numPixels() - 1, 0}};
     //      break;
     case 2: // up, down, full peak 1/2 way BETTER
-      points = {{0, 0}, {1, 1}, {NUM_LEDS / 2, NUM_LEDS / 2 - 1}, {NUM_LEDS - 1, 1}};
+      points = {{0, 0}, {1, 1}, {strip.numPixels() / 2, strip.numPixels() / 2 - 1}, {strip.numPixels() - 1, 1}};
       break;
     case 3: // up, down, full peak 1/2 way BETTER
-      points = {{0, 0}, {1, 1}, {NUM_LEDS / 2, NUM_LEDS - 1}, {NUM_LEDS - 1, 1}};
+      points = {{0, 0}, {1, 1}, {strip.numPixels() / 2, strip.numPixels() - 1}, {strip.numPixels() - 1, 1}};
       break;
     //    OLD case 3: // OLD up, down, full peak 1/2 way
-    //      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS - 2}, {NUM_LEDS / 2, NUM_LEDS - 2}, {NUM_LEDS - 1, 0}};
+    //      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() - 2}, {strip.numPixels() / 2, strip.numPixels() - 2}, {strip.numPixels() - 1, 0}};
     //      break;
     case 4: // up, down, up max 1/3
-      points = {{0, 0}, {NUM_LEDS / 3 - 1, NUM_LEDS / 3 - 1}, {NUM_LEDS / 3, NUM_LEDS / 3 - 1 }, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS / 3 - 1}};
+      points = {{0, 0}, {strip.numPixels() / 3 - 1, strip.numPixels() / 3 - 1}, {strip.numPixels() / 3, strip.numPixels() / 3 - 1 }, {2 * strip.numPixels() / 3, 0}, {strip.numPixels() - 1, strip.numPixels() / 3 - 1}};
       break;
     case 5: // up, up twice full
-      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS - 2 }, {NUM_LEDS / 2, 0}, {NUM_LEDS - 1, NUM_LEDS - 2}};
+      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() - 2 }, {strip.numPixels() / 2, 0}, {strip.numPixels() - 1, strip.numPixels() - 2}};
       break;
     case 6: // up, up, up three time full
-      points = {{0, 0}, {NUM_LEDS / 3 - 1, NUM_LEDS - 3}, {NUM_LEDS / 3, 0}, {2 * NUM_LEDS / 3 - 1, NUM_LEDS - 3}, {2 * NUM_LEDS / 3, 0}, {NUM_LEDS - 1, NUM_LEDS - 3}};
+      points = {{0, 0}, {strip.numPixels() / 3 - 1, strip.numPixels() - 3}, {strip.numPixels() / 3, 0}, {2 * strip.numPixels() / 3 - 1, strip.numPixels() - 3}, {2 * strip.numPixels() / 3, 0}, {strip.numPixels() - 1, strip.numPixels() - 3}};
       break;
     case 7: // up, up, up, up 4 times
-      points = {{0, 0}, {NUM_LEDS / 4 - 1, NUM_LEDS - 4}, {NUM_LEDS / 4, 0},  {NUM_LEDS / 2 - 1, NUM_LEDS - 4}, {NUM_LEDS / 2, 0}, {3 * NUM_LEDS / 4 - 1, NUM_LEDS - 4},  {3 * NUM_LEDS / 4, 0}, {NUM_LEDS - 1, NUM_LEDS - 4}};
+      points = {{0, 0}, {strip.numPixels() / 4 - 1, strip.numPixels() - 4}, {strip.numPixels() / 4, 0},  {strip.numPixels() / 2 - 1, strip.numPixels() - 4}, {strip.numPixels() / 2, 0}, {3 * strip.numPixels() / 4 - 1, strip.numPixels() - 4},  {3 * strip.numPixels() / 4, 0}, {strip.numPixels() - 1, strip.numPixels() - 4}};
       break;
     case 8: // 2 levels
-      points = {{0, 0}, {NUM_LEDS / 2 - 1, 0}, {NUM_LEDS / 2, NUM_LEDS / 2}, {NUM_LEDS - 1, NUM_LEDS / 2}};
+      points = {{0, 0}, {strip.numPixels() / 2 - 1, 0}, {strip.numPixels() / 2, strip.numPixels() / 2}, {strip.numPixels() - 1, strip.numPixels() / 2}};
       break;
     case 9: // 3 levels
-      points = {{0, 0}, {NUM_LEDS / 3 - 1, 0}, {NUM_LEDS / 3, NUM_LEDS / 3}, {2 * NUM_LEDS / 3 - 1, NUM_LEDS / 3}, {2 * NUM_LEDS / 3, 2 * NUM_LEDS / 3}, {NUM_LEDS - 1, 2 * NUM_LEDS / 3}};
+      points = {{0, 0}, {strip.numPixels() / 3 - 1, 0}, {strip.numPixels() / 3, strip.numPixels() / 3}, {2 * strip.numPixels() / 3 - 1, strip.numPixels() / 3}, {2 * strip.numPixels() / 3, 2 * strip.numPixels() / 3}, {strip.numPixels() - 1, 2 * strip.numPixels() / 3}};
       break;
     case 10: // 4 levels
-      points = {{0, 0}, {NUM_LEDS / 4 - 1, 0}, {NUM_LEDS / 4, NUM_LEDS / 4},  {NUM_LEDS / 2 - 1, NUM_LEDS / 4}, {NUM_LEDS / 2, NUM_LEDS / 2}, {3 * NUM_LEDS / 4 - 1, NUM_LEDS / 2},  {3 * NUM_LEDS / 4, 3 * NUM_LEDS / 4}, {NUM_LEDS - 1, 3 * NUM_LEDS / 4}};
+      points = {{0, 0}, {strip.numPixels() / 4 - 1, 0}, {strip.numPixels() / 4, strip.numPixels() / 4},  {strip.numPixels() / 2 - 1, strip.numPixels() / 4}, {strip.numPixels() / 2, strip.numPixels() / 2}, {3 * strip.numPixels() / 4 - 1, strip.numPixels() / 2},  {3 * strip.numPixels() / 4, 3 * strip.numPixels() / 4}, {strip.numPixels() - 1, 3 * strip.numPixels() / 4}};
       break;
     default: // up full half way, then constant
-      points = {{0, 0}, {NUM_LEDS / 2 - 1, NUM_LEDS - 2},  {NUM_LEDS - 1, NUM_LEDS - 2}};
+      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() - 2},  {strip.numPixels() - 1, strip.numPixels() - 2}};
   }
   return points;
 }
@@ -2166,7 +2305,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
 
   strip.setPixelColor(ClockCorrect(i + Param.nodepix), pixelR, pixelG, pixelB);
 
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
   stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
 #endif
   yield();
@@ -2190,19 +2329,6 @@ void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  in
   rainbow(Param, wait, duration);
 }
 
-//TODO why putting template here cause no problemb but if put at start of code gets compiler errors
-template <typename T, typename U>
-T nonNegMod(T n, U d ) {
-  // computes non-negative n % d
-  // result always >= 0 and < d
-  n %= d;
-  if (n >= 0) {
-    return n;
-  }
-  return n + d;
-}
-
-
 //TODO check here Param is passed by value so will not get changed when fields are modified and passed on to pattern_helper
 void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   sprintf(buf, "rainbow wait=%d, duration=%d", wait, duration);
@@ -2210,7 +2336,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   print_Param(Param);
   time_elapsed = 0;
   int nodepix0 = Param.coef0 * 100;
-  nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
+  nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
   int nodepix_diff = (Param.coef1 + Param.coef2);
   uint16_t time_start = millis();
   while (time_elapsed < duration) {
@@ -2225,8 +2351,8 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
 
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
-    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
-    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
+    nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
 
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
@@ -2234,7 +2360,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     Param.Blue.first += Param.Blue.inc;
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
     stripinner.show();
 #endif
     limited_delay(wait);  // Pause for a moment
@@ -2260,7 +2386,7 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
   int i = 0; // starting index
   int maxcnt;
   strip.fill(); // clear
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
   stripinner.fill(); // clear
 #endif
   while (time_elapsed < duration) {
@@ -2273,7 +2399,7 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
     for (int cnt = 0; cnt < maxcnt; cnt++) {
       //TODO fix this, determins direction of fill
       // new parameter?
-      //TODO if maxcnt = NUM_LEDS does this become rainbow?
+      //TODO if maxcnt = strip.numPixels() does this become rainbow?
       //if (nredfrac >= 0) {
       if (true) {
         i++;
@@ -2295,15 +2421,15 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
 
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
-    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
-    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
+    nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
     Param.Blue.first += Param.Blue.inc;
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
     stripinner.show();
 #endif
     limited_delay(wait);  // Pause for a moment
@@ -2388,8 +2514,8 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
   // wait=0 and nworms=0 give wdt reset
   time_elapsed = 0;
   uint16_t time_start = millis();
-  std::vector<int>path(NUM_LEDS);
-  std::iota(path.begin(), path.end(), 0); // path will become: [0..NUM_LEDS-1]
+  std::vector<int>path(strip.numPixels());
+  std::iota(path.begin(), path.end(), 0); // path will become: [0..strip.numPixels()-1]
 
   //std::vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
   // Limit sinksize
@@ -2400,7 +2526,7 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
   nworms = min(abs(nworms), 10);
   std::vector<Worm>Worms;
   for (int i = 0; i < nworms; i++) {
-    int lenworm = random(2, min(NUM_LEDS / 4, 2 + abs(maxlen)));
+    int lenworm = random(2, min(strip.numPixels() / 4, 2 + abs(maxlen)));
     int cyclelen = random(1, min(20, 1 + abs(maxcyclelen)));
     if (dirchoice < 0) {
       dir = -1;
@@ -2444,11 +2570,11 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
   numff = max(1, numff); // will blow up otherwise
   while (time_elapsed < duration) {
     strip.fill(); // clear
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
     stripinner.fill();
 #endif
     for (int i = 0; i < numff; i++) {
-      pixel = random(NUM_LEDS);
+      pixel = random(strip.numPixels());
       if (hueInc == 0) {
         // Choose random color
         pixelHue = random(minHue, maxHue);
@@ -2460,7 +2586,7 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
       }
       Sat = random(minSat, maxSat);
       Val = random(minVal, maxVal);
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
       if (pixel % 2 == 0) {
         stripinner.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
       } else {
@@ -2472,7 +2598,7 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
     }
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-#ifdef HAS_24_RING
+#ifdef HAS_INNER_RING
     stripinner.show(); // Update strip with new contents
 #endif
     yield();
@@ -2552,7 +2678,7 @@ void fire(uint16_t duration, uint8_t r, uint8_t g, uint8_t b, uint8_t rd, uint8_
   while (time_elapsed < duration) {
     //strip.fill(); // clear
     strip.fill(fire_color);
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 0; i < strip.numPixels(); i++) {
       //AddColor(i, fire_color);
       int rr = random(255);
       uint8_t one  = 1;
@@ -2576,12 +2702,12 @@ void cellularAutomata(int wait, uint8_t rule, int pixelHue, uint16_t duration) {
   strip.fill();
   strip.setPixelColor(0, strip.gamma32(strip.ColorHSV(pixelHue)));
   while (time_elapsed < duration) {
-    for (int i = 0; i < NUM_LEDS; i++) {
-      uint8_t nbrs = ((strip.getPixelColor(i) != 0) << 2) + ((strip.getPixelColor((i + 1) % NUM_LEDS) != 0) << 1) +  (strip.getPixelColor((i + 2) % NUM_LEDS) != 0);
-      next[(i + 1) % NUM_LEDS] = (rule >> nbrs) & 0x1;
+    for (int i = 0; i < strip.numPixels(); i++) {
+      uint8_t nbrs = ((strip.getPixelColor(i) != 0) << 2) + ((strip.getPixelColor((i + 1) % strip.numPixels()) != 0) << 1) +  (strip.getPixelColor((i + 2) % strip.numPixels()) != 0);
+      next[(i + 1) % strip.numPixels()] = (rule >> nbrs) & 0x1;
     }
     strip.fill(); // clear
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 0; i < strip.numPixels(); i++) {
       if (next[i]) {
         strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
       }
@@ -2607,17 +2733,17 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, int
   strip.setPixelColor(20, 0x00ff00);
   strip.setPixelColor(40, 0x0000ff);
   while (time_elapsed < duration) {
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 0; i < strip.numPixels(); i++) {
       // have 3 CAs for r,g,b then use
-      uint8_t nbrsR = ((((uint8_t)(strip.getPixelColor(i) >> 16)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 16)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 16)) != 0);
-      uint8_t nbrsG = ((((uint8_t)(strip.getPixelColor(i) >> 8)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 8)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 8)) != 0);
-      uint8_t nbrsB = ((((uint8_t)(strip.getPixelColor(i) >> 0)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % NUM_LEDS) >> 0)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % NUM_LEDS) >> 0)) != 0);
-      nextR[(i + 1) % NUM_LEDS] = (ruleR >> nbrsR) & 0x1;
-      nextG[(i + 1) % NUM_LEDS] = (ruleG >> nbrsG) & 0x1;
-      nextB[(i + 1) % NUM_LEDS] = (ruleB >> nbrsB) & 0x1;
+      uint8_t nbrsR = ((((uint8_t)(strip.getPixelColor(i) >> 16)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % strip.numPixels()) >> 16)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % strip.numPixels()) >> 16)) != 0);
+      uint8_t nbrsG = ((((uint8_t)(strip.getPixelColor(i) >> 8)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % strip.numPixels()) >> 8)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % strip.numPixels()) >> 8)) != 0);
+      uint8_t nbrsB = ((((uint8_t)(strip.getPixelColor(i) >> 0)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % strip.numPixels()) >> 0)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % strip.numPixels()) >> 0)) != 0);
+      nextR[(i + 1) % strip.numPixels()] = (ruleR >> nbrsR) & 0x1;
+      nextG[(i + 1) % strip.numPixels()] = (ruleG >> nbrsG) & 0x1;
+      nextB[(i + 1) % strip.numPixels()] = (ruleB >> nbrsB) & 0x1;
     }
     strip.fill(); // clear
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 0; i < strip.numPixels(); i++) {
       strip.setPixelColor(i, nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
     }
     SetBrightness(); // Set the clock brightness dependant on the time
@@ -2644,6 +2770,7 @@ void colorWipe(uint32_t color, int wait) {
   for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
     strip.setPixelColor(ClockCorrect(i + ihour + 30), color);         //  Set pixel's color (in RAM)
     strip.setPixelColor(ClockCorrect(-i + ihour + 30), color);         //  Set pixel's color (in RAM)
+    //strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show();                          //  Update strip to match
     yield();
