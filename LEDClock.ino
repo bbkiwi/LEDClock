@@ -2183,47 +2183,46 @@ void colorAll(uint32_t color, int duration) {
 
 
 
-std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding) {
+std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding, uint16_t maxNx = strip.numPixels(), uint16_t maxNy = strip.numPixels() ) {
   std::vector<std::pair<int8_t, int8_t>> points;
   switch (embedding) {
     case 1: // full mapping
-      points = {{0, 0}, {strip.numPixels() - 1, strip.numPixels() - 1}};
+      points = {{0, 0}, {maxNx - 1, maxNy - 1}};
       break;
     //    OLD case 2: // up, down, half peak 1/2 way
-    //      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() / 2 - 1}, {strip.numPixels() / 2, strip.numPixels() / 2 - 1}, {strip.numPixels() - 1, 0}};
+    //      points = {{0, 0}, {maxNx / 2 - 1, maxNy / 2 - 1}, {maxNx / 2, maxNy / 2 - 1}, {maxNx - 1, 0}};
     //      break;
     case 2: // up, down, full peak 1/2 way BETTER
-      points = {{0, 0}, {1, 1}, {strip.numPixels() / 2, strip.numPixels() / 2 - 1}, {strip.numPixels() - 1, 1}};
+      points = {{0, 0}, {1, 1}, {maxNx / 2, maxNy / 2 - 1}, {maxNx - 1, 1}};
       break;
     case 3: // up, down, full peak 1/2 way BETTER
-      points = {{0, 0}, {1, 1}, {strip.numPixels() / 2, strip.numPixels() - 1}, {strip.numPixels() - 1, 1}};
+      points = {{0, 0}, {1, 1}, {maxNx / 2, maxNy - 1}, {maxNx - 1, 1}};
       break;
     //    OLD case 3: // OLD up, down, full peak 1/2 way
-    //      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() - 2}, {strip.numPixels() / 2, strip.numPixels() - 2}, {strip.numPixels() - 1, 0}};
+    //      points = {{0, 0}, {maxNx / 2 - 1, maxNy - 2}, {maxNx / 2, maxNy - 2}, {maxNx - 1, 0}};
     //      break;
     case 4: // up, down, up max 1/3
-      points = {{0, 0}, {strip.numPixels() / 3 - 1, strip.numPixels() / 3 - 1}, {strip.numPixels() / 3, strip.numPixels() / 3 - 1 }, {2 * strip.numPixels() / 3, 0}, {strip.numPixels() - 1, strip.numPixels() / 3 - 1}};
+      points = {{0, 0}, {maxNx / 3 - 1, maxNy / 3 - 1}, {maxNx / 3, maxNy / 3 - 1 }, {2 * maxNx / 3, 0}, {maxNx - 1, maxNy / 3 - 1}};
       break;
     case 5: // up, up twice full
-      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() - 2 }, {strip.numPixels() / 2, 0}, {strip.numPixels() - 1, strip.numPixels() - 2}};
+      points = {{0, 0}, {maxNx / 2 - 1, maxNy - 2 }, {maxNx / 2, 0}, {maxNx - 1, maxNy - 2}};
       break;
     case 6: // up, up, up three time full
-      points = {{0, 0}, {strip.numPixels() / 3 - 1, strip.numPixels() - 3}, {strip.numPixels() / 3, 0}, {2 * strip.numPixels() / 3 - 1, strip.numPixels() - 3}, {2 * strip.numPixels() / 3, 0}, {strip.numPixels() - 1, strip.numPixels() - 3}};
+      points = {{0, 0}, {maxNx / 3 - 1, maxNy - 3}, {maxNx / 3, 0}, {2 * maxNx / 3 - 1, maxNy - 3}, {2 * maxNx / 3, 0}, {maxNx - 1, maxNy - 3}};
       break;
     case 7: // up, up, up, up 4 times
-      points = {{0, 0}, {strip.numPixels() / 4 - 1, strip.numPixels() - 4}, {strip.numPixels() / 4, 0},  {strip.numPixels() / 2 - 1, strip.numPixels() - 4}, {strip.numPixels() / 2, 0}, {3 * strip.numPixels() / 4 - 1, strip.numPixels() - 4},  {3 * strip.numPixels() / 4, 0}, {strip.numPixels() - 1, strip.numPixels() - 4}};
+      points = {{0, 0}, {maxNx / 4 - 1, maxNy - 4}, {maxNx / 4, 0},  {maxNx / 2 - 1, maxNy - 4}, {maxNx / 2, 0}, {3 * maxNx / 4 - 1, maxNy - 4},  {3 * maxNx / 4, 0}, {maxNx - 1, maxNy - 4}};
       break;
     case 8: // 2 levels
-      points = {{0, 0}, {strip.numPixels() / 2 - 1, 0}, {strip.numPixels() / 2, strip.numPixels() / 2}, {strip.numPixels() - 1, strip.numPixels() / 2}};
+      points = {{0, 0}, {maxNx / 2 - 1, 0}, {maxNx / 2, maxNy / 2}, {maxNx - 1, maxNy / 2}};
       break;
     case 9: // 3 levels
-      points = {{0, 0}, {strip.numPixels() / 3 - 1, 0}, {strip.numPixels() / 3, strip.numPixels() / 3}, {2 * strip.numPixels() / 3 - 1, strip.numPixels() / 3}, {2 * strip.numPixels() / 3, 2 * strip.numPixels() / 3}, {strip.numPixels() - 1, 2 * strip.numPixels() / 3}};
+      points = {{0, 0}, {maxNx / 3 - 1, 0}, {maxNx / 3, maxNy / 3}, {2 * maxNx / 3 - 1, maxNy / 3}, {2 * maxNx / 3, 2 * maxNy / 3}, {maxNx - 1, 2 * maxNy / 3}};
       break;
     case 10: // 4 levels
-      points = {{0, 0}, {strip.numPixels() / 4 - 1, 0}, {strip.numPixels() / 4, strip.numPixels() / 4},  {strip.numPixels() / 2 - 1, strip.numPixels() / 4}, {strip.numPixels() / 2, strip.numPixels() / 2}, {3 * strip.numPixels() / 4 - 1, strip.numPixels() / 2},  {3 * strip.numPixels() / 4, 3 * strip.numPixels() / 4}, {strip.numPixels() - 1, 3 * strip.numPixels() / 4}};
       break;
     default: // up full half way, then constant
-      points = {{0, 0}, {strip.numPixels() / 2 - 1, strip.numPixels() - 2},  {strip.numPixels() - 1, strip.numPixels() - 2}};
+      points = {{0, 0}, {maxNx / 2 - 1, maxNy - 2},  {maxNx - 1, maxNy - 2}};
   }
   return points;
 }
@@ -2279,10 +2278,15 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
     }
   }
 
+
+//TODO Fix Hack below using bright n0 and n1
+  points = points_for_embedding(Param.Bright.n0, 256, Param.Bright.n1);
+
   if (Param.Red.nfrac == 0) {
     pixelR = 0;
   } else {
     pixelHueR = Param.Red.first + (jRed * NREDLOOP * 65536L / strip.numPixels() / Param.Red.nfrac);
+    //pixelHueR = Param.Red.first + 256 * piecewise_linear((jRed * NREDLOOP * 256 / strip.numPixels() / Param.Red.nfrac), points);
     pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
     pixelR = pixelRcol >> 16;
   }
@@ -2291,6 +2295,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
     pixelG = 0;
   } else {
     pixelHueG = Param.Green.first + (jGreen * NGREENLOOP * 65536L / strip.numPixels() / Param.Green.nfrac);
+    //pixelHueG = Param.Green.first + 256 * piecewise_linear((jGreen * NGREENLOOP * 256 / strip.numPixels() / Param.Green.nfrac), points);
     pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
     pixelG = pixelGcol >> 8;
   }
@@ -2299,6 +2304,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
     pixelB = 0;
   } else {
     pixelHueB = Param.Blue.first + (jBlue * NBLUELOOP * 65536L / strip.numPixels() / Param.Blue.nfrac);
+    //pixelHueB = Param.Blue.first + 256 * piecewise_linear((jBlue * NBLUELOOP * 256 / strip.numPixels() / Param.Blue.nfrac), points);
     pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
     pixelB = pixelBcol;
   }
