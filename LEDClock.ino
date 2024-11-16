@@ -2354,25 +2354,32 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     // at same rate.
     // sets all leds (pixels) for one frame of the animation
     // MUST have yield() in loop - it is in pattern_helper
+
+    // Set up all pixels for this frame
     for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
       pattern_helper(i, Param);
     }
 
-    Param.nodepix = nodepix0 / 100;
-    nodepix0 += nodepix_diff;
-    nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
-    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
-
-//TODO could modify Param.Bright.n0, n1 and n2 here
-    Param.Bright.first += Param.Bright.inc;
-    Param.Red.first += Param.Red.inc;
-    Param.Green.first += Param.Green.inc;
-    Param.Blue.first += Param.Blue.inc;
+    //TODO could put this inside loop with wait/60 as option
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
     stripinner.show();
 #endif
+    //  limited_delay(wait / 60);
+    //}
+    // Adjust parameters for next frame
+    Param.nodepix = nodepix0 / 100;
+    nodepix0 += nodepix_diff;
+    nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
+
+    //TODO could modify Param.Bright.n0, n1 and n2 here
+    Param.Bright.first += Param.Bright.inc;
+    Param.Red.first += Param.Red.inc;
+    Param.Green.first += Param.Green.inc;
+    Param.Blue.first += Param.Blue.inc;
+
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
