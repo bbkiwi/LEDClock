@@ -9,7 +9,13 @@
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
 
-//3 Nov 2024
+//16 Nov 2024
+//TODO using Bright.n0, n1 and n2 need to use better
+// They control how color is embedding in color space
+// Fix so  n1 and n2 can change like Red.first, Green.first and Blue.first
+// Piecewise linear function can be implement in easier (faster) ways
+// eg. with uint16_t multiply by two gives sawtooth
+
 //Added John, using parm7 and parm8 for coef1, coef2 shift node of patterns
 //NOTE n0, n1, n2 not used
 
@@ -2159,7 +2165,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 //#include <vector>
 //#include <numeric>
 
-int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points) {
+int piecewise_linear(uint8_t x, std::vector<std::pair<uint8_t, uint8_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
       int x1 = points[i].first;
@@ -2169,7 +2175,7 @@ int8_t piecewise_linear(int8_t x, std::vector<std::pair<int8_t, int8_t>> points)
       return y1 + (y2 - y1) * (x - x1) / static_cast<double>(x2 - x1);
     }
   }
-  return static_cast<int8_t>(points.back().second);
+  return static_cast<int>(points.back().second);
 }
 
 
@@ -2183,8 +2189,8 @@ void colorAll(uint32_t color, int duration) {
 
 
 
-std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding, uint16_t maxNx = strip.numPixels(), uint16_t maxNy = strip.numPixels() ) {
-  std::vector<std::pair<int8_t, int8_t>> points;
+std::vector<std::pair<uint8_t, uint8_t>> points_for_embedding(int embedding, uint16_t maxNx = strip.numPixels(), uint16_t maxNy = strip.numPixels() ) {
+  std::vector<std::pair<uint8_t, uint8_t>> points;
   switch (embedding) {
     case 1: // full mapping
       points = {{0, 0}, {maxNx - 1, maxNy - 1}};
@@ -2227,18 +2233,14 @@ std::vector<std::pair<int8_t, int8_t>> points_for_embedding(int embedding, uint1
   return points;
 }
 
-////TODO make i and array of indeces to change
-//void pattern_helper(int i, std::vector<std::pair<int8_t, int8_t>> points, int nodepix,
-//                    int firstPixelHue, int firstPixelVal,
-//                    int nredfrac, int ngreenfrac, int nbluefrac, int nbrightfrac) {
-
+////TODO make i an array of indeces to change
 //TODO if use protects Param being changes, but uses more space
 void pattern_helper(int i, const HELPER_PARAM& Param) {
   // This passes by ref but the function does not change any fields
   //void pattern_helper(int i, HELPER_PARAM& Param) {
-  int pixelHueR;
-  int pixelHueG;
-  int pixelHueB;
+  uint16_t pixelHueR;
+  uint16_t pixelHueG;
+  uint16_t pixelHueB;
   uint8_t pixelR;
   uint8_t pixelG;
   uint8_t pixelB;
@@ -2252,7 +2254,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   uint16_t pixelVal = Param.Bright.first / 256; // default should be 255
   uint8_t pixelSat = 255;
 
-  std::vector<std::pair<int8_t, int8_t>> points;
+  std::vector<std::pair<uint8_t, uint8_t>> points;
 
   // could move into if statements below to speed up when nfrac == 0
   points = points_for_embedding(Param.Red.embedding);
@@ -2279,14 +2281,15 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   }
 
 
-//TODO Fix Hack below using bright n0 and n1
-  points = points_for_embedding(Param.Bright.n0, 256, Param.Bright.n1);
+  //TODO  Fix Hack below using bright n0 and n1
+  // Used for setting range of hues maps 0..256 to 0<= Param.Bright.n1 < Param.Bright.2 <=256
+  points = points_for_embedding(Param.Bright.n0, 256, Param.Bright.n2 - Param.Bright.n1);
 
   if (Param.Red.nfrac == 0) {
     pixelR = 0;
   } else {
-    pixelHueR = Param.Red.first + (jRed * NREDLOOP * 65536L / strip.numPixels() / Param.Red.nfrac);
-    //pixelHueR = Param.Red.first + 256 * piecewise_linear((jRed * NREDLOOP * 256 / strip.numPixels() / Param.Red.nfrac), points);
+    pixelHueR = 256 * (Param.Bright.n1 + piecewise_linear((Param.Red.first / 256 + jRed * NREDLOOP * 256 / strip.numPixels() / Param.Red.nfrac), points));
+    //pixelHueR *= 256;
     pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
     pixelR = pixelRcol >> 16;
   }
@@ -2294,8 +2297,8 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Green.nfrac == 0) {
     pixelG = 0;
   } else {
-    pixelHueG = Param.Green.first + (jGreen * NGREENLOOP * 65536L / strip.numPixels() / Param.Green.nfrac);
-    //pixelHueG = Param.Green.first + 256 * piecewise_linear((jGreen * NGREENLOOP * 256 / strip.numPixels() / Param.Green.nfrac), points);
+    pixelHueG = 256 * (Param.Bright.n1 + piecewise_linear((Param.Green.first / 256 + jGreen * NGREENLOOP * 256 / strip.numPixels() / Param.Green.nfrac), points));
+    //pixelHueG *= 256;
     pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
     pixelG = pixelGcol >> 8;
   }
@@ -2303,8 +2306,8 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Blue.nfrac == 0) {
     pixelB = 0;
   } else {
-    pixelHueB = Param.Blue.first + (jBlue * NBLUELOOP * 65536L / strip.numPixels() / Param.Blue.nfrac);
-    //pixelHueB = Param.Blue.first + 256 * piecewise_linear((jBlue * NBLUELOOP * 256 / strip.numPixels() / Param.Blue.nfrac), points);
+    pixelHueB = 256 * (Param.Bright.n1 + piecewise_linear((Param.Blue.first / 256 + jBlue * NBLUELOOP * 256 / strip.numPixels() / Param.Blue.nfrac), points));
+    //pixelHueB *= 256;
     pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
     pixelB = pixelBcol;
   }
@@ -2360,6 +2363,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
     nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
 
+//TODO could modify Param.Bright.n0, n1 and n2 here
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
