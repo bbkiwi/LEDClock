@@ -86,8 +86,8 @@
 #define HAS_INNER_RING
 #endif
 #if defined TEST_CLOCK
-#define HAS_8X8_LED_MATRIX
-#define HAS_INNER_RING
+//#define HAS_8X8_LED_MATRIX
+//#define HAS_INNER_RING
 #define HASMIC
 #define SENSOR_CUTOFF 100
 #define SENSOR_LOW_TIME 500
@@ -375,13 +375,15 @@ T nonNegMod(T n, U d ) {
 // use NEO_KHZ800 but maybe 400 makes wifi more stable???
 
 #ifndef HAS_8X8_LED_MATRIX
-#define NUM_LEDS 60
+////////// Using physical LED rings
+#define NUM_LEDS 8
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 #ifdef HAS_INNER_RING
 Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
 #else
+/////////// Using 8x8 LED MATRIX and making virtual rings
 #define NUM_LEDS 64
 Adafruit_NeoPixel strip_physical = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -498,6 +500,7 @@ VirtualLEDStrip stripinner(strip_physical, path24);
 #endif
 
 #endif
+///////////////// END OF MAKING VIRTUAL LED RINGS INSIDE 8x8 LED MATRIX
 
 //int LEDsegheights[NUM_LEDS]; // not implemented for worm
 
@@ -917,6 +920,7 @@ void playsong(int * melody, int * noteDurations, int whole_note_duration, int pi
   noTone(pin);
 }
 #endif
+///// END MUSIC CODE
 
 /*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
 // Taken from ConfigFile example
@@ -2165,7 +2169,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
 //#include <vector>
 //#include <numeric>
 
-int piecewise_linear(uint8_t x, std::vector<std::pair<uint8_t, uint8_t>> points) {
+int piecewise_linear(uint16_t x, std::vector<std::pair<uint16_t, uint16_t>> points) {
   for (int i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
       int x1 = points[i].first;
@@ -2189,8 +2193,8 @@ void colorAll(uint32_t color, int duration) {
 
 
 
-std::vector<std::pair<uint8_t, uint8_t>> points_for_embedding(int embedding, uint16_t maxNx = strip.numPixels(), uint16_t maxNy = strip.numPixels() ) {
-  std::vector<std::pair<uint8_t, uint8_t>> points;
+std::vector<std::pair<uint16_t, uint16_t>> points_for_embedding(int embedding, uint16_t maxNx = strip.numPixels(), uint16_t maxNy = strip.numPixels() ) {
+  std::vector<std::pair<uint16_t, uint16_t>> points;
   switch (embedding) {
     case 1: // full mapping
       points = {{0, 0}, {maxNx - 1, maxNy - 1}};
@@ -2226,6 +2230,7 @@ std::vector<std::pair<uint8_t, uint8_t>> points_for_embedding(int embedding, uin
       points = {{0, 0}, {maxNx / 3 - 1, 0}, {maxNx / 3, maxNy / 3}, {2 * maxNx / 3 - 1, maxNy / 3}, {2 * maxNx / 3, 2 * maxNy / 3}, {maxNx - 1, 2 * maxNy / 3}};
       break;
     case 10: // 4 levels
+      points = {{0, 0}, {maxNx / 4 - 1, 0}, {maxNx / 4, maxNy / 4}, {2 * maxNx / 4 - 1, maxNy / 4}, {2 * maxNx / 4, 2 * maxNy / 4},  {3 * maxNx / 4 - 1 , 2 * maxNy / 4}, {3 * maxNx / 4, 3 * maxNy / 4}, {maxNx - 1, 3 * maxNy / 4}};
       break;
     default: // up full half way, then constant
       points = {{0, 0}, {maxNx / 2 - 1, maxNy - 2},  {maxNx - 1, maxNy - 2}};
@@ -2254,7 +2259,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   uint16_t pixelVal = Param.Bright.first / 256; // default should be 255
   uint8_t pixelSat = 255;
 
-  std::vector<std::pair<uint8_t, uint8_t>> points;
+  std::vector<std::pair<uint16_t, uint16_t>> points;
 
   // could move into if statements below to speed up when nfrac == 0
   points = points_for_embedding(Param.Red.embedding);
@@ -2282,14 +2287,13 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
 
 
   //TODO  Fix Hack below using bright n0 and n1
-  // Used for setting range of hues maps 0..256 to 0<= Param.Bright.n1 < Param.Bright.2 <=256
-  points = points_for_embedding(Param.Bright.n0, 256, Param.Bright.n2 - Param.Bright.n1);
+  // Used for setting range of hues maps 0..UINT16_MAX to 0<= Param.Bright.n1 < Param.Bright.2 <=UINT16_MAX
+  points = points_for_embedding(Param.Bright.n0, UINT16_MAX, Param.Bright.n2 - Param.Bright.n1);
 
   if (Param.Red.nfrac == 0) {
     pixelR = 0;
   } else {
-    pixelHueR = 256 * (Param.Bright.n1 + piecewise_linear((Param.Red.first / 256 + jRed * NREDLOOP * 256 / strip.numPixels() / Param.Red.nfrac), points));
-    //pixelHueR *= 256;
+    pixelHueR = Param.Bright.n1 + piecewise_linear((Param.Red.first + jRed * NREDLOOP * UINT16_MAX / strip.numPixels() / Param.Red.nfrac), points);
     pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
     pixelR = pixelRcol >> 16;
   }
@@ -2297,8 +2301,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Green.nfrac == 0) {
     pixelG = 0;
   } else {
-    pixelHueG = 256 * (Param.Bright.n1 + piecewise_linear((Param.Green.first / 256 + jGreen * NGREENLOOP * 256 / strip.numPixels() / Param.Green.nfrac), points));
-    //pixelHueG *= 256;
+    pixelHueG = Param.Bright.n1 + piecewise_linear((Param.Green.first + jGreen * NGREENLOOP * UINT16_MAX / strip.numPixels() / Param.Green.nfrac), points);
     pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
     pixelG = pixelGcol >> 8;
   }
@@ -2306,8 +2309,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Blue.nfrac == 0) {
     pixelB = 0;
   } else {
-    pixelHueB = 256 * (Param.Bright.n1 + piecewise_linear((Param.Blue.first / 256 + jBlue * NBLUELOOP * 256 / strip.numPixels() / Param.Blue.nfrac), points));
-    //pixelHueB *= 256;
+    pixelHueB = Param.Bright.n1 + piecewise_linear((Param.Blue.first + jBlue * NBLUELOOP * UINT16_MAX / strip.numPixels() / Param.Blue.nfrac), points);
     pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
     pixelB = pixelBcol;
   }
@@ -2375,6 +2377,8 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
 
     //TODO could modify Param.Bright.n0, n1 and n2 here
+    Param.Bright.n1 += Param.Red.n1; //HACK
+    Param.Bright.n2 += Param.Red.n2; //HACK
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
