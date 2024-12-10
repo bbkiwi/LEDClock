@@ -183,9 +183,16 @@
              <input type="text" size = "5" id="bright_emb" value=0>
              <input type="text" size = "5" id="bright_n0" value=0>
              <input type="text" size = "5" id="bright_n1" value=0>
-             <input type="text" size = "5" id="bright_n2" value=0>
+             <input type="text" size = "5" id="bright_n2" value=0><br>
+             <input type="text" size = "5" disabled value='HUE'>
+             <input type="text" size = "5" id="hue_first" value=0>
+             <input type="text" size = "5" id="hue_inc" value=0>
+             <input type="text" size = "5" id="hue_nfrac" value=0>
+             <input type="text" size = "5" id="hue_emb" value=0>
+             <input type="text" size = "5" id="hue_n0" value=0>
+             <input type="text" size = "5" id="hue_n1" value=0>
+             <input type="text" size = "5" id="hue_n2" value=0>
              </div>
-
        </div>
 
 </div>
@@ -269,7 +276,7 @@
                  </tr>
                  <tr>
                     <td style="width:14.4px; text-align: right"> </td>
-                    <td style="width:14.4px; text-align: right"><input id="blinkminute" type="checkbox" checked="true">blink </td>
+                    <td style="width:14.4px; text-align: right"><input id="blinkminute" type="checkbox" checked="true"  onchange="setminute();">blink </td>
                     <td style="width:14.4px; text-align: right"> </td>
                     <td style="width:14.4px; text-align: right"> </td>
                 </tr>

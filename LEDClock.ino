@@ -9,7 +9,8 @@
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
 */
 
-//16 Nov 2024
+//30 Nov 2024
+// Fixed display control gui to action tick on minute blick when changed.
 //TODO using Bright.n0, n1 and n2 need to use better
 // They control how color is embedding in color space
 // Fix so  n1 and n2 can change like Red.first, Green.first and Blue.first
@@ -61,11 +62,13 @@
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-#define TEST_CLOCK
+//#define TEST_CLOCK
 //#define GBT_CLOCK
-// #define BRYN_CLOCK
+//#define BRYN_CLOCK
 //#define JOHN_CLOCK
-//#define BILL_CLOCK
+//#define BILL_LKIWI_CLOCK
+//#define BILL_KIWI_CLOCK
+#define BILL_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -73,13 +76,6 @@
 #define SENSOR_CUTOFF 700
 #define SENSOR_LOW_TIME 1000
 #define SENSOR_HIGH_TIME 2000
-#endif
-
-#if defined BRYN_CLOCK
-#define HASMIC
-#define SENSOR_CUTOFF 100
-#define SENSOR_LOW_TIME 500
-#define SENSOR_HIGH_TIME 1000
 #endif
 
 #if defined BILL_CLOCK
@@ -95,12 +91,29 @@
 #endif
 
 #define ONE_WEEK 604800 // seconds
+
+//ADD to localconfig and have option to change and store in flash
+
+#ifdef JOHN_CLOCK
+/* Carcassonne */
+#define LATITUDE        43.2163
+#define LONGITUDE       2.3539
+#define CST_OFFSET      1
+#define DST_OFFSET      2
+#elif defined BRYN_CLOCK
+/*Tokyo */
+#define LATITUDE        35.652832
+#define LONGITUDE       139.839478
+#define CST_OFFSET      9
+#define DST_OFFSET      9
+#else
 /* Cass Bay */
 #define LATITUDE        -43.601131
 #define LONGITUDE       172.689831
 #define CST_OFFSET      12
 #define DST_OFFSET      13
 
+#endif
 
 SunSet sun;
 
@@ -121,14 +134,23 @@ const char *OTAandMdnsName = "LEDClock";           // A name and a password for 
 #ifdef IRIS_CLOCK
 const char *OTAandMdnsName = "IrisLEDClock";           // A name and a password for the OTA and mDns service
 #endif
+#ifdef BRYN_CLOCK
+const char *OTAandMdnsName = "BrynsClock";           // A name and a password for the OTA and mDns service
+#endif
+#ifdef JOHN_CLOCK
+const char *OTAandMdnsName = "JohnsClock";           // A name and a password for the OTA and mDns service
+#endif
+#ifdef BILL_KIWI_CLOCK
+const char *OTAandMdnsName = "BillKIWIClock";           // A name and a password for the OTA and mDns service
+#endif
 #ifdef TEST_CLOCK
 const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
 #endif
 #ifdef GBT_CLOCK
 const char *OTAandMdnsName = "GBTLEDClock";           // A name and a password for the OTA and mDns service
 #endif
-#ifdef JOHN_CLOCK
-const char *OTAandMdnsName = "JOHNLEDClock";           // A name and a password for the OTA and mDns service
+#ifdef BILL_LKIWI_CLOCK
+const char *OTAandMdnsName = "BillLKIWIClock";           // A name and a password for the OTA and mDns service
 #endif
 #ifdef BILL_CLOCK
 const char *OTAandMdnsName = "BILLLEDClock";           // A name and a password for the OTA and mDns service
@@ -176,11 +198,12 @@ RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 },
 //The Second hand
 RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
+//TODO Save in Flash and make changeable
 // Make clock go forwards or backwards (dependant on hardware)
-#if defined BEDROOM_CLOCK || defined BRYN_CLOCK
+#if defined BEDROOM_CLOCK || defined BILL_LKIWI_CLOCK
 bool ClockGoBackwards = true;
 #endif
-#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined JOHN_CLOCK || defined BILL_CLOCK
+#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined BILL_CLOCK || defined BRYN_CLOCK || defined JOHN_CLOCK || defined BILL_KIWI_CLOCK
 bool ClockGoBackwards = false;
 #endif
 
@@ -225,7 +248,8 @@ bool nextModeIsDay = false; // used when scheduling next mode
 bool needInitIsDay = true;
 
 //Set your timezone in hours difference rom GMT
-int hours_Offset_From_GMT = 12;
+//TODO Have in config
+int hours_Offset_From_GMT = CST_OFFSET;
 
 
 String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -264,6 +288,7 @@ struct HELPER_PARAM {
   PATTERN Green;
   PATTERN Blue;
   PATTERN Bright;
+  PATTERN Hue;
 };
 
 HELPER_PARAM global_hparam;
@@ -298,10 +323,15 @@ ALARM alarmInfo[NUM_ALARMS];
 
 uint16_t time_elapsed = 0;
 
+//TODO have TopOfClock in config
 #ifdef TEST_CLOCK
 int TopOfClock = 44; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
+#elif defined BRYN_CLOCK || defined BILL_KIWI_CLOCK || defined JOHN_CLOCK
+int TopOfClock = 4;
+#elif defined BILL_LKIWI_CLOCK
+int TopOfClock = 48;
 #else
 int TopOfClock = 15; // to make given pixel the top
 #endif
@@ -323,14 +353,17 @@ int noteDurations[] = {
 
 WiFiUDP ntpUDP;
 //NTPClient timeClient(ntpUDP);
+//TODO have update_interval and time server in config
 unsigned long int update_interval_secs = 3601;
-NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
+//NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
+//This will work for all countries
+NTPClient timeClient(ntpUDP, "pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
-#if defined BEDROOM_CLOCK || defined BRYN_CLOCK
+#if defined BEDROOM_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin RX
 #endif
-#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined JOHN_CLOCK || defined BILL_CLOCK
+#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined BILL_LKIWI_CLOCK || defined BILL_KIWI_CLOCK || defined BILL_CLOCK  || defined BRYN_CLOCK || defined JOHN_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
 #endif
 #ifdef HAS_INNER_RING
@@ -376,7 +409,7 @@ T nonNegMod(T n, U d ) {
 
 #ifndef HAS_8X8_LED_MATRIX
 ////////// Using physical LED rings
-#define NUM_LEDS 8
+#define NUM_LEDS 60
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 #ifdef HAS_INNER_RING
 Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_PIN, NEO_GRB + NEO_KHZ800);
@@ -666,6 +699,7 @@ void loop() {
   }
 
 #ifdef HASMIC
+  //TODO could have key parameters in config and changable in gui
   // read the analog in value coming from microphone
   int sensorValue = analogRead(analogInPin);
   if (sensorValue > SENSOR_CUTOFF ) {
@@ -1636,13 +1670,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm6
         //Carefull with sscanf %d %hd %hhd must match type!
         sscanf((char *) payload,
-               "P%d %d %d %d %d %d %d %d %d %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd",
+               "P%d %d %d %d %d %d %d %d %d %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd",
                &light_alarm_num, &light_alarm_parm1, &light_alarm_parm2, &light_alarm_parm3, &light_alarm_parm4, &light_alarm_parm5,
                &light_alarm_parm6, &light_alarm_parm7, &light_alarm_parm8,
                &global_hparam.Red.first, &global_hparam.Red.inc, &global_hparam.Red.nfrac, &global_hparam.Red.embedding, &global_hparam.Red.n0, &global_hparam.Red.n1, &global_hparam.Red.n2,
                &global_hparam.Green.first, &global_hparam.Green.inc, &global_hparam.Green.nfrac, &global_hparam.Green.embedding, &global_hparam.Green.n0, &global_hparam.Green.n1, &global_hparam.Green.n2,
                &global_hparam.Blue.first, &global_hparam.Blue.inc, &global_hparam.Blue.nfrac, &global_hparam.Blue.embedding, &global_hparam.Blue.n0, &global_hparam.Blue.n1, &global_hparam.Blue.n2,
-               &global_hparam.Bright.first, &global_hparam.Bright.inc, &global_hparam.Bright.nfrac, &global_hparam.Bright.embedding, &global_hparam.Bright.n0, &global_hparam.Bright.n1, &global_hparam.Bright.n2);
+               &global_hparam.Bright.first, &global_hparam.Bright.inc, &global_hparam.Bright.nfrac, &global_hparam.Bright.embedding, &global_hparam.Bright.n0, &global_hparam.Bright.n1, &global_hparam.Bright.n2,
+               &global_hparam.Hue.first, &global_hparam.Hue.inc, &global_hparam.Hue.nfrac, &global_hparam.Hue.embedding, &global_hparam.Hue.n0, &global_hparam.Hue.n1, &global_hparam.Hue.n2);
         //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
@@ -1765,11 +1800,13 @@ void send_alarmInfo(int alarm_ind) {
 
 void send_patternInfo() {
   // send back info same order as payload when pattern defined
-  sprintf(buf, "PATTERNINFO:,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd",
+  sprintf(buf, "PATTERNINFO:,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd,%hu,%hd,%hd,%hhd,%hd,%hd,%hd",
           global_hparam.Red.first, global_hparam.Red.inc, global_hparam.Red.nfrac, global_hparam.Red.embedding, global_hparam.Red.n0, global_hparam.Red.n1, global_hparam.Red.n2,
           global_hparam.Green.first, global_hparam.Green.inc, global_hparam.Green.nfrac, global_hparam.Green.embedding, global_hparam.Green.n0, global_hparam.Green.n1, global_hparam.Green.n2,
           global_hparam.Blue.first, global_hparam.Blue.inc, global_hparam.Blue.nfrac, global_hparam.Blue.embedding, global_hparam.Blue.n0, global_hparam.Blue.n1, global_hparam.Blue.n2,
-          global_hparam.Bright.first, global_hparam.Bright.inc, global_hparam.Bright.nfrac, global_hparam.Bright.embedding, global_hparam.Bright.n0, global_hparam.Bright.n1, global_hparam.Bright.n2);
+          global_hparam.Bright.first, global_hparam.Bright.inc, global_hparam.Bright.nfrac, global_hparam.Bright.embedding, global_hparam.Bright.n0, global_hparam.Bright.n1, global_hparam.Bright.n2,
+          global_hparam.Hue.first, global_hparam.Hue.inc, global_hparam.Hue.nfrac, global_hparam.Hue.embedding, global_hparam.Hue.n0, global_hparam.Hue.n1, global_hparam.Hue.n2);
+
   Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
@@ -2001,6 +2038,36 @@ bool SetClockFromNTP()
   return updated;
 }
 
+//TODO need to be more general to handle other countries
+//TODO set parms for it in config
+
+#ifdef JOHN_CLOCK
+//In continental France, which includes the capital Paris,
+//  the Daylight Saving Time (DST) period
+//  starts on the last Sunday of March and
+//  ends on the last Sunday of October, together with most other European countries.
+
+bool IsDst() //France
+{
+  int previousSunday = day() - weekday() + 1;
+  //Serial.print("    IsDst ");
+  //Serial.print(month());
+  //Serial.println(previousSunday);
+  if (month() > 3 && month() < 10)  return true;
+  if (month() > 10 || month() < 3)  return false;
+
+
+  if (month() == 3) return previousSunday > 23;
+  if (month() == 10) return previousSunday < 24;
+  return false; // this line never gonna happend
+}
+#elif defined BRYN_CLOCK
+bool IsDst() //Japan
+{
+  return false;
+}
+
+#else //NZ
 // Modified for Southern Hemisphere DST
 // NZ daylight savings ends first Sunday of April at 3AM
 // NZ daylight starts last Sunday of September at 2AM
@@ -2018,6 +2085,9 @@ bool IsDst()
   if (month() == 9) return previousSunday > 23;
   return false; // this line never gonna happend
 }
+#endif
+
+
 
 ////////////////////////////////////////////////////////////
 void digitalClockDisplay()
@@ -2252,13 +2322,13 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   uint32_t pixelRcol;
   uint32_t pixelGcol;
   uint32_t pixelBcol;
+  uint16_t pixelVal;
+  uint8_t pixelSat = 255;
+
 #define NREDLOOP 120
 #define NGREENLOOP 120
 #define NBLUELOOP 120
 #define NBRIGHTLOOP 120
-  uint16_t pixelVal = Param.Bright.first / 256; // default should be 255
-  uint8_t pixelSat = 255;
-
   std::vector<std::pair<uint16_t, uint16_t>> points;
 
   // could move into if statements below to speed up when nfrac == 0
@@ -2274,26 +2344,28 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   // Offset pixel val by an amount to make NBRIGHTLOOP/ nbrightfrac  revolutions of the
   // brightness wheel (range of 256) along the length of the strip
   if (Param.Bright.nfrac != 0) {
-    pixelVal =  -128  + strip.sine8(Param.Bright.first / 256 + (jBright * NBRIGHTLOOP * 255 / strip.numPixels() / Param.Bright.nfrac));
-    // need empirical adjustment as for too low value LEDs don't shine at all
-    if (isDay) {
-      // day brightness
-      pixelVal = 33 + 222 * pixelVal / 255;
-    } else {
-      // night brightness
-      pixelVal = 84 + 171 * pixelVal / 255;
-    }
+    pixelVal =  strip.sine8(64 + Param.Bright.first / 256 + (jBright * NBRIGHTLOOP * 255 / strip.numPixels() / Param.Bright.nfrac));
+  } else {
+    pixelVal = strip.sine8(64 + Param.Bright.first / 256);
+  }
+  // need empirical adjustment as for too low value LEDs don't shine at all
+  if (isDay) {
+    // day brightness
+    pixelVal = 33 + 222 * pixelVal / 255;
+  } else {
+    // night brightness
+    pixelVal = 84 + 171 * pixelVal / 255;
   }
 
 
-  //TODO  Fix Hack below using bright n0 and n1
-  // Used for setting range of hues maps 0..UINT16_MAX to 0<= Param.Bright.n1 < Param.Bright.2 <=UINT16_MAX
-  points = points_for_embedding(Param.Bright.n0, UINT16_MAX, Param.Bright.n2 - Param.Bright.n1);
+  // Used for setting range of hues maps 0..UINT16_MAX to 0<= Param.Hue.first < Param.Hue.n0 <=UINT16_MAX
+  // Param.Hue.first can be incremented by Param.Hue.inc, and Param.Hue.n0 by Param.Hue.n1
+  points = points_for_embedding(Param.Hue.embedding, UINT16_MAX, Param.Hue.n0 - Param.Hue.first);
 
   if (Param.Red.nfrac == 0) {
     pixelR = 0;
   } else {
-    pixelHueR = Param.Bright.n1 + piecewise_linear((Param.Red.first + jRed * NREDLOOP * UINT16_MAX / strip.numPixels() / Param.Red.nfrac), points);
+    pixelHueR = Param.Hue.first + piecewise_linear((Param.Red.first + jRed * NREDLOOP * UINT16_MAX / strip.numPixels() / Param.Red.nfrac), points);
     pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
     pixelR = pixelRcol >> 16;
   }
@@ -2301,7 +2373,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Green.nfrac == 0) {
     pixelG = 0;
   } else {
-    pixelHueG = Param.Bright.n1 + piecewise_linear((Param.Green.first + jGreen * NGREENLOOP * UINT16_MAX / strip.numPixels() / Param.Green.nfrac), points);
+    pixelHueG = Param.Hue.first + piecewise_linear((Param.Green.first + jGreen * NGREENLOOP * UINT16_MAX / strip.numPixels() / Param.Green.nfrac), points);
     pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
     pixelG = pixelGcol >> 8;
   }
@@ -2309,7 +2381,7 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Blue.nfrac == 0) {
     pixelB = 0;
   } else {
-    pixelHueB = Param.Bright.n1 + piecewise_linear((Param.Blue.first + jBlue * NBLUELOOP * UINT16_MAX / strip.numPixels() / Param.Blue.nfrac), points);
+    pixelHueB = Param.Hue.first + piecewise_linear((Param.Blue.first + jBlue * NBLUELOOP * UINT16_MAX / strip.numPixels() / Param.Blue.nfrac), points);
     pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
     pixelB = pixelBcol;
   }
@@ -2323,12 +2395,13 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
 }
 
 void print_Param(HELPER_PARAM& Param) {
-  sprintf(buf, "nodepix = %d, coef0 = %d, coef1 = %d, coef2 = %d\nRed first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Green first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Blue first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Bright first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n",
+  sprintf(buf, "Param. nodepix = %d, coef0 = %d, coef1 = %d, coef2 = %d\n Red first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Green first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Blue first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Bright first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n Hue first: %hu, inc: %hd, nfrac: %hd, emb: %hhd,  n0: %hd, n1:%hd, n2: %hd\n",
           Param.nodepix, Param.coef0, Param.coef1, Param.coef2,
           Param.Red.first, Param.Red.inc, Param.Red.nfrac, Param.Red.embedding, Param.Red.n0, Param.Red.n1, Param.Red.n2,
           Param.Green.first, Param.Green.inc, Param.Green.nfrac, Param.Green.embedding, Param.Green.n0, Param.Green.n1, Param.Green.n2,
           Param.Blue.first, Param.Blue.inc, Param.Blue.nfrac, Param.Blue.embedding, Param.Blue.n0, Param.Blue.n1, Param.Blue.n2,
-          Param.Bright.first, Param.Bright.inc, Param.Bright.nfrac, Param.Bright.embedding, Param.Bright.n0, Param.Bright.n1, Param.Bright.n2);
+          Param.Bright.first, Param.Bright.inc, Param.Bright.nfrac, Param.Bright.embedding, Param.Bright.n0, Param.Bright.n1, Param.Bright.n2,
+          Param.Hue.first, Param.Hue.inc, Param.Hue.nfrac, Param.Hue.embedding, Param.Hue.n0, Param.Hue.n1, Param.Hue.n2);
   Serial.println(buf);
 }
 
@@ -2336,7 +2409,7 @@ void print_Param(HELPER_PARAM& Param) {
 void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac, int16_t nbrightfrac, int16_t valinc, uint16_t firstval) {
   sprintf(buf, "Rainbow old ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, nodepix, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding } };
+  HELPER_PARAM Param = {nodepix, nodepix, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding}, {0, 0, 0, 1 } };
   rainbow(Param, wait, duration);
 }
 
@@ -2376,13 +2449,18 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
     nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
 
-    //TODO could modify Param.Bright.n0, n1 and n2 here
-    Param.Bright.n1 += Param.Red.n1; //HACK
-    Param.Bright.n2 += Param.Red.n2; //HACK
-    Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
     Param.Blue.first += Param.Blue.inc;
+    Param.Bright.first += Param.Bright.inc;
+
+    Param.Bright.inc += Param.Bright.n0;
+    Param.Red.inc += Param.Red.n0;
+    Param.Green.inc += Param.Green.n0;
+    Param.Blue.inc += Param.Blue.n0;
+
+    Param.Hue.first += Param.Hue.inc;
+    Param.Hue.n0 += Param.Hue.n1;
 
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
