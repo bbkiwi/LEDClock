@@ -906,7 +906,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       global_hparam.coef0 = parm6;
       global_hparam.coef1 = parm7;
       global_hparam.coef2 = parm8;
-      color_wipe(global_hparam, parm1, parm2, duration);
+      color_wipe(global_hparam, parm1, duration, parm2);
       break;
     case 46:
     default:
@@ -2470,11 +2470,12 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
 void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t ngreenfrac, int16_t nbluefrac, int16_t valinc, uint16_t firstval) {
   sprintf(buf, "Color wipe old ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, 0, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding } };
-  color_wipe(Param, blocksize,  wait, duration);
+  HELPER_PARAM Param = {nodepix, 0, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding }, {0, 0, 0, 1 } };
+  color_wipe(Param, wait, duration, blocksize);
 }
 
-void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration) {
+//TODO check this becomes rainbow when blocksize = NUM_PIXELS
+void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize) {
   sprintf(buf, "color_wipe wait=%d, duration=%d, blocksize=%d", wait, duration, blocksize);
   Serial.println(buf);
   print_Param(Param);
@@ -2485,8 +2486,10 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
   int i = 0; // starting index
   int maxcnt;
   strip.fill(); // clear
+  strip.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
   stripinner.fill(); // clear
+  stripinner.show();
 #endif
   while (time_elapsed < duration) {
     if (blocksize > 0) {
@@ -2526,6 +2529,14 @@ void color_wipe(HELPER_PARAM Param, int blocksize, int wait,  uint16_t duration)
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
     Param.Blue.first += Param.Blue.inc;
+
+    Param.Bright.inc += Param.Bright.n0;
+    Param.Red.inc += Param.Red.n0;
+    Param.Green.inc += Param.Green.n0;
+    Param.Blue.inc += Param.Blue.n0;
+
+    Param.Hue.first += Param.Hue.inc;
+    Param.Hue.n0 += Param.Hue.n1;
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
