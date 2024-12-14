@@ -6,7 +6,8 @@ var savedate;
 
 
 connection.onopen = function () {
-    connection.send('Connect ' + new Date());
+    savedate = new Date();
+    connection.send('Connect ' + savedate.getMonth() + ' ' + savedate);
 };
 connection.onerror = function (error) {
     console.log('WebSocket Error ', error);

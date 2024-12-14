@@ -123,7 +123,7 @@ uint8_t websocketId_num = 0;
 
 File fsUploadFile;                                    // a File variable to temporarily store the received file
 
-const char *ssid = "LED Clock Access Point"; // The name of the Wi-Fi network that will be created
+const char *ssid = "LED_Clock_Access_Point"; // The name of the Wi-Fi network that will be created
 const char *password = "ledclock";   // The password required to connect to it, leave blank for an open network
 
 // OTA and mDns must have same name
@@ -538,6 +538,7 @@ VirtualLEDStrip stripinner(strip_physical, path24);
 //int LEDsegheights[NUM_LEDS]; // not implemented for worm
 
 bool ClockInitialized = false;
+bool ClockSetViaWebsocket = false;
 time_t nextCalcTime;
 time_t nextAlarmTime;
 time_t nextModeTime;
@@ -1235,8 +1236,39 @@ bool saveConfig() {
 
 
 void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
+  IPAddress IP;
   WiFiManager wifiManager;
-  wifiManager.autoConnect("AutoConnectAP");
+  //reset settings - wipe credentials for testing
+  //wifiManager.resetSettings();
+  wifiManager.setConfigPortalTimeout(120);
+  //automatically connect using saved credentials if they exist
+  //If connection fails it starts an access point with the specified name
+  //  and asks to connect, if that fails will keep asking unless EXIT is
+  //  pushed than will set up its own AP. The time will have to be set
+  //  and it won't go to NTP servers
+  if (wifiManager.autoConnect("AutoConnectAP")) {
+    Serial.println("connected...yeey :)");
+  }
+  else {
+#ifdef ESP8266
+    // This is a BUG FIX where when using WiFiManger trying to use the
+    //  same ssid as last run for the softAP fails.
+    WiFi.softAP("TempHackAP");
+    Serial.print("Using ssid TempHackAP the esp8266 used ");
+    Serial.print(WiFi.softAPSSID());
+    IP = WiFi.softAPIP();
+    Serial.print(" with IP = ");
+    Serial.println(IP);
+#endif
+    Serial.println("Setting AP (Access Point)…");
+    // Remove the password parameter, if you want the AP (Access Point) to be open
+    WiFi.softAP(ssid, password);
+    Serial.print("Using ssid that is wanted the esp8266 used ");
+    Serial.print(WiFi.softAPSSID()); // note using Serial.printf does not work for this???
+    IP = WiFi.softAPIP();
+    Serial.print(" with IP = ");
+    Serial.println(IP);
+  }
   delay(100);
 }
 
@@ -1767,7 +1799,23 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int alarm_ind = payload[1] - '0';
         send_alarmInfo(alarm_ind);
 
-      } else if (payload[0] == 'C') {                      // the browser sends an C to compute sunsets
+      } else if (payload[0] == 'C') {  // the browser sends an C to compute sunsets and also when websocket started sent Connect with time and date
+        //Connect Sat Dec 14 2024 14:27:16 GMT+1300 (New Zealand Daylight Time)
+        // Check if time and date info present and can use to set clock if running as AP
+        if ((length > 34) and (not ClockInitialized)) {
+          char Aday[4]; //3 char
+          char Amonth[4]; //3 char
+          int  AmonthNum;
+          int Adate;
+          int Ayear;
+          int Ahour;
+          int Aminute;
+          int Asecond;
+          sscanf((char *) payload, "Connect %d %s %s %2d %4d %2d:%2d:%2d ", &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute, &Asecond);
+          Serial.printf("Time read day %s month %s(%d) date %d year %d time %d:%02d:%02d\n", Aday, Amonth, AmonthNum + 1, Adate, Ayear, Ahour, Aminute, Asecond );
+          ClockSetViaWebsocket = true;
+          setTime(Ahour, Aminute, Asecond, Adate, AmonthNum + 1, Ayear);
+        }
         Serial.printf("Compute Sunsets\n");
         calcSun();
       }
@@ -2184,7 +2232,7 @@ void Draw_Clock(time_t t, byte Phase)
 
 //************* Function to set the clock brightness ******************************
 void SetBrightness() {
-  if (isDay and ClockInitialized) {
+  if (isDay and (ClockInitialized or ClockSetViaWebsocket)) {
     strip.setBrightness(day_brightness);
 #ifdef HAS_INNER_RING
     stripinner.setBrightness(day_brightness);
