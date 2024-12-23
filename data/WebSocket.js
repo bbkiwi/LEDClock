@@ -17,10 +17,28 @@ connection.onmessage = function (e) {
     console.log('Server: ', e.data);
     if (e.data === 'MUSIC') {
       document.getElementById("Melody-Button").style.display = "block";
+    } else if (e.data.startsWith('PARMINFO')) {
+      var parminfo = e.data.split(',');
+      console.log(parminfo);
+      document.getElementById('pat_parm1').value = Number(parminfo[1]);
+      document.getElementById('pat_parm2').value = Number(parminfo[2]);
+      document.getElementById('pat_parm3').value = Number(parminfo[3]);
+      document.getElementById('pat_parm4').value = Number(parminfo[4]);
+      document.getElementById('pat_parm5').value = Number(parminfo[5]);
+      document.getElementById('pat_parm6').value = Number(parminfo[6]);
     } else if (e.data.startsWith('ALARMINFO:')) {
       var alarminfo = e.data.split(',');
       console.log(alarminfo);
       document.getElementById('numpattern').value = Math.abs(Number(alarminfo[3]));
+
+      if (document.getElementById('numpattern').value === '') {
+        document.getElementById('numpattern').value = 'other';
+        document.getElementById('othernumpattern').hidden =  false;
+        document.getElementById('othernumpattern').value = alarminfo[3];
+      } else {
+        document.getElementById('othernumpattern').hidden =  true;
+      }
+
       document.getElementById('pat_parm1').value = Number(alarminfo[4]);
       document.getElementById('pat_parm2').value = Number(alarminfo[5]);
       document.getElementById('pat_parm3').value = Number(alarminfo[6]);
@@ -223,6 +241,9 @@ function setalarm() {
   if (alarmrepeat === 'other') {
     alarmrepeat = document.getElementById('othervalue').value;
   }
+  if (alarmtype === 'other') {
+    alarmtype = document.getElementById('othernumpattern').value;
+  }
   var alarmduration = document.getElementById('alarmduration').value;
   var dayonlysign = "";
   if (document.getElementById('dayonly').innerHTML === "Day Only") {
@@ -250,6 +271,13 @@ function getRandomIntInclusive(min, max) {
   return Math.floor(Math.random() * (maxFloored - minCeiled + 1) + minCeiled); // The maximum is inclusive and the minimum is inclusive
 }
 
+function numpatternChanged() {
+  if (document.getElementById('numpattern').value === "other") {
+    document.getElementById('othernumpattern').hidden =  false;
+  } else {
+    document.getElementById('othernumpattern').hidden =  true;
+  }
+}
 
 function patternEffect() {
   var num = document.getElementById('numpattern').value;
@@ -264,6 +292,10 @@ function patternEffect() {
   if (num == 46) {
     num = getRandomIntInclusive(1, 42);
   }
+  if (num === 'other') {
+    num = document.getElementById('othernumpattern').value;
+  }
+
   connection.send("P" + num + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " " + sendRGBBparms());
 }
 

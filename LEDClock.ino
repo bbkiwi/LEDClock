@@ -384,9 +384,9 @@ void limited_delay(int d);
 
 
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
-void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t nbrightfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
+//void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t nbrightfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280, int16_t coef1 = 0, int16_t coef2 = 0);
 // embedding, firstRhue, firstGhue, firstBhue, firstval, nredfrac, ngreenfrac, nbluefrac, nbrightfrac,  hueRinc, hueGinc, hueBinc, valinc, nodepix, nodepix1, nodepix2,    wait, duration, t
-void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
+void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t nbluefrac = 0, int16_t ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280, int16_t coef1 = 0, int16_t coef2 = 0);
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7 = 0, int parm8 = 0);
 void fire(uint16_t duration, uint8_t r = 255, uint8_t g = 127, uint8_t b = 0, uint8_t rd = 1, uint8_t gd = 1, uint8_t bd = 2);
 
@@ -748,170 +748,226 @@ void limited_delay(int d) {
 }
 
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7, int parm8) {
-  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d, p7 = %d, p8 = %d",
-          light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6, parm7, parm8);
-  Serial.println(buf);
+
 
   int isecond = second(now());
   int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
 
   switch (light_alarm_num) {
-    case 1: // wait parm1, parm2 number of worms sink size parm3 maxlen parm4 maxcycle parm5 dir parm6 (-1, 0=rand, 1)
-      moveworms(parm1, parm2, ihour, parm3, parm4, parm5, parm6, duration);
+    // Random examples
+    case 1:
+      //void rainbow(wait, embedding, uint16_t firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
+      // rgb sep                      nrfrac ngfrac                  nbfrac
+      //          emb  firsthue,hueinc nrfra ngfrac                  nbfrac   nbrfrac valinc
+      parm1 = random(1, 11);
+      parm2 = random(-1000, 1000);
+      parm3 = 30 * random(0, 8);
+      parm4 = 30 * random(0, 8);
+      parm5 = 30 * random(0, 8);
+      parm6 = 30 * random(0, 8);
+      rainbow(0, parm1, 0, parm2, parm3, parm4, ihour, duration, parm5,  parm6, 0, 0, 0, 0);
       break;
     case 2:
-      firefly(parm1, parm2, 0, 65535, parm3, 255, 255,  255, 256, duration);
+      //color_wipe(int wait, int embedding, uint16_t firsthue, int16_t hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
+      parm1 = random(0, 300);
+      parm2 = random(1, 11);
+      parm3 = random(65536);
+      parm4 = random(-1000, 1000);
+      parm5 = 30 * random(0, 8);
+      parm6 = random(1, 30);
+      color_wipe(parm1, parm2, parm3, parm4, parm5, parm6, ihour, duration, parm5, parm5); // color_wipe
       break;
-    case 3:
+    case 3: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
+      parm1 = random(0, 200);
+      parm2 = random(0, 200);
+      parm3 = random(0, 200);
+      showlights(duration, parm1, parm2, parm3);
+      break;
+    case 4: // wait parm1, parm2 number of worms sink size parm3 maxlen parm4 maxcycle parm5 dir parm6 (-1, 0=rand, 1)
+      parm1 = random(0, 300);
+      parm2 = random(1, 6);
+      parm3 = random(0, 10);
+      parm4 = random(1, 20);
+      parm5 = random(1, 5);
+      moveworms(parm1, parm2, ihour, parm3, parm4, parm5, 0 , duration);
+      break;
+    case 5:
+      //void firefly(wait, numff, minHue, maxHue, hueInc, minSat, maxSat, minVal, maxVal, duration) {
+
+      parm1 = random(0, 300);
+      parm2 = random(1, 30);
+      parm3 = random(30000);
+      parm4 = random(30000, 65536);
+      parm5 = random(400);
+      firefly(parm1, parm2, parm3, parm4, parm5, 255, 255,  255, 256, duration);
+      break;
+
+    case 6:  // rainbow theater chase
+      //void theaterChaseRainbow(duration, wait, firstHue, hueInc, den) {
+      parm1 = random(0, 300);
+      parm2 = random(65536);
+      parm3 = random(-1000, 1000);
+      parm4 = 30 * random(0, 8);
+      theaterChaseRainbow(duration, parm1, parm2, parm3, parm4);
+      break;
+    case 7:
+      parm1 = random(0, 300);
+      parm2 = random(256);
+      parm3 = random(65535);
+      cellularAutomata(parm1, parm2, parm3, duration);
+      break;
+
+    case 8:
+      parm1 = random(0, 300);
+      parm2 = random(256);
+      parm3 = random(256);
+      parm4 = random(256);
+      parm5 = random(65535);
+      cellularAutomata(parm1, parm2, parm3, parm4, parm5, duration);
+      break;
+
+    case 9: // fire
+      //void fire(duration, r, g, b, rd, gd, bd)
+      // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
+      //fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
+      parm1 = random(256);
+      parm2 = random(256);
+      parm3 = random(256);
+      parm4 = random(1, 4);
+      parm5 = random(1, 4);
+      parm6 = random(1, 4);
+      fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
+      break;
+
+    // using user specified parameters making alarms
+    case 10:
       //void rainbow(wait, embedding, uint16_t firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
-      // rgb sep                                                 nrfrac     ngfrac                                           nbfrac
-      //          emb  firsthue,hueinc nrfra ngfrac                        nbrfrac   brightfrac valinc
-      rainbow(0, parm1, 0,     parm2, parm3, parm4, ihour, duration, parm5,   parm6); // full rainbow ring rotating
+      // rgb sep                      nrfrac ngfrac                  nbfrac
+      //          emb  firsthue,hueinc nrfra ngfrac                  nbfrac   nbrfrac valinc
+      rainbow(0, parm1, 0,     parm2, parm3, parm4, ihour, duration, parm5,   parm6, 0, 0, 0, 0);
       break;
-    case 4:
-      //color_wipe(int wait, int embedding, uint16_t firsthue, int16_t hueembedding,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
+    case 11:
+      //color_wipe(int wait, int embedding, uint16_t firsthue, int16_t hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
       color_wipe(     parm1,        parm2,        parm3,            parm4,               parm5,       parm6,          ihour,       duration,            parm5,             parm5); // color_wipe
       break;
-    case 5: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
-      showlights(duration, parm1, parm2, parm3, -1, -1, -1, -1, -1);
+    case 12: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
+      // time at least 60 * (parm1+parm2+parm3), so limit
+      if (60 * (parm1 + parm2 + parm3) > duration) {
+        parm1 = parm1 * duration / (parm1 + parm2 + parm3) / 60;
+        parm2 = parm2 * duration / (parm1 + parm2 + parm3) / 60;
+        parm3 = parm3 * duration / (parm1 + parm2 + parm3) / 60;
+      }
+      showlights(duration, parm1, parm2, parm3);
       break;
-    case 6:  // rainbow 10 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 10, -1);
+    case 13: // wait parm1, parm2 number of worms sink size parm3 maxlen parm4 maxcycle parm5 dir parm6 (-1, 0=rand, 1)
+      moveworms(parm1, parm2, ihour, parm3, parm4, parm5, parm6, duration);
       break;
-    case 7: // rainbow 5 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 5, -1);
+    case 14:
+      firefly(parm1, parm2, 0, 65535, parm3, 255, 255,  255, 256, duration);
       break;
-    case 8: // rainbow 1 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 1, -1);
+
+    case 15:  // rainbow theater chase
+      theaterChaseRainbow(duration, parm1, parm2, parm3, parm4);
       break;
-    case 9: // ranbow2 0 wait
-      showlights(duration, -1, -1, -1, -1, -1, -1, 0, -1);
+    case 16:
+      cellularAutomata(parm1, parm2, parm3, duration);
+      //cellularAutomata(50, 26, random(65535), duration);
       break;
-    case 10: //
+
+    case 17:
+      cellularAutomata(parm1, parm2, parm3, parm4, parm5, duration);
+      //cellularAutomata(250, 26, 30, 60, random(65535), duration);
+      break;
+
+    case 18: // fire
+      //void fire(duration, r, g, b, rd, gd, bd)
+      // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
+      fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
+      break;
+
+
+    // Specific examples
+
+    case 19: //
       moveworms(5, 3, ihour, 1, 20, 8, 0, duration);
       break;
     //cellularAutomata(int wait, uint8_t rule, int pixelhue, uint16_t duration)
-    case 11:
-      cellularAutomata(250, 26, 30, 60, random(65535), duration);
-      break;
-    case 12:
+
+    case 20:
       cellularAutomata(250, 26, 26, 26, random(65535), duration);
       break;
-    case 13:
+    case 21:
       cellularAutomata(250, 30, 30, 30, random(65535), duration);
       break;
-    case 14:
+    case 22:
       cellularAutomata(250, 60, 60, 60, random(65535), duration);
       break;
-    case 15:
+    case 23:
       // goes black cellularAutomata(250, 104, 104, 104, random(65535), duration);
       cellularAutomata(250, 110, 110, 110, random(65535), duration);
       break;
-    case 16:
-      cellularAutomata(50, 26, random(65535), duration);
-      break;
-    case 17:
+
+    case 24:
       cellularAutomata(50, 30, random(65535), duration);
       break;
-    case 18:
+    case 25:
       cellularAutomata(50, 45, random(65535), duration);
       break;
-    case 19:
+    case 26:
       cellularAutomata(50, 57, random(65535), duration);
       break;
-    case 20:
+    case 27:
       cellularAutomata(50, 60, random(65535), duration);
       break;
-    case 21:
+    case 28:
       cellularAutomata(50, 73, random(65535), duration);
       break;
-    case 22:
+    case 29:
       cellularAutomata(50, 110, random(65535), duration);
       break;
-    case 23: // fire
-      fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
-      break;
+
     // fireflys
-    case 24:
+    case 30:
       firefly(1000, 5, 0, 65535, 256, 255, 255,  255, 256, duration);
       break;
-    case 25:
+    case 31:
       firefly(1000, 5, 32000, 32001, 0, 255, 255,  255, 256, duration);
       break;
-    case 26:
+    case 32:
       firefly(1000, 5, 0, 65535, 33000, 255, 255,  255, 256, duration);
       break;
-    case 27:
+    case 33:
       firefly(100, 1, 0, 65535, 256, 0, 1,  1, 256, duration);
       break;
     // (partial) rainbows
-    case 28:
-      rainbow(0, 1, 0, 256, 4, 1, ihour, duration); // 4 full rainbows in ring rotating
-      break;
-    case 29:
-      rainbow(0, 1, 0, 32, 4, 1, ihour, duration); // 4 full rainbows in ring rotating 8 times slower
-      break;
-    case 30:
-      rainbow(0, 1, 32000, 32, 4, 1, ihour, duration); // 4 full rainbows as above starting different place
-      break;
-    case 31:
-      rainbow(0, 2, 0, 256, 4, 1, ihour, duration); //  4 full and 4 reverse flowing from ihour led
-      break;
-    case 32:
-      rainbow(0, 2, 0, 256, 1, 4, ihour, duration); //  1/4 rainbox and its reverse flowing from ihour led
-      break;
-    case 33:
-      rainbow(0, 2, 0, 256, 1, 4, ihour, duration); //  1/4 rainbox and its reverse flowing from ihour led
-      break;
     case 34:
-      rainbow(0, 2, 0, 16, 1, 4, ihour, duration); //   1/64 rainbox and its reverse flowing from ihour led
-      break;
-    case 35:
-      rainbow(0, 2, 32000, 16, 1, 4, ihour, duration); // start diff place 1/64 rainbox and its reverse flowing from ihour led
-      break;
-    case 36:
-      rainbow(0, 3, 0, 256, 1, 1, ihour, duration);
-      break;
-    case 37:
-      rainbow(0, 3, 0, 256, 4, 1, ihour, duration);
-      break;
-    case 38:
-      rainbow(0, 4, 0, 256, 1, 1, ihour, duration);
-      break;
-    case 39:
-      rainbow(0, 4, 0, 256, 4, 1, ihour, duration);
-      break;
-    case 40:
-      rainbow(0, 5, 0, 256, 1, 1, ihour, duration);
+      //emb=parm1, firsthue=parm2, hueinc=parm3, nrfrac=ngfrac=nbgrac=parm4, brightfrac=parm5, valinc=parm6,
+      rainbow(0, parm1, parm2,   parm3,  parm4, ihour, duration, parm5, parm6, 0);
       break;
     // color wipes
-    case 41:
-      showlights(duration, 1, 1, 1, -1, -1, -1, -1, -1);
+    case 36:
+      showlights(duration, random(100), random(100), random(100));
       break;
-    case 42:
-      showlights(duration, 5, 5, 5, -1, -1, -1, -1, -1);
+    case 37:
+      showlights(duration, random(10), random(10), random(10));
       break;
-    case 43:
-      send_patternInfo();
-      break;
-    case 44:
-      global_hparam.nodepix = ihour;
-      global_hparam.coef0 = parm6;
-      global_hparam.coef1 = parm7;
-      global_hparam.coef2 = parm8;
-      rainbow(global_hparam, parm1, duration);
-      break;
-    case 45:
+
+    case 38:
       global_hparam.nodepix = ihour;
       global_hparam.coef0 = parm6;
       global_hparam.coef1 = parm7;
       global_hparam.coef2 = parm8;
       color_wipe(global_hparam, parm1, duration, parm2);
       break;
-    case 46:
+
+    case 39:
+      send_patternInfo();
+      break;
+
+    case 40:
     default:
-      light_alarm_num = random(1, 42);
+      light_alarm_num = random(1, 9);
       show_alarm_pattern(light_alarm_num, duration, parm1, parm2, parm3, parm4, parm5, parm6);
       break;
 
@@ -920,6 +976,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
   stripinner.fill();
   stripinner.show();
 #endif
+  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d, p7 = %d, p8 = %d",
+          light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6, parm7, parm8);
+  Serial.println(buf);
+  send_patternParms(parm1, parm2, parm3, parm4, parm5, parm6);
 }
 
 #ifdef MUSIC
@@ -1859,6 +1919,12 @@ void send_patternInfo() {
   webSocket.sendTXT(websocketId_num, buf);
 }
 
+void send_patternParms(int parm1, int parm2, int parm3, int parm4, int parm5, int parm6) {
+  sprintf(buf, "PARMINFO:,%d,%d,%d,%d,%d,%d", parm1, parm2, parm3, parm4, parm5, parm6);
+  Serial.println(buf);
+  webSocket.sendTXT(websocketId_num, buf);
+}
+
 void send_modeInfo() {
   // send back info same order as payload when modes defined
   sprintf(buf, "MODEINFO:,");
@@ -2257,11 +2323,11 @@ int ClockCorrect(int Pixel)
 }
 
 /* ----------------------------------------- LED ANIMATIONS ------------------------------------*/
-void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w6, int w7, int w8)
+void showlights(uint16_t duration, int w1, int w2, int w3)
 {
   time_elapsed = 0;
   uint16_t time_start = millis();
-  sprintf(buf, "showlights called with %d %d %d %d %d %d %d %d %d\n ", duration, w1, w2, w3, w4, w5, w6, w7, w8);
+  sprintf(buf, "showlights called with %d %d %d %d\n ", duration, w1, w2, w3);
   Serial.println(buf);
   while (time_elapsed < duration)
     //TODO need to interupt otherwise will always go thru loop an integral number of times
@@ -2271,12 +2337,6 @@ void showlights(uint16_t duration, int w1, int w2, int w3, int w4, int w5, int w
     if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1); // Red
     if (w2 >= 0) colorWipe(strip.Color(  0, 255,   0), w2); // Green
     if (w3 >= 0) colorWipe(strip.Color(  0,   0, 255), w3); // Blue
-    // Do a theater marquee effect in various colors...
-    if (w4 >= 0) theaterChase(strip.Color(127, 127, 127), w4); // White, half brightness
-    if (w5 >= 0) theaterChase(strip.Color(127,   0,   0), w5); // Red, half brightness
-    if (w6 >= 0) theaterChase(strip.Color(  0,   0, 127), w6); // Blue, half brightness
-    if (w7 >= 0) rainbow(w7, 1, 0, 256, 4, 1, 15, duration);            // Flowing rainbow cycle along the whole strip
-    if (w8 >= 0) theaterChaseRainbow(w8); // Rainbow-enhanced theaterChase variant
     time_elapsed = millis() - time_start;
   }
 }
@@ -2356,8 +2416,10 @@ std::vector<std::pair<uint16_t, uint16_t>> points_for_embedding(int embedding, u
   return points;
 }
 
-////TODO make i an array of indeces to change
-//TODO if use protects Param being changes, but uses more space
+// pattern_helper embeds i into strip and sets color there as specified in Param
+// could be used to replace setPixelColor in other animtations
+////TODO make i an array of indicies to change
+//using const protects Param being changed, but uses more space
 void pattern_helper(int i, const HELPER_PARAM& Param) {
   // This passes by ref but the function does not change any fields
   //void pattern_helper(int i, HELPER_PARAM& Param) {
@@ -2454,15 +2516,30 @@ void print_Param(HELPER_PARAM& Param) {
 }
 
 // Mod of Adafruit Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac, int16_t nbrightfrac, int16_t valinc, uint16_t firstval) {
-  sprintf(buf, "Rainbow old ");
+void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int16_t ngreenfrac, int nodepix, uint16_t duration, int16_t nbluefrac, int16_t nbrightfrac, int16_t valinc, uint16_t firstval, int16_t coef1, int16_t coef2) {
+  sprintf(buf, "Rainbow old using color_wipe with blocksize numPixels ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, nodepix, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding}, {0, 0, 0, 1 } };
-  rainbow(Param, wait, duration);
+  HELPER_PARAM Param = {nodepix, nodepix, coef1, coef2, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding }, {0, 0, 0, 1 } };
+  color_wipe(Param, wait, duration, strip.numPixels());
 }
 
-//TODO check here Param is passed by value so will not get changed when fields are modified and passed on to pattern_helper
+void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nallfrac, int nodepix, uint16_t duration,  int16_t nbrightfrac, int16_t valinc,  uint16_t firstval) {
+  rainbow(wait, embedding, firsthue, hueinc, nallfrac, nallfrac, nodepix, duration, nallfrac, nbrightfrac, valinc, firstval, 0, 0);
+}
+
+void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nallfrac, int16_t dallfrac, int nodepix, uint16_t duration) {
+  rainbow(wait, embedding, firsthue, hueinc, 120 * dallfrac / nallfrac, nodepix, duration, 0, 0, 0);
+}
+
 void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
+  sprintf(buf, "rainbow( = color_wipe with full blocksize) wait=%d, duration=%d", wait, duration);
+  Serial.println(buf);
+  print_Param(Param);
+  color_wipe(Param, wait, duration, strip.numPixels());
+}
+/*   ************ OLD CODE, but color_wipe using blocksize of whole strip reduces to this ************************
+  //TODO check here Param is passed by value so will not get changed when fields are modified and passed on to pattern_helper
+  void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   sprintf(buf, "rainbow wait=%d, duration=%d", wait, duration);
   Serial.println(buf);
   print_Param(Param);
@@ -2486,9 +2563,9 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     //TODO could put this inside loop with wait/60 as option
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
-#ifdef HAS_INNER_RING
+  #ifdef HAS_INNER_RING
     stripinner.show();
-#endif
+  #endif
     //  limited_delay(wait / 60);
     //}
     // Adjust parameters for next frame
@@ -2513,12 +2590,12 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
-}
-
-void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t ngreenfrac, int16_t nbluefrac, int16_t valinc, uint16_t firstval) {
+  }
+*/
+void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t ngreenfrac, int16_t nbluefrac, int16_t valinc, uint16_t firstval, int16_t coef1, int16_t coef2) {
   sprintf(buf, "Color wipe old ");
   Serial.println(buf);
-  HELPER_PARAM Param = {nodepix, 0, 0, 0, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding }, {0, 0, 0, 1 } };
+  HELPER_PARAM Param = {nodepix, nodepix, coef1, coef2, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, 0, embedding }, {0, 0, 0, 1 } };
   color_wipe(Param, wait, duration, blocksize);
 }
 
@@ -2569,6 +2646,12 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
       pattern_helper(i, Param);
     }
 
+
+    SetBrightness(); // Set the clock brightness dependant on the time
+    strip.show(); // Update strip with new contents
+#ifdef HAS_INNER_RING
+    stripinner.show();
+#endif
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
     nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
@@ -2585,11 +2668,7 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
 
     Param.Hue.first += Param.Hue.inc;
     Param.Hue.n0 += Param.Hue.n1;
-    SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
-#ifdef HAS_INNER_RING
-    stripinner.show();
-#endif
+
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
@@ -2936,29 +3015,12 @@ void colorWipe(uint32_t color, int wait) {
   }
 }
 
-// Theater-marquee-style chasing lights. Pass in a color (32-bit value,
-// a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
-// between frames.
-void theaterChase(uint32_t color, int wait) {
-  for (int a = 0; a < 10; a++) { // Repeat 10 times...
-    for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
-      strip.clear();         //   Set all pixels in RAM to 0 (off)
-      // 'c' counts up from 'b' to end of strip in steps of 3...
-      for (int c = b; c < strip.numPixels(); c += 3) {
-        strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
-      }
-      SetBrightness(); // Set the clock brightness dependant on the time
-      strip.show(); // Update strip with new contents
-      yield();
-      limited_delay(wait);  // Pause for a moment
-    }
-  }
-}
-
 // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
-void theaterChaseRainbow(int wait) {
-  int firstPixelHue = 0;     // First pixel starts at red (hue 0)
-  for (int a = 0; a < 10; a++) { // Repeat 10 times...
+void theaterChaseRainbow(uint16_t duration, int wait, uint16_t firstHue, int hueInc, int16_t den) {
+  wait = max(1, abs(wait));
+  int hue;
+  int firstPixelHue = firstHue;
+  for (int a = 0; a < duration / wait / 3; a++) {
     for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
       strip.clear();         //   Set all pixels in RAM to 0 (off)
       // 'c' counts up from 'b' to end of strip in increments of 3...
@@ -2966,7 +3028,11 @@ void theaterChaseRainbow(int wait) {
         // hue of pixel 'c' is offset by an amount to make one full
         // revolution of the color wheel (range 65536) along the length
         // of the strip (strip.numPixels() steps):
-        int      hue   = firstPixelHue + ClockCorrect(c) * 65536L / strip.numPixels();
+        if (den == 0) {
+          hue   = firstPixelHue;
+        } else {
+          hue   = firstPixelHue + ClockCorrect(c) * 65536L * 120 / den / strip.numPixels();
+        }
         uint32_t color = strip.gamma32(strip.ColorHSV(hue)); // hue -> RGB
         strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
       }
@@ -2974,7 +3040,7 @@ void theaterChaseRainbow(int wait) {
       strip.show();                // Update strip with new contents
       yield();
       limited_delay(wait);                 // Pause for a moment
-      firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
+      firstPixelHue += hueInc;
     }
   }
 }

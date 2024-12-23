@@ -109,20 +109,31 @@
         <div class="btn-group">
              <p style="margin:8px 0px">
              <p style="margin:8px 0px"><button id="pattern" class="button" onclick="patternEffect();">Pattern</button>
-             <select id="numpattern">
-                <option value="0">None</option>
-                <option value="3">Rainbow</option>
-                <option value="1">Worms</option>
-                <option value="11">CAuto</option>
-                <option value="23">Fire</option>
-                <option value="2">FireFly</option>
-                <option value="5">Wipe</option>
-                <option value="4">WipeT</option>
+             <select id="numpattern" onchange="numpatternChanged();">
+                <option value="10">Rainbow</option>
+                <option value="11">Wipe</option>
+                <option value="12">WipeT</option>
+                <option value="13">Worms</option>
+                <option value="14">FireFly</option>
+                <option value="15">Theater</option>
+                <option value="16">CA 1d</option>
+                <option value="17">CA 3d</option>
+                <option value="18">Fire</option>
                 <option value="46">Random</option>
-                <option value="43">Params</option>
-                <option value="44">PRainbow</option>
-                <option value="45">PWipeT</option>
-             </select><br>
+                <option value="1">R-Rainbow</option>
+                <option value="2">R-Wipe</option>
+                <option value="3">R-WipeT</option>
+                <option value="4">R-Worms</option>
+                <option value="5">R-FireFly</option>
+                <option value="6">R-Theater</option>
+                <option value="7">R-CA 1d</option>
+                <option value="8">R-CA 3d</option>
+                <option value="9">R-Fire</option>
+                <option value="38">PWipeT</option>
+                <option value="other">Other</option>
+                <option value="39">Params</option>
+             </select>
+             <input hidden type="text" id="othernumpattern" size='8' value=0><br>
              <input type="text" size = "5" disabled value='parm1'>
              <input type="text" size = "5" disabled value='parm2'>
              <input type="text" size = "5" disabled value='parm3'>
