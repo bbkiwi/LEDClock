@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>LED Control</title>
     <link href='main.css' rel='stylesheet' type='text/css'>
-	<link rel="stylesheet" href="dist/simplepicker.css">
+	  <link rel="stylesheet" href="dist/simplepicker.css">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
     <link rel="icon" type="image/png" sizes="144x144"  href="/favicon-144x144.png">
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon.ico">
@@ -20,58 +20,374 @@
 		  margin: 10px 5px;
 		  line-height: 1;
 		  border: 1px solid #4c4c4c;
-		  height: auto;
+		  height: 200px;
 		  width: 90%;
 		  padding: 2px 6px;
 		  color: #4c4c4c;
-		  white-space: pre;
+		  overflow-wrap: break-word;
+      overflow-y: scroll;
 		}
+        .btn-group button {
+            background-color: #04AA6D; /* Green background */
+            border: 1px solid green; /* Green border */
+            color: white; /* White text */
+            padding: 10px 24px; /* Some padding */
+            cursor: pointer; /* Pointer/hand icon */
+            float: center; /* Float the buttons side by side */
+        }
+
+        /* Clear floats (clearfix hack) */
+        .btn-group:after {
+          content: "";
+          clear: both;
+          display: table;
+        }
+
+        .btn-group button:not(:last-child) {
+          border-right: none; /* Prevent double borders */
+        }
+
+        /* Add a background color on hover */
+        .btn-group button:hover {
+          background-color: #3e8e41;
+        }
+
+         .tabledays{
+            table-layout: fixed;
+            float: center;
+
+        }
+         .tabledays td{
+            width: 10px;
+            text-align: center;
+
+        }
+
+       .tablemode{
+            table-layout: fixed;
+            float: center;
+
+        }
+         .tablemode td{
+            width: 200px;
+            text-align: center;
+
+        }
+
   </style>
 </head>
 
 <body>
 <button onclick="toggleShowHide('Clock-Control')">Clock Control</button>
-<button onclick="toggleShowHide('Led-Control')">LED Control</button>
-<button class="simplepicker-btn">Show Picker</button>
-<div id="Clock-Control" style="display: none;">
-    <center>
+<button onclick="toggleShowHide('Pattern-Control')">Pattern Control</button>
+<button onclick="toggleShowHide('Alarm-Control')">Alarm Control</button>
+<button onclick="toggleShowHide('Mode-Control')">Mode Control</button>
+<button onclick="toggleShowHide('Display-Control')">Display Control</button>
+<div id="Clock-Control" style="display: block;">
+<center>
         <header>
             <h1>Clock Control</h1>
         </header>
+        <div class="btn-group">
+             <p style="margin:8px 0px">
+               <button id="whattimeb" class="button"  onclick="whattimeAnswer();">Time?</button><br>
+               <button id="whattime" class="button">Time Will Appear Here</button></p>
+             <p style="margin:8px 0px"><button id="forceday" class="button" onclick="togForceDay();">Force Day</button>
+             <button id="forcenight" class="button" onclick="togForceNight();">Force Night</button></p>
+             <div id="Melody-Button" style= "display:none;">
+             <p style="margin:8px 0px"><button id="melody" class="button"  onclick="melodyEffect();">Melody</button></p>
+             </div>
+             <p style="margin:8px 0px"><button id="sunset" class="button" onclick="calcSunsets();">Calc Sunsets</button></p>
+       </div>
+</center>
+</div>
+<div id="Pattern-Control" style="text-align:center; width:80%;display: none;">
+
+        <header>
+            <h1>Pattern Control</h1>
+        </header>
+        <div class="btn-group">
+             <p style="margin:8px 0px">
+             <p style="margin:8px 0px"><button id="pattern" class="button" onclick="patternEffect();">Pattern</button>
+             <select id="numpattern" onchange="numpatternChanged();">
+                <option value="10">Rainbow</option>
+                <option value="11">Wipe</option>
+                <option value="12">WipeT</option>
+                <option value="13">Worms</option>
+                <option value="14">FireFly</option>
+                <option value="15">Theater</option>
+                <option value="16">CA 1d</option>
+                <option value="17">CA 3d</option>
+                <option value="18">Fire</option>
+                <option value="40">Random</option>
+                <option value="1">R-Rainbow</option>
+                <option value="2">R-Wipe</option>
+                <option value="3">R-WipeT</option>
+                <option value="4">R-Worms</option>
+                <option value="5">R-FireFly</option>
+                <option value="6">R-Theater</option>
+                <option value="7">R-CA 1d</option>
+                <option value="8">R-CA 3d</option>
+                <option value="9">R-Fire</option>
+                <option value="38">PWipeT</option>
+                <option value="other">Other</option>
+                <option value="39">Params</option>
+             </select>
+             <input hidden type="text" id="othernumpattern" size='8' value=0><br>
+             <input type="text" size = "5" disabled value='parm1'>
+             <input type="text" size = "5" disabled value='parm2'>
+             <input type="text" size = "5" disabled value='parm3'>
+             <input type="text" size = "5" disabled value='parm4'>
+             <input type="text" size = "5" disabled value='parm5'>
+             <input type="text" size = "5" disabled value='parm6'>
+             <input type="text" size = "5" disabled value='parm7'>
+             <input type="text" size = "5" disabled value='parm8'></p>
+
+
+             <input type="text" size = "5" id="pat_parm1" value=0>
+             <input type="text" size = "5" id="pat_parm2" value=0>
+             <input type="text" size = "5" id="pat_parm3" value=0>
+             <input type="text" size = "5" id="pat_parm4" value=0>
+             <input type="text" size = "5" id="pat_parm5" value=0>
+             <input type="text" size = "5" id="pat_parm6" value=0>
+             <input type="text" size = "5" id="pat_parm7" value=0>
+             <input type="text" size = "5" id="pat_parm8" value=0><br>
+
+
+             <input type="text" size = "5" disabled value=''>
+             <input type="text" size = "5" disabled value='first'>
+             <input type="text" size = "5" disabled value='inc'>
+             <input type="text" size = "5" disabled value='nfrac'>
+             <input type="text" size = "5" disabled value='emb'>
+             <input type="text" size = "5" disabled value='n0'>
+             <input type="text" size = "5" disabled value='n1'>
+             <input type="text" size = "5" disabled value='n2'><br>
+             <div id="RGBBparms">
+             <input type="text" size = "5" disabled value='RED'>
+             <input type="text" size = "5" id="red_first" value=0>
+             <input type="text" size = "5" id="red_inc" value=0>
+             <input type="text" size = "5" id="red_nfrac" value=0>
+             <input type="text" size = "5" id="red_emb" value=0>
+             <input type="text" size = "5" id="red_n0" value=0>
+             <input type="text" size = "5" id="red_n1" value=0>
+             <input type="text" size = "5" id="red_n2" value=0><br>
+             <input type="text" size = "5" disabled value='GREEN'>
+             <input type="text" size = "5" id="green_first" value=0>
+             <input type="text" size = "5" id="green_inc" value=0>
+             <input type="text" size = "5" id="green_nfrac" value=0>
+             <input type="text" size = "5" id="green_emb" value=0>
+             <input type="text" size = "5" id="green_n0" value=0>
+             <input type="text" size = "5" id="green_n1" value=0>
+             <input type="text" size = "5" id="green_n2" value=0><br>
+             <input type="text" size = "5" disabled value='BLUE'>
+             <input type="text" size = "5" id="blue_first" value=0>
+             <input type="text" size = "5" id="blue_inc" value=0>
+             <input type="text" size = "5" id="blue_nfrac" value=0>
+             <input type="text" size = "5" id="blue_emb" value=0>
+             <input type="text" size = "5" id="blue_n0" value=0>
+             <input type="text" size = "5" id="blue_n1" value=0>
+             <input type="text" size = "5" id="blue_n2" value=0><br>
+             <input type="text" size = "5" disabled value='BRIGHT'>
+             <input type="text" size = "5" id="bright_first" value=0>
+             <input type="text" size = "5" id="bright_inc" value=0>
+             <input type="text" size = "5" id="bright_nfrac" value=0>
+             <input type="text" size = "5" id="bright_emb" value=0>
+             <input type="text" size = "5" id="bright_n0" value=0>
+             <input type="text" size = "5" id="bright_n1" value=0>
+             <input type="text" size = "5" id="bright_n2" value=0><br>
+             <input type="text" size = "5" disabled value='HUE'>
+             <input type="text" size = "5" id="hue_first" value=0>
+             <input type="text" size = "5" id="hue_inc" value=0>
+             <input type="text" size = "5" id="hue_nfrac" value=0>
+             <input type="text" size = "5" id="hue_emb" value=0>
+             <input type="text" size = "5" id="hue_n0" value=0>
+             <input type="text" size = "5" id="hue_n1" value=0>
+             <input type="text" size = "5" id="hue_n2" value=0>
+             </div>
+       </div>
+
+</div>
+
+
+<div id="Display-Control" style="display: none;">
+    <center>
+        <header>
+            <h1>Display Control</h1>
+        </header>
         <div>
-             <p style="margin:8px 0px"><button id="whattime" class="button" style="background-color:#999" onclick="whattimeAnswer();">What time?</button></p>
-             <p style="margin:8px 0px"><button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button></p>
-             <p style="margin:8px 0px"><button id="sunset" class="button" style="background-color:#999" onclick="calcSunsets();">Calc Sunsets</button></p>
-             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" style="background-color:#999" onclick="requestSaveConfig();">Save Config</button></p>
+          <p>Display <select id="dispind" onchange="setdispind();">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">night</option>
+                        </select></p>
+       <p>Can choose color and test how it looks on the LEDS</p>
+       <input class="enabled" type="color" id="cp"  value="#0"><button id="testbutton"  onclick="sendColor();">Test Color</button>
+       </div>
+
+       <div class="btn-group">
+         Buttons change display part to selected color<br>
+             <button id="set12" class="button"  onclick="set12();">12</button>
+             <button id="setquarter" class="button"  onclick="setquarter();">Quad</button>
+             <button id="setdivision" class="button"  onclick="setdivision();">Div</button>
+             <button id="setbackground" class="button"  onclick="setbackground();">Back</button>
+       </div>
+       <div class="btn-group">
+         Buttons change hand to selected color<br> Selections set width
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: right"><button id="sethourcol" class="button"  onclick="sethourcol();">Hour</button> </td>
+                     <td style="width:14.4px; text-align: right"> <button id="setminutecol" class="button"  onclick="setminutecol();">Min</button></td>
+                     <td style="width:14.4px; text-align: right"> <button id="setsecondcol" class="button"  onclick="setsecondcol();">Sec</button></td>
+                </tr>
+                <tr>
+                    <td style="width:14.4px; text-align: right">
+                      <select id="widthhour" onchange="sethour();">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                      </select></td>
+                     <td style="width:14.4px; text-align: right">
+                       <select id="widthminute" onchange="setminute();">
+                        <option value="-3">Hide</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                      </select> </td>
+                     <td style="width:14.4px; text-align: right">
+                        <select id="widthsecond" onchange="setsecond();">
+                        <option value="-3">Hide</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        </select>
+                     </td>
+                 </tr>
+                 <tr>
+                    <td style="width:14.4px; text-align: right"> </td>
+                    <td style="width:14.4px; text-align: right"><input id="blinkminute" type="checkbox" checked="true"  onchange="setminute();">blink </td>
+                    <td style="width:14.4px; text-align: right"> </td>
+                    <td style="width:14.4px; text-align: right"> </td>
+                </tr>
+            </table>
+       <p>Brightness Day:<input type="text" id="daybright" size='4' onchange="setbright();" value=127>    Night:<input type="text" id="nightbright" size='4'  onchange="setbright();" value=16></p>
+       <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
        </div>
     </center>
 </div>
-<div id="Led-Control" style="display: none;">
+
+<div id="Alarm-Control" style="display: none;">
     <center>
         <header>
-            <h1>LED Control</h1>
+            <h1>Alarm Control</h1>
         </header>
-        <div>
-            <table>
-                <tr>
-                    <td style="width:14.4px; text-align: right">R: </td>
-                    <td><input class="enabled" id="r" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();" value="0"></td>
-                </tr>
-                <tr>
-                    <td style="width:14.4px; text-align: right">G: </td>
-                    <td><input class="enabled" id="g" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
-                </tr>
-                <tr>
-                    <td style="width:14.4px; text-align: right">B: </td>
-                    <td><input class="enabled" id="b" type="range" min="0" max="1023" step="1" onmouseup="sendRGB();" ontouchend="sendRGB();"  value="0"></td>
-                </tr>
-            </table>
-             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setbackground();">Set Background</button></p>
-             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="sethour();">Set Hour</button></p>
-             <p style="margin:8px 0px"><button id="setbackground" class="button" style="background-color:#999" onclick="setminute();">Set Minute</button></p>
-       </div>
+        <div class="btn-group">
+             <p>Alarm number - <select id="alarmnum" onchange="RequestPopulate();">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        </select></p>
+          <button class="simplepicker-btn">Choose Date and Time</button>
+          <p style="margin:8px 0px"><button id="saveddatetime" class="button">Saved Date Time</button></p>
+
+          <div>
+             <p style="margin:8px 0px"><button id="repeat" class="button">Repeat</button>
+             <select id="alarmrepeat" onchange="AlarmrepeatChanged();">
+                        <option value="86400">Daily</option>
+                        <option value="3600">Hourly</option>
+                        <option value="1800">Half Hourly</option>
+                        <option value="604800">Weekly</option>
+                        <option value="other">Other</option>
+                        </select>
+                        <input hidden type="text" id="othervalue" size='8' value=0>
+                        </p>
+
+                        <table class="tabledays">
+                        <tr><td>S</td><td>M</td><td>T</td><td>W</td><td>T</td><td>F</td><td>S</td></tr>
+                        <tr>
+                          <td><input type="checkbox" id="dayactive1"></td><td>
+                          <input type="checkbox" id="dayactive2"></td><td>
+                          <input type="checkbox" id="dayactive3"></td><td>
+                          <input type="checkbox" id="dayactive4"></td><td>
+                          <input type="checkbox" id="dayactive5"></td><td>
+                          <input type="checkbox" id="dayactive6"></td><td>
+                          <input type="checkbox" id="dayactive7"></td>
+                        </tr>
+                        </table>
+
+             </div>
+            <p><button id="dayonly" class="button" onclick="handleWhen();">Day Only</button></p>
+
+             <p style="margin:8px 0px"><button id="duration" class="button">Duration</button>
+             <input type="text" id="alarmduration" value=10000></p>
+             <p style="margin:8px 0px"><button id="setalarm" class="button" onclick="setalarm();">Activate Alarm Settings</button>
+             </p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
+        </div>
     </center>
-	</div>
+</div>
+
+<div id="Mode-Control" style="display: none;">
+    <center>
+        <header>
+            <h1 style ="margin-bottom: 0">Mode Control </h1>
+            <h4 style ="margin-top: 0">&#10003; = mins relative to sun</h4>
+        </header>
+
+        <table class="tablemode" id="ModeTimesTable">
+            <thead>
+                <tr><th></th><th>Day Starts</th><th>Night Starts</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Sun</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Mon</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Tue</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Wed</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Thu</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Fri</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+                <tr><td>Sat</td><td><input type="checkbox"><input type="time"><input type="text" size='4'></td>
+                                    <td><input type="checkbox"><input type="time"><input type="text" size='4'></td></tr>
+            </tbody>
+        </table>
+
+             <p style="margin:8px 0px"><button class="button" onclick="sendTableData();">Activate Table Data</button>
+             </p>
+             <p style="margin:8px 0px"><button id="requestsaveconfig" class="button" onclick="requestSaveConfig();">Save Config to Flash Memory</button></p>
+
+    </center>
+
+</div>
+
   <div class="picker-area">
   <h2>Event logs:</h2>
   <div class="event-log"></div>
@@ -103,6 +419,8 @@
     simplepicker.on('close', (date) => {
       $eventLog.innerHTML = 'Picker Closed'  + '\n' + $eventLog.innerHTML;
     });
+
+
   </script>
   </div>
 </body>

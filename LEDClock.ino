@@ -7,6 +7,25 @@
    2 Jan 2023
    Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
        and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
+
+  6 Jan 2025 used for Gift Clocks
+  Used Arduino 1.8.13
+  NTPClient 3.2.1
+  Timezone 1.2.4
+  Time 1.6.1 (TimeLib.h)
+  Adafruit_NeoPixel 1.12.3
+  WifiManager 2.0.17
+  ESP8266WiFi.h ? greyed out in code
+  ArduinoOTA 1.1.0
+  ESP8266WebServer
+  ESP8266mDNS
+  ESP8266LittleFS-2.6.0.zip
+  WebSocket_Generic Markus Sattler, Khio Hoan 2.16.1
+  ArduinoJson 7.3.0
+
+
+  LOLIN (Weimos) D1 R2 & mini
+  Flash 4M (FS:2M OTA ~1019KB)
 */
 
 //30 Nov 2024
@@ -36,12 +55,13 @@
 //     then can have time before day begins and night begins to fade
 //     in or out display
 
-//NOTE if want to upload sketch data SPIFFS via OTA can NOT set OTA password
+//NOTE if want to upload sketch data LittleFS via OTA can NOT set OTA password
 /************* Declare included libraries ******************************/
 #include <cmath>
 #include <vector>
 #include <numeric>
 #include <NTPClient.h>
+#include <Timezone.h>
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
 #include <string.h>
@@ -56,7 +76,7 @@
 #include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
-#include <FS.h>
+#include <LittleFS.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
@@ -67,7 +87,7 @@
 //#define BRYN_CLOCK
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
-//#define BILL_KIWI_CLOCK
+//#define JAPAN_KIWI_CLOCK
 #define BILL_CLOCK
 
 #if defined BEDROOM_CLOCK
@@ -91,29 +111,6 @@
 #endif
 
 #define ONE_WEEK 604800 // seconds
-
-//ADD to localconfig and have option to change and store in flash
-
-#ifdef JOHN_CLOCK
-/* Carcassonne */
-#define LATITUDE        43.2163
-#define LONGITUDE       2.3539
-#define CST_OFFSET      1
-#define DST_OFFSET      2
-#elif defined BRYN_CLOCK
-/*Tokyo */
-#define LATITUDE        35.652832
-#define LONGITUDE       139.839478
-#define CST_OFFSET      9
-#define DST_OFFSET      9
-#else
-/* Cass Bay */
-#define LATITUDE        -43.601131
-#define LONGITUDE       172.689831
-#define CST_OFFSET      12
-#define DST_OFFSET      13
-
-#endif
 
 SunSet sun;
 
@@ -140,8 +137,8 @@ const char *OTAandMdnsName = "BrynsClock";           // A name and a password fo
 #ifdef JOHN_CLOCK
 const char *OTAandMdnsName = "JohnsClock";           // A name and a password for the OTA and mDns service
 #endif
-#ifdef BILL_KIWI_CLOCK
-const char *OTAandMdnsName = "BillKIWIClock";           // A name and a password for the OTA and mDns service
+#ifdef JAPAN_KIWI_CLOCK
+const char *OTAandMdnsName = "KIWIClock";           // A name and a password for the OTA and mDns service
 #endif
 #ifdef TEST_CLOCK
 const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
@@ -178,6 +175,13 @@ struct MODE_CHANGE {
   TIME specificTime;
 };
 
+//Create structure for time zone info
+struct TIME_ZONE {
+  uint8_t week;
+  uint8_t dow;
+  uint8_t month;
+  uint8_t hour;
+};
 
 #define NUM_DISP_OPTIONS 5
 RGB SliderColor;
@@ -196,14 +200,14 @@ RGB Hour[NUM_DISP_OPTIONS] = {{ 0, 255, 0 }, { 0, 0, 255 }, { 0, 255, 0 }, { 0, 
 //The Minute hand
 RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 }, { 255, 255, 0 }, {0, 0, 0} }; //yellow
 //The Second hand
-RGB Second[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
+RGB SecHand[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 //TODO Save in Flash and make changeable
 // Make clock go forwards or backwards (dependant on hardware)
 #if defined BEDROOM_CLOCK || defined BILL_LKIWI_CLOCK
 bool ClockGoBackwards = true;
 #endif
-#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined BILL_CLOCK || defined BRYN_CLOCK || defined JOHN_CLOCK || defined BILL_KIWI_CLOCK
+#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined BILL_CLOCK || defined BRYN_CLOCK || defined JOHN_CLOCK || defined JAPAN_KIWI_CLOCK
 bool ClockGoBackwards = false;
 #endif
 
@@ -247,10 +251,49 @@ bool isDay = true; // gets set in main loop and also toggled by gui
 bool nextModeIsDay = false; // used when scheduling next mode
 bool needInitIsDay = true;
 
+//TIME ZONES
 //Set your timezone in hours difference rom GMT
-//TODO Have in config
-int hours_Offset_From_GMT = CST_OFFSET;
+// Note in Timezone.h has defined enum for Last, First, Second, Third, Fourth, Sun, Mon, Tue, Wed, Thur, Fri, Sat, Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+// New Zealand Time Zone
+// 5 char max name, uint8_t week 0=Last,1=Frist, 2=Second, 3=Third, 4=Fourth, day of week, Sun=1,...; month 1= Jan,..; hour 0-23; int offset from UTC in minutes
+//TimeChangeRule mySTD = {"NZST", First, Sun, Apr, 3, hourOff_CST * 60};   // UTC + hourOff_CST hours
+//TimeChangeRule myDST = {"NZDT", Last, Sun, Sep, 2, hourOff_CST * 60};    // UTC + hourOff_DST hours
 
+
+#ifdef JOHN_CLOCK
+/* Carcassonne */
+#define LATITUDE        43.2163
+#define LONGITUDE       2.3539
+#define CST_OFFSET      1
+#define DST_OFFSET      2
+TIME_ZONE TZSpec[2] = {{Last, Sun, Oct, 3}, {Last, Sun, Mar, 2}};
+#elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK
+/*Tokyo */
+#define LATITUDE        35.652832
+#define LONGITUDE       139.839478
+#define CST_OFFSET      9
+#define DST_OFFSET      9
+TIME_ZONE TZSpec[2] = {{Last, Sun, Oct, 3}, {Last, Sun, Oct, 3}};
+#else
+/* Cass Bay */
+#define LATITUDE        -43.601131
+#define LONGITUDE       172.689831
+#define CST_OFFSET      12
+#define DST_OFFSET      13
+// For NZ
+TIME_ZONE TZSpec[2] = {{First, Sun, Apr, 3}, {Last, Sun, Sep, 2}};
+#endif
+
+
+int hourOff_CST = CST_OFFSET;
+int hourOff_DST = DST_OFFSET;
+double latitude = LATITUDE;
+double longitude = LONGITUDE;
+
+
+TimeChangeRule myDST = {"NZST", TZSpec[1].week, TZSpec[1].dow, TZSpec[1].month, TZSpec[1].hour, hourOff_DST * 60};    // UTC + hours_Offset_From_GMT_DST hours
+TimeChangeRule mySTD = {"NZST", TZSpec[0].week, TZSpec[0].dow, TZSpec[0].month, TZSpec[0].hour, hourOff_CST * 60};   // UTC + hourOff_CST hours
+Timezone my_tz(myDST, mySTD);
 
 String daysOfWeek[8] = {"dummy", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 String monthNames[13] = {"dummy", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
@@ -264,7 +307,6 @@ int light_alarm_parm3 = 0;
 int light_alarm_parm4 = 0;
 int light_alarm_parm5 = 0;
 int light_alarm_parm6 = 0;
-// extra test parameters
 int light_alarm_parm7 = 0;
 int light_alarm_parm8 = 0;
 
@@ -308,6 +350,8 @@ struct ALARM {
   int parm4;
   int parm5;
   int parm6;
+  int parm7;
+  int parm8;
   uint16_t duration; //ms
   uint32_t repeat; //sec
   tmElements_t alarmTime;
@@ -328,7 +372,7 @@ uint16_t time_elapsed = 0;
 int TopOfClock = 44; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
-#elif defined BRYN_CLOCK || defined BILL_KIWI_CLOCK || defined JOHN_CLOCK
+#elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK || defined JOHN_CLOCK
 int TopOfClock = 4;
 #elif defined BILL_LKIWI_CLOCK
 int TopOfClock = 48;
@@ -355,15 +399,15 @@ WiFiUDP ntpUDP;
 //NTPClient timeClient(ntpUDP);
 //TODO have update_interval and time server in config
 unsigned long int update_interval_secs = 3601;
-//NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
+//NTPClient timeClient(ntpUDP, "nz.pool.ntp.org", hourOff_CST * 3600, update_interval_secs * 1000);
 //This will work for all countries
-NTPClient timeClient(ntpUDP, "pool.ntp.org", hours_Offset_From_GMT * 3600, update_interval_secs * 1000);
+NTPClient timeClient(ntpUDP, "pool.ntp.org", hourOff_CST * 3600, update_interval_secs * 1000);
 
 // Which pin on the ESP8266 is connected to the NeoPixels?
 #if defined BEDROOM_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin RX
 #endif
-#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined BILL_LKIWI_CLOCK || defined BILL_KIWI_CLOCK || defined BILL_CLOCK  || defined BRYN_CLOCK || defined JOHN_CLOCK
+#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined BILL_LKIWI_CLOCK || defined JAPAN_KIWI_CLOCK || defined BILL_CLOCK  || defined BRYN_CLOCK || defined JOHN_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
 #endif
 #ifdef HAS_INNER_RING
@@ -548,13 +592,13 @@ const int ESP_BUILTIN_LED = 2;
 
 void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
-  delay(10);
+  delay(1000);
   Serial.println("\r\n");
-  sun.setPosition(LATITUDE, LONGITUDE, DST_OFFSET);
+  sun.setPosition(latitude, longitude, hourOff_DST);
 
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
   startOTA();                  // Start the OTA service
-  startSPIFFS();               // Start the SPIFFS and list all contents
+  startLittleFS();               // Start the LittleFS and list all contents
 
   if (!loadConfig()) {
     Serial.println("Failed to load config will use defaults");
@@ -572,9 +616,9 @@ void setup() {
     Serial.println("Config loaded");
   }
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d, active=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+    sprintf(buf, "Loaded alarmInfo[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d,  parm4=%d, parm5=%d, parm6=%d, parm7=%d, parm8=%d, duration=%d, repeat=%d, active=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
             alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-            alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+            alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6, alarmInfo[alarm_ind].parm7, alarmInfo[alarm_ind].parm8,
             alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive,
             hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
             second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
@@ -656,7 +700,7 @@ void loop() {
         if (isDay || alarmInfo[alarm_ind].alarmType > 0) {
           show_alarm_pattern(abs(alarmInfo[alarm_ind].alarmType), alarmInfo[alarm_ind].duration,
                              alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-                             alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6);
+                             alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6, alarmInfo[alarm_ind].parm7, alarmInfo[alarm_ind].parm8);
           // redraw clock now to restore clock leds (thus not leaving alarm display on past its duration)
           Draw_Clock(now(), 4); // Draw the whole clock face with hours minutes and seconds
         } else {
@@ -665,9 +709,9 @@ void loop() {
           Serial.println(buf);
           webSocket.sendTXT(websocketId_num, buf);
         }
-        sprintf(buf, "Alarm type %d (%d, %d, %d, %d, %d, %d) at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType,
+        sprintf(buf, "Alarm type %d (%d, %d, %d, %d, %d, %d, %d, %d) at %d:%02d:%02d %s %d %s %d", alarmInfo[alarm_ind].alarmType,
                 alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6, alarmInfo[alarm_ind].parm7, alarmInfo[alarm_ind].parm8,
                 hour(currentTime), minute(currentTime), second(currentTime), daysOfWeek[weekday(currentTime)].c_str(), day(currentTime),  monthNames[month(currentTime)].c_str(), year(currentTime));
         Serial.println();
         Serial.println(buf);
@@ -755,7 +799,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
 
   switch (light_alarm_num) {
-    // Random examples
+    // Choose parms for Random examples
     case 1:
       //void rainbow(wait, embedding, uint16_t firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
       // rgb sep                      nrfrac ngfrac                  nbfrac
@@ -766,7 +810,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       parm4 = 30 * random(0, 8);
       parm5 = 30 * random(0, 8);
       parm6 = 30 * random(0, 8);
-      rainbow(0, parm1, 0, parm2, parm3, parm4, ihour, duration, parm5,  parm6, 0, 0, 0, 0);
+      //rainbow(0, parm1, 0, parm2, parm3, parm4, ihour, duration, parm5,  parm6, 0, 0, 0, 0);
       break;
     case 2:
       //color_wipe(int wait, int embedding, uint16_t firsthue, int16_t hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
@@ -776,21 +820,21 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       parm4 = random(-1000, 1000);
       parm5 = 30 * random(0, 8);
       parm6 = random(1, 30);
-      color_wipe(parm1, parm2, parm3, parm4, parm5, parm6, ihour, duration, parm5, parm5); // color_wipe
+      //color_wipe(parm1, parm2, parm3, parm4, parm5, parm6, ihour, duration, parm5, parm5); // color_wipe
       break;
     case 3: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
       parm1 = random(0, 200);
       parm2 = random(0, 200);
       parm3 = random(0, 200);
-      showlights(duration, parm1, parm2, parm3);
+      //showlights(duration, parm1, parm2, parm3);
       break;
     case 4: // wait parm1, parm2 number of worms sink size parm3 maxlen parm4 maxcycle parm5 dir parm6 (-1, 0=rand, 1)
-      parm1 = random(0, 300);
+      parm1 = random(1, 300);
       parm2 = random(1, 6);
       parm3 = random(0, 10);
       parm4 = random(1, 20);
       parm5 = random(1, 5);
-      moveworms(parm1, parm2, ihour, parm3, parm4, parm5, 0 , duration);
+      //moveworms(parm1, parm2, ihour, parm3, parm4, parm5, 0 , duration);
       break;
     case 5:
       //void firefly(wait, numff, minHue, maxHue, hueInc, minSat, maxSat, minVal, maxVal, duration) {
@@ -800,7 +844,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       parm3 = random(30000);
       parm4 = random(30000, 65536);
       parm5 = random(400);
-      firefly(parm1, parm2, parm3, parm4, parm5, 255, 255,  255, 256, duration);
+      //firefly(parm1, parm2, parm3, parm4, parm5, 255, 255,  255, 256, duration);
       break;
 
     case 6:  // rainbow theater chase
@@ -809,13 +853,13 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       parm2 = random(65536);
       parm3 = random(-1000, 1000);
       parm4 = 30 * random(0, 8);
-      theaterChaseRainbow(duration, parm1, parm2, parm3, parm4);
+      //theaterChaseRainbow(duration, parm1, parm2, parm3, parm4);
       break;
     case 7:
       parm1 = random(0, 300);
       parm2 = random(256);
       parm3 = random(65535);
-      cellularAutomata(parm1, parm2, parm3, duration);
+      //cellularAutomata(parm1, parm2, parm3, duration);
       break;
 
     case 8:
@@ -824,7 +868,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       parm3 = random(256);
       parm4 = random(256);
       parm5 = random(65535);
-      cellularAutomata(parm1, parm2, parm3, parm4, parm5, duration);
+      //cellularAutomata(parm1, parm2, parm3, parm4, parm5, duration);
       break;
 
     case 9: // fire
@@ -837,6 +881,56 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       parm4 = random(1, 4);
       parm5 = random(1, 4);
       parm6 = random(1, 4);
+      //fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
+      break;
+    default:
+      break;
+  }
+
+  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d, p7 = %d, p8 = %d",
+          light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6, parm7, parm8);
+  Serial.println(buf);
+  send_patternParms(parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8);
+
+  switch (light_alarm_num) {
+    // Random examples
+    case 1:
+      //void rainbow(wait, embedding, uint16_t firsthue, hueinc,  nredfrac, ngreenfrac, nodepix, uint16_t duration, nbluefrac = 0, nbrightfrac = 0, valinc = 0, firstval = 0 );
+      // rgb sep                      nrfrac ngfrac                  nbfrac
+      //          emb  firsthue,hueinc nrfra ngfrac                  nbfrac   nbrfrac valinc
+      rainbow(0, parm1, 0, parm2, parm3, parm4, ihour, duration, parm5,  parm6, 0, 0, 0, 0);
+      break;
+    case 2:
+      //color_wipe(int wait, int embedding, uint16_t firsthue, int16_t hueinc,  int nredfrac, int blocksize, int nodepix, uint16_t duration, int nbluefrac = 0, int ngreenfrac = 0, int16_t valinc = 0, uint16_t firstval = 65280);
+      color_wipe(parm1, parm2, parm3, parm4, parm5, parm6, ihour, duration, parm5, parm5); // color_wipe
+      break;
+    case 3: // Wipe RGB   parm1 R wait, parm2 G wait, parm3 B wait
+      showlights(duration, parm1, parm2, parm3);
+      break;
+    case 4: // wait parm1, parm2 number of worms sink size parm3 maxlen parm4 maxcycle parm5 dir parm6 (-1, 0=rand, 1)
+      moveworms(parm1, parm2, ihour, parm3, parm4, parm5, 0 , duration);
+      break;
+    case 5:
+      //void firefly(wait, numff, minHue, maxHue, hueInc, minSat, maxSat, minVal, maxVal, duration) {
+      firefly(parm1, parm2, parm3, parm4, parm5, 255, 255,  255, 256, duration);
+      break;
+
+    case 6:  // rainbow theater chase
+      //void theaterChaseRainbow(duration, wait, firstHue, hueInc, den) {
+      theaterChaseRainbow(duration, parm1, parm2, parm3, parm4);
+      break;
+    case 7:
+      cellularAutomata(parm1, parm2, parm3, duration);
+      break;
+
+    case 8:
+      cellularAutomata(parm1, parm2, parm3, parm4, parm5, duration);
+      break;
+
+    case 9: // fire
+      //void fire(duration, r, g, b, rd, gd, bd)
+      // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
+      //fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
       fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
       break;
 
@@ -976,10 +1070,6 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
   stripinner.fill();
   stripinner.show();
 #endif
-  sprintf(buf, "Pattern %d, duration = %d, p1 = %d, p2 = %d, p3 = %d, p4 = %d, p5 = %d, p6 = %d, p7 = %d, p8 = %d",
-          light_alarm_num, duration,  parm1, parm2, parm3,  parm4, parm5, parm6, parm7, parm8);
-  Serial.println(buf);
-  send_patternParms(parm1, parm2, parm3, parm4, parm5, parm6);
 }
 
 #ifdef MUSIC
@@ -1020,7 +1110,7 @@ void playsong(int * melody, int * noteDurations, int whole_note_duration, int pi
 /*__________________________________________________________SETUP_FUNCTIONS__________________________________________________________*/
 // Taken from ConfigFile example
 bool loadConfig() {
-  File configFile = SPIFFS.open("/config.json", "r");
+  File configFile = LittleFS.open("/config.json", "r");
   if (!configFile) {
     Serial.println("Failed to open config file");
     return false;
@@ -1037,7 +1127,7 @@ bool loadConfig() {
   std::unique_ptr<char[]> buf(new char[size]);
 
   configFile.readBytes(buf.get(), size);
-  DynamicJsonDocument doc(6144);
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, buf.get());
 
   if (error) {
@@ -1048,21 +1138,52 @@ bool loadConfig() {
 
   // Deserialize and if key absent use default
 
+  if (doc["latitude"].is<double>()) {
+    latitude = doc["latitude"];
+  }
+  if (doc["longitude"].is<double>()) {
+    longitude = doc["longitude"];
+  }
+  if (doc["hourOff_CST"].is<int>()) {
+    hourOff_CST = doc["hourOff_CST"];
+  }
+  if (doc["hourOff_DST"].is<int>()) {
+    hourOff_DST = doc["hourOff_DST"];
+  }
+
+  timeClient.setTimeOffset(hourOff_CST * 3600);
+
   // Deserialize day_disp_ind
   day_disp_ind = doc["day_disp_ind"]; // will give 0 if key not exist
   // Deserialize day_brightness (use default if key not exist)
-  if (doc.containsKey("day_brightness")) {
+  if (doc["day_brightness"].is<uint8_t>()) {
     day_brightness = doc["day_brightness"];
     day_brightness = min(MAX_BRIGHTNESS, day_brightness);
   }
   // Deserialize night_brightness (use default if key not exist)
-  if (doc.containsKey("night_brightness")) {
+  //if (doc.containsKey("night_brightness")) {
+  if (doc["night_brightness"].is<uint8_t>()) {
     night_brightness = doc["night_brightness"];
     night_brightness = min(night_brightness, day_brightness);
   }
 
+
   // The rest of the keys should be arrays, so if key missing will
   //   just use the defaults
+
+  int tzSpec_ind = 0; //0 is CST 1 is DST
+  for (JsonObject tzSpec : doc["tzSpec"].as<JsonArray>()) {
+    TZSpec[tzSpec_ind].week = tzSpec["week"]; // 1, 0
+    TZSpec[tzSpec_ind].dow = tzSpec["dow"]; // 1, 1
+    TZSpec[tzSpec_ind].month = tzSpec["month"]; // 4, 9
+    TZSpec[tzSpec_ind].hour = tzSpec["hour"]; // 3, 2
+    tzSpec_ind++;
+  }
+  TimeChangeRule myDST = {"NZST", TZSpec[1].week, TZSpec[1].dow, TZSpec[1].month, TZSpec[1].hour, hourOff_DST * 60};    // UTC + hours_Offset_From_GMT_DST hours
+  TimeChangeRule mySTD = {"NZST", TZSpec[0].week, TZSpec[0].dow, TZSpec[0].month, TZSpec[0].hour, hourOff_CST * 60};   // UTC + hourOff_CST hours
+
+  my_tz.setRules(myDST, mySTD);
+
   int mode_ind = 0;
   for (JsonObject mode_change_item : doc["mode_change"].as<JsonArray>()) {
     mode_change[mode_ind].useSun = mode_change_item["useSun"];
@@ -1084,6 +1205,8 @@ bool loadConfig() {
     alarmInfo[alarm_ind].parm4 = alarm["p4"]; // 0, 0, 0, 0, 0
     alarmInfo[alarm_ind].parm5 = alarm["p5"]; // 0, 0, 0, 0, 0
     alarmInfo[alarm_ind].parm6 = alarm["p6"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm7 = alarm["p7"]; // 0, 0, 0, 0, 0
+    alarmInfo[alarm_ind].parm8 = alarm["p8"]; // 0, 0, 0, 0, 0
     alarmInfo[alarm_ind].duration = alarm["duration"]; // 10000, 10000, 10000, 10000, 10000
     alarmInfo[alarm_ind].repeat = alarm["repeat"]; // 86400, 86400, 86400, 86400, 86400
 
@@ -1156,13 +1279,13 @@ bool loadConfig() {
     minute_width[i] = rgbObj["width"];
   }
 
-  // Deserialize Second
-  JsonArray secondArray = doc["Second"];
+  // Deserialize SecHand
+  JsonArray secondArray = doc["SecHand"];
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
     JsonObject rgbObj = secondArray[i];
-    Second[i].r = rgbObj["r"];
-    Second[i].g = rgbObj["g"];
-    Second[i].b = rgbObj["b"];
+    SecHand[i].r = rgbObj["r"];
+    SecHand[i].g = rgbObj["g"];
+    SecHand[i].b = rgbObj["b"];
     second_width[i] = rgbObj["width"];
   }
   return true;
@@ -1171,8 +1294,12 @@ bool loadConfig() {
 
 bool saveConfig() {
 
-  DynamicJsonDocument doc(6144);
+  JsonDocument doc;
 
+  doc["latitude"] = latitude;
+  doc["longitude"] = longitude;
+  doc["hourOff_CST"] = hourOff_CST;
+  doc["hourOff_DST"] = hourOff_DST;
   // Serialize day_disp_ind
   doc["day_disp_ind"] = day_disp_ind;
   // Serialize day_brightness
@@ -1180,22 +1307,33 @@ bool saveConfig() {
   // Serialize night_brightness
   doc["night_brightness"] = night_brightness;
 
+  // Serialize TZSpec
+  JsonArray tzSpecArray = doc["tzSpec"].to<JsonArray>();
+  for (int i = 0; i < 2; i++) {
+    JsonObject rule = tzSpecArray.add<JsonObject>();
+    rule["week"] = TZSpec[i].week;
+    rule["dow"] = TZSpec[i].dow;
+    rule["month"] = TZSpec[i].month;
+    rule["hour"] = TZSpec[i].hour;
+  }
 
   //Serialize mode_change
-  JsonArray mode_change_items = doc.createNestedArray("mode_change");
+  //JsonArray mode_change_items = doc.createNestedArray("mode_change");
+  JsonArray mode_change_items = doc["mode_change"].to<JsonArray>();
   for (int mode_ind = 0; mode_ind < 14; mode_ind++) {
-    JsonObject mode_change_nested = mode_change_items.createNestedObject();
+    //JsonObject mode_change_nested = mode_change_items.createNestedObject();
+    JsonObject mode_change_nested = mode_change_items.add<JsonObject>();
     mode_change_nested["useSun"] = mode_change[mode_ind].useSun;
     mode_change_nested["sunDeviation"] = mode_change[mode_ind].sunDeviation;
-    JsonObject mode_change_nested_specificTime = mode_change_nested.createNestedObject("specificTime");
+    JsonObject mode_change_nested_specificTime = mode_change_nested["specificTime"].to<JsonObject>();
     mode_change_nested_specificTime["Hour"] = mode_change[mode_ind].specificTime.Hour;
     mode_change_nested_specificTime["Minute"] = mode_change[mode_ind].specificTime.Minute;
   }
 
   // Serialize alarms
-  JsonArray alarms = doc.createNestedArray("alarms");
+  JsonArray alarms = doc["alarms"].to<JsonArray>();
   for (int alarm_ind = 0; alarm_ind < NUM_ALARMS; alarm_ind++) {
-    JsonObject alarms_nested = alarms.createNestedObject();
+    JsonObject alarms_nested = alarms.add<JsonObject>();
     alarms_nested["alarmSet"] = alarmInfo[alarm_ind].alarmSet;
     alarms_nested["alarmType"] = alarmInfo[alarm_ind].alarmType;
     alarms_nested["p1"] = alarmInfo[alarm_ind].parm1;
@@ -1204,10 +1342,12 @@ bool saveConfig() {
     alarms_nested["p4"] = alarmInfo[alarm_ind].parm4;
     alarms_nested["p5"] = alarmInfo[alarm_ind].parm5;
     alarms_nested["p6"] = alarmInfo[alarm_ind].parm6;
+    alarms_nested["p7"] = alarmInfo[alarm_ind].parm7;
+    alarms_nested["p8"] = alarmInfo[alarm_ind].parm8;
     alarms_nested["duration"] = alarmInfo[alarm_ind].duration;
     alarms_nested["repeat"] = alarmInfo[alarm_ind].repeat;
 
-    JsonObject alarms_nested_alarmTime = alarms_nested.createNestedObject("alarmTime");
+    JsonObject alarms_nested_alarmTime = alarms_nested["alarmTime"].to<JsonObject>();
     alarms_nested_alarmTime["sec"] = alarmInfo[alarm_ind].alarmTime.Second;
     alarms_nested_alarmTime["min"] = alarmInfo[alarm_ind].alarmTime.Minute;
     alarms_nested_alarmTime["hour"] = alarmInfo[alarm_ind].alarmTime.Hour;
@@ -1219,45 +1359,45 @@ bool saveConfig() {
   }
 
   // Serialize Twelve
-  JsonArray twelveArray = doc.createNestedArray("Twelve");
+  JsonArray twelveArray = doc["Twelve"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = twelveArray.createNestedObject();
+    JsonObject rgbObj = twelveArray.add<JsonObject>();
     rgbObj["r"] = Twelve[i].r;
     rgbObj["g"] = Twelve[i].g;
     rgbObj["b"] = Twelve[i].b;
   }
 
   // Serialize Quarters
-  JsonArray quartersArray = doc.createNestedArray("Quarters");
+  JsonArray quartersArray = doc["Quarters"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = quartersArray.createNestedObject();
+    JsonObject rgbObj = quartersArray.add<JsonObject>();
     rgbObj["r"] = Quarters[i].r;
     rgbObj["g"] = Quarters[i].g;
     rgbObj["b"] = Quarters[i].b;
   }
 
   // Serialize Divisions
-  JsonArray divisionsArray = doc.createNestedArray("Divisions");
+  JsonArray divisionsArray = doc["Divisions"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = divisionsArray.createNestedObject();
+    JsonObject rgbObj = divisionsArray.add<JsonObject>();
     rgbObj["r"] = Divisions[i].r;
     rgbObj["g"] = Divisions[i].g;
     rgbObj["b"] = Divisions[i].b;
   }
 
   // Serialize Background
-  JsonArray backgroundArray = doc.createNestedArray("Background");
+  JsonArray backgroundArray = doc["Background"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = backgroundArray.createNestedObject();
+    JsonObject rgbObj = backgroundArray.add<JsonObject>();
     rgbObj["r"] = Background[i].r;
     rgbObj["g"] = Background[i].g;
     rgbObj["b"] = Background[i].b;
   }
 
   // Serialize Hour
-  JsonArray hourArray = doc.createNestedArray("Hour");
+  JsonArray hourArray = doc["Hour"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = hourArray.createNestedObject();
+    JsonObject rgbObj = hourArray.add<JsonObject>();
     rgbObj["r"] = Hour[i].r;
     rgbObj["g"] = Hour[i].g;
     rgbObj["b"] = Hour[i].b;
@@ -1265,9 +1405,9 @@ bool saveConfig() {
   }
 
   // Serialize Minute
-  JsonArray minuteArray = doc.createNestedArray("Minute");
+  JsonArray minuteArray = doc["Minute"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = minuteArray.createNestedObject();
+    JsonObject rgbObj = minuteArray.add<JsonObject>();
     rgbObj["r"] = Minute[i].r;
     rgbObj["g"] = Minute[i].g;
     rgbObj["b"] = Minute[i].b;
@@ -1275,17 +1415,17 @@ bool saveConfig() {
     rgbObj["width"] = minute_width[i];
   }
 
-  // Serialize Second
-  JsonArray secondArray = doc.createNestedArray("Second");
+  // Serialize SecHand
+  JsonArray secondArray = doc["SecHand"].to<JsonArray>();
   for (int i = 0; i < NUM_DISP_OPTIONS; ++i) {
-    JsonObject rgbObj = secondArray.createNestedObject();
-    rgbObj["r"] = Second[i].r;
-    rgbObj["g"] = Second[i].g;
-    rgbObj["b"] = Second[i].b;
+    JsonObject rgbObj = secondArray.add<JsonObject>();
+    rgbObj["r"] = SecHand[i].r;
+    rgbObj["g"] = SecHand[i].g;
+    rgbObj["b"] = SecHand[i].b;
     rgbObj["width"] = second_width[i];
   }
 
-  File configFile = SPIFFS.open("/config.json", "w");
+  File configFile = LittleFS.open("/config.json", "w");
   if (!configFile) {
     Serial.println("Failed to open config file for writing");
     return false;
@@ -1296,10 +1436,13 @@ bool saveConfig() {
 
 
 void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
+
   IPAddress IP;
   WiFiManager wifiManager;
+  Serial.println("Enter startWiFi");
   //reset settings - wipe credentials for testing
   //wifiManager.resetSettings();
+  wifiManager.setConnectTimeout(10);
   wifiManager.setConfigPortalTimeout(120);
   //automatically connect using saved credentials if they exist
   //If connection fails it starts an access point with the specified name
@@ -1334,7 +1477,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
 
 void startOTA() { // Start the OTA service
   ArduinoOTA.setHostname(OTAandMdnsName);
-  //Comment out if want to upload sketch data (SPIFFS) via OTA
+  //Comment out if want to upload sketch data (LittleFS) via OTA
   //ArduinoOTA.setPassword(OTAPassword);
 
   ArduinoOTA.onStart([]() {
@@ -1358,11 +1501,11 @@ void startOTA() { // Start the OTA service
   Serial.println("OTA ready\r\n");
 }
 
-void startSPIFFS() { // Start the SPIFFS and list all contents
-  SPIFFS.begin();                             // Start the SPI Flash File System (SPIFFS)
-  Serial.println("SPIFFS started. Contents:");
+void startLittleFS() { // Start the LittleFS and list all contents
+  LittleFS.begin();                             // Start the SPI Flash File System (LittleFS)
+  Serial.println("LittleFS started. Contents:");
   {
-    Dir dir = SPIFFS.openDir("/");
+    Dir dir = LittleFS.openDir("/");
     while (dir.next()) {                      // List the file system contents
       String fileName = dir.fileName();
       size_t fileSize = dir.fileSize();
@@ -1468,7 +1611,7 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
 /*__________________________________________________________SERVER_HANDLERS__________________________________________________________*/
 
 void handleNotFound() { // if the requested file or page doesn't exist, return a 404 not found error
-  if (!handleFileRead(server.uri())) {        // check if the file exists in the flash memory (SPIFFS), if so, send it
+  if (!handleFileRead(server.uri())) {        // check if the file exists in the flash memory (LittleFS), if so, send it
     server.send(404, "text/plain", "404: File Not Found");
   }
 }
@@ -1478,10 +1621,10 @@ bool handleFileRead(String path) { // send the right file to the client (if it e
   if (path.endsWith("/")) path += "index.htm";          // If a folder is requested, send the index file
   String contentType = getContentType(path);             // Get the MIME type
   String pathWithGz = path + ".gz";
-  if (SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) { // If the file exists, either as a compressed archive, or normal
-    if (SPIFFS.exists(pathWithGz))                         // If there's a compressed version available
+  if (LittleFS.exists(pathWithGz) || LittleFS.exists(path)) { // If the file exists, either as a compressed archive, or normal
+    if (LittleFS.exists(pathWithGz))                         // If there's a compressed version available
       path += ".gz";                                         // Use the compressed verion
-    File file = SPIFFS.open(path, "r");                    // Open the file
+    File file = LittleFS.open(path, "r");                    // Open the file
     size_t sent = server.streamFile(file, contentType);    // Send it to the client
     file.close();                                          // Close the file again
     Serial.println(String("\tSent file: ") + path);
@@ -1491,7 +1634,7 @@ bool handleFileRead(String path) { // send the right file to the client (if it e
   return false;
 }
 
-void handleFileUpload() { // upload a new file to the SPIFFS
+void handleFileUpload() { // upload a new file to the LittleFS
   if (server.uri() != "/edit") {
     return;
   }
@@ -1502,11 +1645,11 @@ void handleFileUpload() { // upload a new file to the SPIFFS
     if (!path.startsWith("/")) path = "/" + path;
     if (!path.endsWith(".gz")) {                         // The file server always prefers a compressed version of a file
       String pathWithGz = path + ".gz";                  // So if an uploaded file is not compressed, the existing compressed
-      if (SPIFFS.exists(pathWithGz))                     // version of that file must be deleted (if it exists)
-        SPIFFS.remove(pathWithGz);
+      if (LittleFS.exists(pathWithGz))                     // version of that file must be deleted (if it exists)
+        LittleFS.remove(pathWithGz);
     }
     Serial.print("handleFileUpload Name: "); Serial.println(path);
-    fsUploadFile = SPIFFS.open(path, "w");            // Open the file for writing in SPIFFS (create if it doesn't exist)
+    fsUploadFile = LittleFS.open(path, "w");            // Open the file for writing in LittleFS (create if it doesn't exist)
     path = String();
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (fsUploadFile)
@@ -1530,10 +1673,10 @@ void handleFileDelete() {
   if (path == "/") {
     return server.send(500, "text/plain", "BAD PATH");
   }
-  if (!SPIFFS.exists(path)) {
+  if (!LittleFS.exists(path)) {
     return server.send(404, "text/plain", "FileNotFound");
   }
-  SPIFFS.remove(path);
+  LittleFS.remove(path);
   server.send(200, "text/plain", "");
   path = String();
 }
@@ -1547,10 +1690,10 @@ void handleFileCreate() {
   if (path == "/") {
     return server.send(500, "text/plain", "BAD PATH");
   }
-  if (SPIFFS.exists(path)) {
+  if (LittleFS.exists(path)) {
     return server.send(500, "text/plain", "FILE EXISTS");
   }
-  File file = SPIFFS.open(path, "w");
+  File file = LittleFS.open(path, "w");
   if (file) {
     file.close();
   } else {
@@ -1568,7 +1711,7 @@ void handleFileList() {
 
   String path = server.arg("dir");
   Serial.println("handleFileList: " + path);
-  Dir dir = SPIFFS.openDir(path);
+  Dir dir = LittleFS.openDir(path);
   path = String();
 
   String output = "[";
@@ -1612,6 +1755,8 @@ void setalarmurl()
   String p4 = server.arg("parm4");
   String p5 = server.arg("parm5");
   String p6 = server.arg("parm6");
+  String p7 = server.arg("parm7");
+  String p8 = server.arg("parm8");
   String t = server.arg("duration"); // in ms
   String r = server.arg("repeat"); // in seconds
   String da = server.arg("active"); // days active coded as binary
@@ -1632,6 +1777,8 @@ void setalarmurl()
            (strlen(p4.c_str()) > 0) ? p4.toInt() : alarmInfo[alarm_num].parm4,
            (strlen(p5.c_str()) > 0) ? p5.toInt() : alarmInfo[alarm_num].parm5,
            (strlen(p6.c_str()) > 0) ? p6.toInt() : alarmInfo[alarm_num].parm6,
+           (strlen(p7.c_str()) > 0) ? p7.toInt() : alarmInfo[alarm_num].parm7,
+           (strlen(p8.c_str()) > 0) ? p8.toInt() : alarmInfo[alarm_num].parm8,
            (strlen(t.c_str()) > 0) ? t.toInt() : alarmInfo[alarm_num].duration, //10000,
            (strlen(r.c_str()) > 0) ? r.toInt() : alarmInfo[alarm_num].repeat, //SECS_PER_DAY,
            (strlen(da.c_str()) > 0) ? da.toInt() : alarmInfo[alarm_num].daysactive,
@@ -1739,7 +1886,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'M') {                      // browser sent M to set Minute hand color from SliderColor
         Minute[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'S') {                      // browser sent S to set Second hand color from SliderColor
-        Second[day_disp_ind] = SliderColor;
+        SecHand[day_disp_ind] = SliderColor;
       } else if (payload[0] == 'h') {                      // browser sent h to set Hour hand width
         hour_width[day_disp_ind] = payload[2] - '0';
       } else if (payload[0] == 'm') {                      // browser sent m to set Minute hand width and blink status
@@ -1759,7 +1906,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         isDay = true;
       } else if (payload[0] == 'G') {                      // browser sent G to  force_night
         isDay = false;
-      } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm6
+      } else if (payload[0] == 'P') {                      // the browser sends an P for pattern follow by type, parm1, ..., parm8
         //Carefull with sscanf %d %hd %hhd must match type!
         sscanf((char *) payload,
                "P%d %d %d %d %d %d %d %d %d %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd %hu %hd %hd %hhd %hd %hd %hd",
@@ -1826,14 +1973,16 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int parm4;
         int parm5;
         int parm6;
+        int parm7;
+        int parm8;
         int alarmrepeat;
         int daysactive;
         int alarmduration;
 
         //sprintf(buf, "Set Alarm for %s length: %d", payload, length);
         //webSocket.sendTXT(num, buf);
-        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3,
-               &parm4, &parm5, &parm6, &alarmrepeat, &daysactive, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
+        sscanf((char *) payload, "A%d %d %d %d %d %d %d %d %d %d %d %d %d %d %s %s %2d %4d %2d:%2d", &alarm_ind, &alarmtype, &parm1, &parm2, &parm3,
+               &parm4, &parm5, &parm6, &parm7, &parm8, &alarmrepeat, &daysactive, &alarmduration, &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute);
         //PREVENT bad input
         if (alarm_ind >= 5) alarm_ind = 0;
         if (alarm_ind < 0) alarm_ind = 0;
@@ -1843,11 +1992,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sprintf(buf, "Set alarm for %s %s %2d %2d %4d %2d:%2d", Aday, Amonth, Adate, AmonthNum + 1, Ayear, Ahour, Aminute);
         webSocket.sendTXT(num, buf);
         alarmInfo[alarm_ind].alarmSet = makeset;
-        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, parm4, parm5, parm6, alarmduration, alarmrepeat, daysactive, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
+        setalarm(alarm_ind, alarmtype, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, alarmduration, alarmrepeat, daysactive, 0, Aminute, Ahour, Adate, AmonthNum + 1, Ayear);
 
-        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d, daysactive=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+        sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d,  parm7=%d,  parm8=%d, duration=%d, repeat=%d, daysactive=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
                 alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+                alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6, alarmInfo[alarm_ind].parm7, alarmInfo[alarm_ind].parm8,
                 alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive,
                 hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
                 second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
@@ -1892,16 +2041,16 @@ void send_displayInfo() {
 
 void send_alarmInfo(int alarm_ind) {
   // send back info same order as payload when alarm defined
-  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %02d:%02d:%02d,%d,%d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "ALARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d, %s %s %2d %4d %02d:%02d:%02d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-          alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+          alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6, alarmInfo[alarm_ind].parm7, alarmInfo[alarm_ind].parm8,
           alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive, alarmInfo[alarm_ind].duration,
           daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
           monthNames[month(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(),
           day(makeTime(alarmInfo[alarm_ind].alarmTime)),
           year(makeTime(alarmInfo[alarm_ind].alarmTime)),
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
-          second(makeTime(alarmInfo[alarm_ind].alarmTime)), light_alarm_parm7, light_alarm_parm8);
+          second(makeTime(alarmInfo[alarm_ind].alarmTime)));
   Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
@@ -1919,8 +2068,8 @@ void send_patternInfo() {
   webSocket.sendTXT(websocketId_num, buf);
 }
 
-void send_patternParms(int parm1, int parm2, int parm3, int parm4, int parm5, int parm6) {
-  sprintf(buf, "PARMINFO:,%d,%d,%d,%d,%d,%d", parm1, parm2, parm3, parm4, parm5, parm6);
+void send_patternParms(int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7, int parm8) {
+  sprintf(buf, "PARMINFO:,%d,%d,%d,%d,%d,%d,%d,%d", parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8);
   Serial.println(buf);
   webSocket.sendTXT(websocketId_num, buf);
 }
@@ -1937,7 +2086,7 @@ void send_modeInfo() {
 }
 
 /*------------------------------------------------------ Utilities ------------------------------------------------------*/
-void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6,  uint16_t t, uint32_t r, int da, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
+void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8, uint16_t t, uint32_t r, int da, uint8_t s, uint8_t m, uint8_t h, uint8_t d, uint8_t mth, uint16_t y) {
   alarmInfo[alarm_ind].alarmType = alarmtype;
   alarmInfo[alarm_ind].parm1 = p1;
   alarmInfo[alarm_ind].parm2 = p2;
@@ -1945,6 +2094,8 @@ void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int 
   alarmInfo[alarm_ind].parm4 = p4;
   alarmInfo[alarm_ind].parm5 = p5;
   alarmInfo[alarm_ind].parm6 = p6;
+  alarmInfo[alarm_ind].parm7 = p7;
+  alarmInfo[alarm_ind].parm8 = p8;
   alarmInfo[alarm_ind].duration = t;
   alarmInfo[alarm_ind].repeat = r;
   alarmInfo[alarm_ind].daysactive = da;
@@ -1955,9 +2106,9 @@ void setalarm(int alarm_ind, int alarmtype, int p1, int p2, int p3, int p4, int 
   alarmInfo[alarm_ind].alarmTime.Month = mth;
   //NOTE year is excess from 1970
   alarmInfo[alarm_ind].alarmTime.Year = y - 1970;
-  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, duration=%d, repeat=%d, daysactive=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
+  sprintf(buf, "Alarm[%d] set=%d, type=%d, parm1=%d, parm2=%d, parm3=%d, parm4=%d, parm5=%d, parm6=%d, parm7=%d, parm8=%d, duration=%d, repeat=%d, daysactive=%d\n %d:%02d:%02d %s %d %s %d", alarm_ind, alarmInfo[alarm_ind].alarmSet, alarmInfo[alarm_ind].alarmType,
           alarmInfo[alarm_ind].parm1, alarmInfo[alarm_ind].parm2, alarmInfo[alarm_ind].parm3,
-          alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6,
+          alarmInfo[alarm_ind].parm4, alarmInfo[alarm_ind].parm5, alarmInfo[alarm_ind].parm6, alarmInfo[alarm_ind].parm7, alarmInfo[alarm_ind].parm8,
           alarmInfo[alarm_ind].duration, alarmInfo[alarm_ind].repeat, alarmInfo[alarm_ind].daysactive,
           hour(makeTime(alarmInfo[alarm_ind].alarmTime)), minute(makeTime(alarmInfo[alarm_ind].alarmTime)),
           second(makeTime(alarmInfo[alarm_ind].alarmTime)), daysOfWeek[weekday(makeTime(alarmInfo[alarm_ind].alarmTime))].c_str(), day(makeTime(alarmInfo[alarm_ind].alarmTime)),
@@ -2007,10 +2158,14 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
 
   sun.setCurrentDate(year(currentTime), month(currentTime), day(currentTime));
   /* Check to see if we need to update our timezone value */
-  if (IsDst())
-    sun.setTZOffset(DST_OFFSET);
-  else
-    sun.setTZOffset(CST_OFFSET);
+  if (IsDst()) {
+    sun.setTZOffset(hourOff_DST);
+    sprintf(buf, "Daylight Savings");
+  } else {
+    sun.setTZOffset(hourOff_CST);
+    sprintf(buf, "Standard Time");
+  }
+  webSocket.sendTXT(websocketId_num, buf);
 
   // These are all minutes after midnight
   sunrise = sun.calcSunrise();
@@ -2155,53 +2310,11 @@ bool SetClockFromNTP()
 //TODO need to be more general to handle other countries
 //TODO set parms for it in config
 
-#ifdef JOHN_CLOCK
-//In continental France, which includes the capital Paris,
-//  the Daylight Saving Time (DST) period
-//  starts on the last Sunday of March and
-//  ends on the last Sunday of October, together with most other European countries.
 
-bool IsDst() //France
-{
-  int previousSunday = day() - weekday() + 1;
-  //Serial.print("    IsDst ");
-  //Serial.print(month());
-  //Serial.println(previousSunday);
-  if (month() > 3 && month() < 10)  return true;
-  if (month() > 10 || month() < 3)  return false;
-
-
-  if (month() == 3) return previousSunday > 23;
-  if (month() == 10) return previousSunday < 24;
-  return false; // this line never gonna happend
-}
-#elif defined BRYN_CLOCK
-bool IsDst() //Japan
-{
-  return false;
-}
-
-#else //NZ
-// Modified for Southern Hemisphere DST
-// NZ daylight savings ends first Sunday of April at 3AM
-// NZ daylight starts last Sunday of September at 2AM
 bool IsDst()
 {
-  int previousSunday = day() - weekday() + 1;
-  //Serial.print("    IsDst ");
-  //Serial.print(month());
-  //Serial.println(previousSunday);
-  if (month() < 4 || month() > 9)  return true;
-  if (month() > 4 && month() < 9)  return false;
-
-
-  if (month() == 4) return previousSunday < 1;
-  if (month() == 9) return previousSunday > 23;
-  return false; // this line never gonna happend
+  return my_tz.locIsDST(now());
 }
-#endif
-
-
 
 ////////////////////////////////////////////////////////////
 void digitalClockDisplay()
@@ -2283,10 +2396,10 @@ void Draw_Clock(time_t t, byte Phase)
     }
     //second on top of both
     if (second_width[disp_ind] >= 0) {
-      strip.setPixelColor(ClockCorrect(isecond), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+      strip.setPixelColor(ClockCorrect(isecond), strip.Color(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b));
       for (int i = 0; i <= second_width[disp_ind]; i++) {
-        strip.setPixelColor(ClockCorrect(isecond - i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
-        strip.setPixelColor(ClockCorrect(isecond + i), strip.Color(Second[disp_ind].r, Second[disp_ind].g, Second[disp_ind].b));
+        strip.setPixelColor(ClockCorrect(isecond - i), strip.Color(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b));
+        strip.setPixelColor(ClockCorrect(isecond + i), strip.Color(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b));
       }
     }
   }
@@ -2760,7 +2873,7 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
     path.push_back(0);
   }
   int dir;
-  nworms = min(abs(nworms), 10);
+  nworms = max(1, min(abs(nworms), 10)); // prevent error
   std::vector<Worm>Worms;
   for (int i = 0; i < nworms; i++) {
     int lenworm = random(2, min(strip.numPixels() / 4, 2 + abs(maxlen)));
@@ -2791,6 +2904,7 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
     SetBrightness(); // Set the clock brightness dependant on the time
     strip.show(); // Update strip with new contents
     //yield();
+    wait = max(1, wait); // prevent error
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }

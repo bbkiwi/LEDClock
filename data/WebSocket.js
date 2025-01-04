@@ -26,6 +26,8 @@ connection.onmessage = function (e) {
       document.getElementById('pat_parm4').value = Number(parminfo[4]);
       document.getElementById('pat_parm5').value = Number(parminfo[5]);
       document.getElementById('pat_parm6').value = Number(parminfo[6]);
+      document.getElementById('pat_parm7').value = Number(parminfo[7]);
+      document.getElementById('pat_parm8').value = Number(parminfo[8]);
     } else if (e.data.startsWith('ALARMINFO:')) {
       var alarminfo = e.data.split(',');
       console.log(alarminfo);
@@ -45,26 +47,26 @@ connection.onmessage = function (e) {
       document.getElementById('pat_parm4').value = Number(alarminfo[7]);
       document.getElementById('pat_parm5').value = Number(alarminfo[8]);
       document.getElementById('pat_parm6').value = Number(alarminfo[9]);
-      document.getElementById('pat_parm7').value = Number(alarminfo[14]);
-      document.getElementById('pat_parm8').value = Number(alarminfo[15]);
-      document.getElementById('alarmrepeat').value = alarminfo[10];
+      document.getElementById('pat_parm7').value = Number(alarminfo[10]);
+      document.getElementById('pat_parm8').value = Number(alarminfo[11]);
+      document.getElementById('alarmrepeat').value = alarminfo[12];
       if (document.getElementById('alarmrepeat').value === '') {
         document.getElementById('alarmrepeat').value = 'other';
         document.getElementById('othervalue').hidden =  false;
-        document.getElementById('othervalue').value = alarminfo[10];
+        document.getElementById('othervalue').value = alarminfo[12];
       } else {
         document.getElementById('othervalue').hidden =  true;
       }
-      document.getElementById('dayactive1').checked = Number(alarminfo[11]) & 2;
-      document.getElementById('dayactive2').checked = Number(alarminfo[11]) & 4;
-      document.getElementById('dayactive3').checked = Number(alarminfo[11]) & 8;
-      document.getElementById('dayactive4').checked = Number(alarminfo[11]) & 16;
-      document.getElementById('dayactive5').checked = Number(alarminfo[11]) & 32;
-      document.getElementById('dayactive6').checked = Number(alarminfo[11]) & 64;
-      document.getElementById('dayactive7').checked = Number(alarminfo[11]) & 128;
+      document.getElementById('dayactive1').checked = Number(alarminfo[13]) & 2;
+      document.getElementById('dayactive2').checked = Number(alarminfo[13]) & 4;
+      document.getElementById('dayactive3').checked = Number(alarminfo[13]) & 8;
+      document.getElementById('dayactive4').checked = Number(alarminfo[13]) & 16;
+      document.getElementById('dayactive5').checked = Number(alarminfo[13]) & 32;
+      document.getElementById('dayactive6').checked = Number(alarminfo[13]) & 64;
+      document.getElementById('dayactive7').checked = Number(alarminfo[13]) & 128;
 
-      document.getElementById('alarmduration').value = Number(alarminfo[12]);
-      savedate = new Date(Date.parse(alarminfo[13]));
+      document.getElementById('alarmduration').value = Number(alarminfo[14]);
+      savedate = new Date(Date.parse(alarminfo[15]));
       document.getElementById('saveddatetime').innerHTML = savedate.toString().slice(0,-36);
 
       if (alarminfo[2] === '1') {
@@ -251,8 +253,8 @@ function setalarm() {
   }
 	console.log(savedate.getDay(), savedate.getHours(), savedate, alarmnum, alarmtype, alarmrepeat, alarmduration);
 	//document.getElementById('whattime').innerHTML = savedate;
-	connection.send(cmd + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " "
-	 +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate + " " + parm7 + " " + parm8);
+	connection.send(cmd + alarmnum + " " + dayonlysign + alarmtype + " " + parm1 + " " + parm2 + " " + parm3 + " " + parm4 + " " + parm5 + " " + parm6 + " " + parm7 + " " + parm8 + " "
+	 +  alarmrepeat + " " +  daysactive + " " + alarmduration + " " + savedate.getMonth() +" " + savedate);
 	//connection.send("J" + adjmorn + " " + adjnight + " " + daystart + " " + nightstart);
 }
 
@@ -289,9 +291,6 @@ function patternEffect() {
   var parm6 = document.getElementById('pat_parm6').value;
   var parm7 = document.getElementById('pat_parm7').value;
   var parm8 = document.getElementById('pat_parm8').value;
-  if (num == 46) {
-    num = getRandomIntInclusive(1, 42);
-  }
   if (num === 'other') {
     num = document.getElementById('othernumpattern').value;
   }
