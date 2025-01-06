@@ -114,6 +114,7 @@
 
 SunSet sun;
 
+WiFiManager wifiManager;           // create manager
 ESP8266WebServer server(80);       // create a web server on port 80
 WebSocketsServer webSocket(81);    // create a websocket server on port 81
 uint8_t websocketId_num = 0;
@@ -1438,7 +1439,7 @@ bool saveConfig() {
 void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
 
   IPAddress IP;
-  WiFiManager wifiManager;
+  //WiFiManager wifiManager;
   Serial.println("Enter startWiFi");
   //reset settings - wipe credentials for testing
   //wifiManager.resetSettings();
@@ -1565,6 +1566,16 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     delay(1000);
     ESP.restart();
   });
+
+  server.on("/forgetwifi", []() {
+    server.send(200, "text/plain", "Forgetting Wifi and restarting ...");
+    delay(1000);
+    //reset settings - wipe credentials
+    wifiManager.resetSettings();
+    delay(1000);
+    ESP.restart();
+  });
+
 
   //    server.on("/startota",[](){
   //      server.send(200,"text/plain", "Make OTA ready ...");
