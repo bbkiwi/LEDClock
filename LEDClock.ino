@@ -682,7 +682,7 @@ void loop() {
   if (prevDisplay >= nextModeTime) {
     isDay = nextModeIsDay;
     calcSun();
-    sprintf(buf, "\nIn loop modechange at %d to %d of %d\n", prevDisplay, nextModeTime, nextModeIsDay );
+    sprintf(buf, "\nIn loop modechange at %lld to %lld of %d\n", prevDisplay, nextModeTime, nextModeIsDay );
     Serial.println(buf);
   }
 
@@ -1644,7 +1644,8 @@ bool handleFileRead(String path) { // send the right file to the client (if it e
     if (LittleFS.exists(pathWithGz))                         // If there's a compressed version available
       path += ".gz";                                         // Use the compressed verion
     File file = LittleFS.open(path, "r");                    // Open the file
-    size_t sent = server.streamFile(file, contentType);    // Send it to the client
+    //size_t sent = server.streamFile(file, contentType);    // Send it to the client
+    server.streamFile(file, contentType);    // Send it to the client
     file.close();                                          // Close the file again
     Serial.println(String("\tSent file: ") + path);
     return true;
@@ -1821,7 +1822,7 @@ void settime()
   String y = server.arg("year");
   setTime(h.toInt(), m.toInt(), s.toInt(), d.toInt(), mth.toInt(), y.toInt());
   ClockInitialized = false;
-  sprintf(buf, "Clock Set to %d:%02d:%02d %s %d %s %d", h.toInt(), m.toInt(), s.toInt(),
+  sprintf(buf, "Clock Set to %ld:%02ld:%02ld %s %ld %s %ld", h.toInt(), m.toInt(), s.toInt(),
           daysOfWeek[d.toInt()].c_str(), d.toInt(), monthNames[mth.toInt()].c_str(),  y.toInt());
   server.send(200, "text/plain", buf);
   Serial.println(buf);
@@ -1876,10 +1877,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         // r,g,b now from 0 to 1023
         sprintf(buf, "led color r = %d, g = %d, b = %d", r, g, b);
         // scale from 0 to 255
-        SliderColor  = {r >> 2, g >> 2, b >> 2};
+        SliderColor  = {(byte)(r >> 2), (byte)(g >> 2), (byte)(b >> 2)};
         //webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
-        led_color_alarm_rgb = strip.Color(r >> 2, g >> 2, b >> 2);
+        led_color_alarm_rgb = strip.Color((byte)(r >> 2), (byte)(g >> 2), (byte)(b >> 2));
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'V') {                      // browser sent V to save config file
@@ -1955,7 +1956,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         int numread;
         for (int i = 0; i < 14; i++ ) {
           // must use payload + ind_read, BLOWS UP if use payload[ind_read]
-          if (sscanf((char *) payload + ind_read, "%d %2d:%2d %d,%n", &ch, &H, &M, &D, &numread) != 4) {
+          if (sscanf((char *) payload + ind_read, "%hhu %2d:%2d %d,%n", &ch, &H, &M, &D, &numread) != 4) {
             Serial.println("ERROR");
             break;
           };
@@ -2047,6 +2048,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         Serial.printf("Compute Sunsets\n");
         calcSun();
       }
+      break;
+      default:
       break;
   }
 }
@@ -2476,7 +2479,7 @@ void showlights(uint16_t duration, int w1, int w2, int w3)
 //#include <numeric>
 
 int piecewise_linear(uint16_t x, std::vector<std::pair<uint16_t, uint16_t>> points) {
-  for (int i = 0; i < points.size() - 1; i++) {
+  for (uint16_t i = 0; i < points.size() - 1; i++) {
     if (x < points[i + 1].first) {
       int x1 = points[i].first;
       int y1 = points[i].second;
@@ -2848,7 +2851,7 @@ class Worm
         // Put worm into strip and blank end
         int segpos = this->headposition;
         //Serial.println(" ");
-        for (int x = 0; x < this->colors.size (); x++)
+        for (uint16_t x = 0; x < this->colors.size (); x++)
         {
           int strippos = this->path[segpos];
           if (true) //(this->height[x] >= LEDsegheights[this->path[segpos]])
