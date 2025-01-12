@@ -203,8 +203,6 @@ RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 },
 //The Second hand
 RGB SecHand[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
-//TODO Save in Flash and make changeable
-// Make clock go forwards or backwards (dependant on hardware)
 #if defined BEDROOM_CLOCK || defined BILL_LKIWI_CLOCK
 bool ClockGoBackwards = true;
 #endif
@@ -368,13 +366,14 @@ ALARM alarmInfo[NUM_ALARMS];
 
 uint16_t time_elapsed = 0;
 
-//TODO have TopOfClock in config
 #ifdef TEST_CLOCK
 int TopOfClock = 44; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
-#elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK || defined JOHN_CLOCK
+#elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK
 int TopOfClock = 4;
+#elis defined JOHN_CLOCK
+int TopOfClock = 19;
 #elif defined BILL_LKIWI_CLOCK
 int TopOfClock = 48;
 #else
@@ -1139,6 +1138,14 @@ bool loadConfig() {
 
   // Deserialize and if key absent use default
 
+  if (doc["TopOfClock"].is<int>()) {
+    TopOfClock = doc["TopOfClock"];
+  }
+
+  if (doc["ClockGoBackwards"].is<bool>()) {
+    ClockGoBackwards = doc["ClockGoBackwards"];
+  }
+
   if (doc["latitude"].is<double>()) {
     latitude = doc["latitude"];
   }
@@ -1296,7 +1303,8 @@ bool loadConfig() {
 bool saveConfig() {
 
   JsonDocument doc;
-
+  doc["TopOfClock"] = TopOfClock;
+  doc["ClockGoBackwards"] = ClockGoBackwards;
   doc["latitude"] = latitude;
   doc["longitude"] = longitude;
   doc["hourOff_CST"] = hourOff_CST;
@@ -2317,10 +2325,6 @@ bool SetClockFromNTP()
   }
   return updated;
 }
-
-//TODO need to be more general to handle other countries
-//TODO set parms for it in config
-
 
 bool IsDst()
 {
