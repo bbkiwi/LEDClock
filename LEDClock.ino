@@ -4,6 +4,16 @@
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
 
+
+With Partition Shceme - Default
+   Sketch uses 1499505 bytes (114%) of program storage space. Maximum is 1310720 bytes.
+   text section exceeds available space in board
+   Global variables use 64688 bytes (19%) of dynamic memory, leaving 262992 bytes for local variables. Maximum is 327680 bytes.
+   Sketch too big; see http://www.arduino.cc/en/Guide/Troubleshooting#size for tips on reducing it.
+   Error compiling for board LOLIN D32.
+Now Used Partition Scheme -  minimal SPIFFS large app with OTA
+and Compressed all the files except config.json and other files not used
+
    21 Jan 2023
    Fix for ESP32 on LOLIN D32
    TODO encorporate from https://github.com/cotestatnt/esp-fs-webserver/tree/master
@@ -100,6 +110,52 @@
 #include <LittleFS.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
+
+
+#include <Arduino.h>
+
+//#define HAS_OLED
+
+////////////////  BLEMIDI ///////////////////////////////////
+//#include <hardware/BLEMIDI_Transport.h>
+#include <BLEMIDI_Transport.h>
+#include <hardware/BLEMIDI_Client_ESP32.h>
+//NOTE if I uncommented below didn't scan for bluetooth devices
+//#include <hardware/BLEMIDI_ESP32_NimBLE.h>
+//#include <hardware/BLEMIDI_ESP32.h>
+//#include <hardware/BLEMIDI_nRF52.h>
+//#include <hardware/BLEMIDI_ArduinoBLE.h>
+BLEMIDI_CREATE_DEFAULT_INSTANCE(); //Connect to first server found
+//BLEMIDI_CREATE_INSTANCE("",MIDI)                  //Connect to the first server found
+//BLEMIDI_CREATE_INSTANCE("f2:c1:d9:36:e7:6b",MIDI) //Connect to a specific BLE address server
+//NOTE tried below and didn't work as well as default above
+//BLEMIDI_CREATE_INSTANCE("CA49",MIDI)       //Connect to a specific name server
+
+#ifdef HAS_OLED
+///////////////////////////  OLED  //////////////////////////////
+//#include <Wire.h>               // Only needed for Arduino 1.6.5 and earlier
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+// Initialize the OLED display using Arduino Wire:
+// For TTGO Wifi + Bluetooth Battery OLED (see http://www.areresearch.net/2018/01/how-to-use-ttgo-esp32-module-with-oled.html)
+// and NODEMCU 32S
+//#define SDA 5
+//#define SCL 4
+// better for NODEMCU 32S 30 pin
+#define SDA 21
+#define SCL 22
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#endif
+////////////////////// END OLED
+
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 2 //modify for match with yout board
+#endif
+
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
@@ -450,6 +506,33 @@ void SetBrightness();
 bool SetClockFromNTP();
 bool IsDst();
 void limited_delay(int d);
+void ReadCB(void *parameter);       //Continuos Read function (See FreeRTOS multitasks)
+
+/// Global variables
+unsigned long t0 = millis();
+bool isConnected = false;
+// must be longer than longest message
+char gBuffer[400];
+
+#ifdef HAS_OLED
+uint8_t line_to_write = 56;
+uint8_t shift_of_display = 0;
+#endif
+
+bool DampON = false;
+uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+
+#ifdef HAS_OLED
+void scrollline() {
+  line_to_write += 8;
+  line_to_write %= 64;
+  shift_of_display = (8 + line_to_write) % 64;
+  display.ssd1306_command(0x40 + shift_of_display); //40h ... 7Fh
+  display.writeFillRect(0, line_to_write, 128, 8, 0); //clear line first
+  display.setCursor(0, line_to_write);
+}
+#endif
 
 
 //If want to have default arguments MUST delclare with the default values here and just the argments when defined later
@@ -665,6 +748,169 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels, String spaces) {
 ////////////////////// END LittleFS routines ////////////////
 
 
+//// setup OLED
+
+#ifdef HAS_OLED
+void setupOLED()
+{
+  /// OLED setup
+  //https://github.com/espressif/arduino-esp32/issues/3779
+#ifdef ARDUINO_ARCH_ESP32
+  Wire.setPins(SDA, SCL);
+#endif
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;); // Don't proceed, loop forever
+  }
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  display.display();
+  delay(2000); // Pause for 2 seconds
+  // Clear the buffer
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);        // Draw white text
+  display.setCursor(0, line_to_write);
+  display.ssd1306_command(0x40 + shift_of_display);
+  display.println(F("MIDI keys!"));
+  display.display();
+}
+#endif
+//// end setup OLED
+
+//// setupBLEMIDI
+void setupBLEMIDI()
+{
+
+
+  /// BLEMIDI setup
+  MIDI.begin(MIDI_CHANNEL_OMNI);
+
+  BLEMIDI.setHandleConnected([]()
+  {
+    Serial.println("---------CONNECTED---------");
+    isConnected = true;
+    digitalWrite(LED_BUILTIN, HIGH);
+  });
+
+  BLEMIDI.setHandleDisconnected([]()
+  {
+    Serial.println("---------NOT CONNECTED---------");
+    isConnected = false;
+    digitalWrite(LED_BUILTIN, LOW);
+  });
+
+  //https://nickfever.com/music/midi-cc-list
+  //ON Kawai CA49
+  //MIDI CC 64  Sustain Pedal  gives continuous ≤63 off, ≥64 on
+  //MIDI CC 66  Sostenuto Pedal on 127, off 0
+  //MIDI CC 67  Soft Pedal  on 127, off 0
+
+  MIDI.setHandleControlChange([](byte channel, byte number, byte value)
+  {
+    //digitalWrite(LED_BUILTIN, LOW);
+    //Serial.printf("--- CC %d CH %d, number:%d, value:%d", millis() - t0, channel, number, value);
+    //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
+    //display.print("ON %d CH %d, number:%d, value:%d\n", millis() - t0,  channel, number, value);
+    if (number == 66 || number == 67) {
+      if (number == 66) {
+        sprintf(gBuffer, "HOLD %s %d", (value <= 64) ? "OFF " : "ON ", millis() - t0);
+      } else {
+        sprintf(gBuffer, "SOFT %s %d", (value <= 64) ? "OFF " : "ON ", millis() - t0);
+      }
+      Serial.println(gBuffer);
+#ifdef HAS_OLED
+      scrollline();
+      display.println(gBuffer);
+      display.display();
+#endif
+    } else if (number == 64) {
+      if (value == 0) {
+        DampON = false;
+        Serial.println("SUST OFF");
+#ifdef HAS_OLED
+        scrollline();
+        display.print("SUST OFF ");
+        display.println(millis() - t0);
+        display.display();
+#endif
+      } else if (!DampON) {
+        DampON = true;
+        Serial.println("SUST ON");
+#ifdef HAS_OLED
+        scrollline();
+        display.print("SUST ON ");
+        display.println(millis() - t0);
+        display.display();
+#endif
+      }
+    } else {
+      sprintf(gBuffer, "C-%d (%d) %d", number, value, millis() - t0);
+      Serial.println(gBuffer);
+#ifdef HAS_OLED
+      scrollline();
+      display.println(gBuffer);
+      display.display();
+#endif
+    }
+  });
+
+  MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity)
+  {
+    //digitalWrite(LED_BUILTIN, LOW);
+    //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
+    //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);
+    //Serial.printf("ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
+    //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
+    //sprintf(gBuffer, "ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
+    sprintf(gBuffer, "D-%d (%d) %d", note, velocity, millis() - t0);
+    Serial.println(gBuffer);
+#ifdef HAS_OLED
+    scrollline();
+    display.println(gBuffer);
+    display.display();
+#endif
+  });
+
+  MIDI.setHandleNoteOff([](byte channel, byte note, byte velocity)
+  {
+    //digitalWrite(LED_BUILTIN, HIGH);
+    //leds[note % 12] = CRGB::Black;
+    //TODO need to handle SUST ON notes and HOLD ON
+    //leds[(note + 30) % 60] = CRGB::Black;
+    //Serial.printf("OFF %d CH %d, note:%d, vel:%d", millis() - t0,  channel, note, velocity);
+    //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
+    sprintf(gBuffer, "U-%d (%d) %d", note, velocity, millis() - t0);
+    Serial.println(gBuffer);
+#ifdef HAS_OLED
+    scrollline();
+    display.println(gBuffer);
+    display.display();
+#endif
+  });
+
+  // Run this task on Core0, and loop() runs on core1
+  // Found that if on same core as loop, when seaching for connection would get resets
+  //   (probably due to lots of serialwrites by BLEMIDI_Client_ESP32.h which can't
+  //    be suppress unless I change the library code
+  xTaskCreatePinnedToCore(ReadCB,           //See FreeRTOS for more multitask info
+                          "MIDI-READ",
+                          3000,
+                          NULL,
+                          1,
+                          NULL,
+                          0); //Core0 or Core1
+
+  /// LED_BUILTIN
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  /// starttime
+  t0 = millis();
+}
+//// end setup BLEMIDI
+
 void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
   delay(1000);
@@ -717,6 +963,10 @@ void setup() {
   stripinner.clear();
   stripinner.show();
 #endif
+#ifdef HAS_OLED
+  setupOLED();
+#endif
+  setupBLEMIDI();
   colorAll(strip.Color(127, 0, 0), 1000);
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
@@ -727,7 +977,7 @@ void setup() {
 /*___________________LOOP__________________________________________________________*/
 time_t prevDisplay = 0; // when the digital clock was displayed
 
-void loop() {
+void loop() { // runs on core1
   webSocket.loop();                           // constantly check for websocket events
   server.handleClient();                      // run the server
   ArduinoOTA.handle();                        // listen for OTA events
@@ -863,6 +1113,27 @@ void loop() {
   }
   delay(10); // needed to keep wifi going
 }
+
+/**
+   This function is called by xTaskCreatePinnedToCore() to perform a multitask execution.
+   In this task, read() is called every millisecond (approx.).
+   read() function performs connection, reconnection and scan-BLE functions.
+   Call read() method repeatedly to perform a successfull connection with the server
+   in case connection is lost.
+*/
+void ReadCB(void *parameter)
+{
+  //  Serial.print("READ Task is started on core: ");
+  //  Serial.println(xPortGetCoreID());
+  for (;;)
+  {
+    MIDI.read();
+    vTaskDelay(1 / portTICK_PERIOD_MS); //Feed the watchdog of FreeRTOS.
+    //Serial.println(uxTaskGetStackHighWaterMark(NULL)); //Only for debug. You can see the watermark of the free resources assigned by the xTaskCreatePinnedToCore() function.
+  }
+  vTaskDelay(1);
+}
+
 
 void limited_delay(int d) {
   delay(min(abs(d), 10000));
