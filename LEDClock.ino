@@ -4,28 +4,42 @@
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
 
-   2 Jan 2023
-   Now C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.0.2
-       and ../libraries/ESP8266mDNS/src/ESP8266mDNS.h has been changed
+   21 Jan 2023
+   Fix for ESP32 on LOLIN D32
+   TODO encorporate from https://github.com/cotestatnt/esp-fs-webserver/tree/master
+   TODO and from here D:\Bill\My Documents\Arduino\FSBrowser
 
-  6 Jan 2025 used for Gift Clocks
+  6 Jan 2025 used for Gift Clocks  LOLIN (Weimos) D1 R2 & mini Flash 4M (FS:2M OTA ~1019KB)
+
   Used Arduino 1.8.13
-  NTPClient 3.2.1
-  Timezone 1.2.4
-  Time 1.6.1 (TimeLib.h)
-  Adafruit_NeoPixel 1.12.3
-  WifiManager 2.0.17
-  ESP8266WiFi.h ? greyed out in code
-  ArduinoOTA 1.1.0
-  ESP8266WebServer
-  ESP8266mDNS
-  ESP8266LittleFS-2.6.0.zip
-  WebSocket_Generic Markus Sattler, Khio Hoan 2.16.1
-  ArduinoJson 7.3.0
+  NTPClient 3.2.1 in folder: D:\Bill\My Documents\Arduino\libraries\NTPClient
+  Timezone 1.2.4 in folder: D:\Bill\My Documents\Arduino\libraries\Timezone
+  Time 1.6.1 in folder: D:\Bill\My Documents\Arduino\libraries\Time
+  Adafruit_NeoPixel 1.12.3 in folder: D:\Bill\My Documents\Arduino\libraries\Adafruit_NeoPixel
+  WiFiManager 2.0.17 in folder: D:\Bill\My Documents\Arduino\libraries\WiFiManager
+  WebSockets 2.6.1 in folder: D:\Bill\My Documents\Arduino\libraries\WebSockets
+  ArduinoJson 7.3.0 in folder: D:\Bill\My Documents\Arduino\libraries\ArduinoJson
 
+  ESP8266WiFi 1.0 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\ESP8266WiFi
+  ESP8266WebServer 1.0 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\ESP8266WebServer
+  ESP8266mDNS 1.2 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\ESP8266mDNS
+  DNSServer 1.1.1 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\DNSServer
+  ArduinoOTA 1.0 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\ArduinoOTA
+  LittleFS 0.1.0 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\LittleFS
+  Hash 1.0 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\Hash
 
-  LOLIN (Weimos) D1 R2 & mini
-  Flash 4M (FS:2M OTA ~1019KB)
+  Tested on ESP32, LOLIN D32
+  WiFi   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\WiFi
+  Network   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\Network
+  WebServer   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\WebServer
+  FS   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\FS
+  ESPmDNS   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\ESPmDNS
+  Update   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\Update
+  DNSServer   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\DNSServer
+  AsyncUDP   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\AsyncUDP
+  ArduinoOTA   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\ArduinoOTA
+  LittleFS   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\LittleFS
+  NetworkClientSecure   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\NetworkClientSecure
 */
 
 //30 Nov 2024
@@ -71,11 +85,18 @@
 //  MUST have this file which defines homeSSID and homePW
 //#include "localwificonfig.h"
 
-#include <WiFiManager.h>
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
-#include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+#else
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
+#endif
+#include "FS.h"
+#include <WiFiManager.h>
+#include <ArduinoOTA.h>
 #include <LittleFS.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
@@ -115,7 +136,11 @@
 SunSet sun;
 
 WiFiManager wifiManager;           // create manager
+#ifdef ESP8266
 ESP8266WebServer server(80);       // create a web server on port 80
+#else
+WebServer server(80);       // create a web server on port 80
+#endif
 WebSocketsServer webSocket(81);    // create a websocket server on port 81
 uint8_t websocketId_num = 0;
 
@@ -590,6 +615,56 @@ time_t nextModeTime;
 unsigned long prev_sound_time = 0;
 const int ESP_BUILTIN_LED = 2;
 
+
+/////////////////////// LittleFS routines ///////////////////
+#define FORMAT_LITTLEFS_IF_FAILED true
+
+void listDir(fs::FS &fs, const char * dirname, uint8_t levels, String spaces) {
+  Serial.printf("%sListing directory: %s\r\n", spaces,  dirname);
+#if ESP8266
+  //TODO only giving root dir, fix
+  Dir dir = fs.openDir(dirname);
+  while (dir.next()) {                      // List the file system contents
+    String fileName = dir.fileName();
+    size_t fileSize = dir.fileSize();
+    Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
+  }
+  Serial.printf("\n");
+#else
+  File root = fs.open(dirname);
+  if (!root) {
+    Serial.println("- failed to open directory");
+    return;
+  }
+  if (!root.isDirectory()) {
+    Serial.println(" - not a directory");
+    return;
+  }
+
+  File file = root.openNextFile();
+  while (file) {
+    if (file.isDirectory()) {
+      Serial.print(spaces);
+      Serial.print("  DIR : ");
+      Serial.println(file.name());
+      if (levels) {
+        listDir(fs, file.path(), levels - 1, spaces + "  ");
+      }
+    } else {
+      Serial.print(spaces);
+      Serial.print("  FILE: ");
+      Serial.print(file.name());
+      Serial.print("\tSIZE: ");
+      Serial.println(file.size());
+    }
+    file = root.openNextFile();
+  }
+#endif
+}
+
+////////////////////// END LittleFS routines ////////////////
+
+
 void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
   delay(1000);
@@ -656,7 +731,9 @@ void loop() {
   webSocket.loop();                           // constantly check for websocket events
   server.handleClient();                      // run the server
   ArduinoOTA.handle();                        // listen for OTA events
+#ifdef ESP8266
   MDNS.update();                              // must have above as well
+#endif
 
   if (light_alarm_num)  {
     light_alarm_parm1 = max(light_alarm_parm1, 1);
@@ -1510,18 +1587,17 @@ void startOTA() { // Start the OTA service
   Serial.println("OTA ready\r\n");
 }
 
+//TODO check, this may work for ESP8266 as well as ESP32
 void startLittleFS() { // Start the LittleFS and list all contents
-  LittleFS.begin();                             // Start the SPI Flash File System (LittleFS)
-  Serial.println("LittleFS started. Contents:");
-  {
-    Dir dir = LittleFS.openDir("/");
-    while (dir.next()) {                      // List the file system contents
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();
-      Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
-    }
-    Serial.printf("\n");
+#ifdef ESP8266
+  LittleFS.begin();
+#else
+  if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+    Serial.println("LittleFS Mount Failed");
+    return;
   }
+#endif
+  listDir(LittleFS, "/", 1, ""); // list all directories to make sure they were deleted
 }
 
 void startWebSocket() { // Start a WebSocket server
@@ -1539,6 +1615,10 @@ void startMDNS() { // Start the mDNS responder
 
 void startServer() { // Start a HTTP server with a file read handler and an upload handler
 
+  //status
+  server.on("/status", HTTP_GET, []() {
+    server.send(200, "text/plain", "Status Request not implemented");
+  });
   //list directory
   server.on("/list", HTTP_GET, handleFileList);
   //load editor
@@ -1723,6 +1803,8 @@ void handleFileCreate() {
   path = String();
 }
 
+// basically from here
+// https://github.com/cotestatnt/esp-fs-webserver/blob/master/src/esp-fs-webserver.cpp
 void handleFileList() {
   if (!server.hasArg("dir")) {
     server.send(500, "text/plain", "BAD ARGS");
@@ -1731,32 +1813,40 @@ void handleFileList() {
 
   String path = server.arg("dir");
   Serial.println("handleFileList: " + path);
-  Dir dir = LittleFS.openDir(path);
-  path = String();
-
-  String output = "[";
-  while (dir.next()) {
-    File entry = dir.openFile("r");
-    if (output != "[") {
-      output += ',';
-    }
-    bool isDir = false;
-    output += "{\"type\":\"";
-    output += (isDir) ? "dir" : "file";
-    output += "\",\"name\":\"";
-    if (entry.name()[0] == '/') {
-      output += &(entry.name()[1]);
-    } else {
-      output += entry.name();
-    }
-    output += "\"}";
-    entry.close();
+  if (path != "/" && !LittleFS.exists(path)) {
+    server.send(500, "text/plain", "BAD PATH");
+    return;
   }
 
+  File root = LittleFS.open(path, "r");
+  path = String();
+  String output;
+  output.reserve(256);
+
+  output = "[";
+  if (root.isDirectory()) {
+    File file = root.openNextFile();
+    while (file) {
+      String filename = file.name();
+      if (filename.lastIndexOf("/") > -1) {
+        filename.remove(0, filename.lastIndexOf("/") + 1);
+      }
+      if (output != "[") {
+        output += ',';
+      }
+      output += "{\"type\":\"";
+      output += (file.isDirectory()) ? "dir" : "file";
+      output += "\",\"size\":\"";
+      output += file.size();
+      output += "\",\"name\":\"";
+      output += filename;
+      output += "\"}";
+      file = root.openNextFile();
+    }
+  }
   output += "]";
   server.send(200, "text/json", output);
 }
-
 
 void setalarmurl()
 {
@@ -2049,7 +2139,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         calcSun();
       }
       break;
-      default:
+    default:
       break;
   }
 }
