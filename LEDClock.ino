@@ -5,14 +5,16 @@
   //https://github.com/PaulStoffregen/Time
 
 
-With Partition Shceme - Default
-   Sketch uses 1499505 bytes (114%) of program storage space. Maximum is 1310720 bytes.
+  With Partition Scheme - Default
+   Sketch without OLED uses 1499505 bytes (114%) of program storage space. Maximum is 1310720 bytes.
    text section exceeds available space in board
    Global variables use 64688 bytes (19%) of dynamic memory, leaving 262992 bytes for local variables. Maximum is 327680 bytes.
    Sketch too big; see http://www.arduino.cc/en/Guide/Troubleshooting#size for tips on reducing it.
    Error compiling for board LOLIN D32.
-Now Used Partition Scheme -  minimal SPIFFS large app with OTA
-and Compressed all the files except config.json and other files not used
+
+  Now Used Partition Scheme -  minimal SPIFFS large app with OTA
+  and Compressed all the files in data except config.json and other files not used
+  even using HAS_OLED compiles and fits.
 
    21 Jan 2023
    Fix for ESP32 on LOLIN D32
@@ -114,7 +116,7 @@ and Compressed all the files except config.json and other files not used
 
 #include <Arduino.h>
 
-//#define HAS_OLED
+#define HAS_OLED
 
 ////////////////  BLEMIDI ///////////////////////////////////
 //#include <hardware/BLEMIDI_Transport.h>
@@ -510,7 +512,9 @@ void ReadCB(void *parameter);       //Continuos Read function (See FreeRTOS mult
 
 /// Global variables
 unsigned long t0 = millis();
-bool isConnected = false;
+bool scanMidi = false;
+bool midiIsConnected = false;
+bool gShowMidi = false;
 // must be longer than longest message
 char gBuffer[400];
 
@@ -521,7 +525,7 @@ uint8_t shift_of_display = 0;
 
 bool DampON = false;
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+uint16_t gHue = 0; // rotating "base color" used by many of the patterns
 
 #ifdef HAS_OLED
 void scrollline() {
@@ -790,14 +794,14 @@ void setupBLEMIDI()
   BLEMIDI.setHandleConnected([]()
   {
     Serial.println("---------CONNECTED---------");
-    isConnected = true;
+    midiIsConnected = true;
     digitalWrite(LED_BUILTIN, HIGH);
   });
 
   BLEMIDI.setHandleDisconnected([]()
   {
     Serial.println("---------NOT CONNECTED---------");
-    isConnected = false;
+    midiIsConnected = false;
     digitalWrite(LED_BUILTIN, LOW);
   });
 
@@ -860,7 +864,10 @@ void setupBLEMIDI()
   {
     //digitalWrite(LED_BUILTIN, LOW);
     //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
-    //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);
+    //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);// for FastLED gHue is 8 bits
+    if (gShowMidi) {
+      strip.setPixelColor((note + 30) % 60, strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+    }
     //Serial.printf("ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     //sprintf(gBuffer, "ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
@@ -879,6 +886,9 @@ void setupBLEMIDI()
     //leds[note % 12] = CRGB::Black;
     //TODO need to handle SUST ON notes and HOLD ON
     //leds[(note + 30) % 60] = CRGB::Black;
+    if (gShowMidi) {
+      strip.setPixelColor((note + 30) % 60, 0, 0, 0);
+    }
     //Serial.printf("OFF %d CH %d, note:%d, vel:%d", millis() - t0,  channel, note, velocity);
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     sprintf(gBuffer, "U-%d (%d) %d", note, velocity, millis() - t0);
@@ -1127,7 +1137,7 @@ void ReadCB(void *parameter)
   //  Serial.println(xPortGetCoreID());
   for (;;)
   {
-    MIDI.read();
+    if (scanMidi) MIDI.read();
     vTaskDelay(1 / portTICK_PERIOD_MS); //Feed the watchdog of FreeRTOS.
     //Serial.println(uxTaskGetStackHighWaterMark(NULL)); //Only for debug. You can see the watermark of the free resources assigned by the xTaskCreatePinnedToCore() function.
   }
@@ -1327,23 +1337,20 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
       fire(duration, parm1, parm2, parm3, parm4, parm5, parm6);
       break;
-
-
     // Specific examples
-
     case 19: //
+      gShowMidi = true; // tested by BLE note on and off and will modifiy strip
+      midipiano(parm1, parm2, 0);// duration 0 means till turn off piano
+      break;
+    case 20: //
       moveworms(5, 3, ihour, 1, 20, 8, 0, duration);
       break;
     //cellularAutomata(int wait, uint8_t rule, int pixelhue, uint16_t duration)
-
-    case 20:
+    case 21:
       cellularAutomata(250, 26, 26, 26, random(65535), duration);
       break;
-    case 21:
-      cellularAutomata(250, 30, 30, 30, random(65535), duration);
-      break;
     case 22:
-      cellularAutomata(250, 60, 60, 60, random(65535), duration);
+      cellularAutomata(250, 30, 30, 30, random(65535), duration);
       break;
     case 23:
       // goes black cellularAutomata(250, 104, 104, 104, random(65535), duration);
@@ -3091,6 +3098,46 @@ void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc, 
   color_wipe(Param, wait, duration, blocksize);
 }
 
+//void midipiano(HELPER_PARAM Param, int wait, int16_t hueinc,  uint16_t duration) {
+void midipiano(int wait, int16_t hueinc, uint16_t duration) {
+  sprintf(buf, "midipiano wait=%d, hueinc=%d, duration=%d", wait, hueinc, duration);
+  Serial.println(buf);
+  //print_Param(Param);
+
+  if (!gShowMidi) {
+    Serial.println(" aborted");
+    return;
+  }
+
+  // Try for upto 10 sec to connect to piano
+  uint16_t time_start = millis();
+  scanMidi = true;
+  time_elapsed = 0;
+  while (time_elapsed < 10000) {
+    if (midiIsConnected) break;
+    time_elapsed = millis() - time_start;
+  }
+  if (!midiIsConnected) {
+    Serial.println("Failed to connect to piano");
+    scanMidi = false;
+    gShowMidi = false;
+    return;
+  }
+  /// If get here the piano is attached and MIDI.read() being called
+  time_elapsed = 0;
+  time_start = millis();
+  strip.fill(); // clear
+  while (((time_elapsed < duration) || (duration == 0)) && gShowMidi && midiIsConnected) {
+    gHue += hueinc;
+    SetBrightness(); // Set the clock brightness dependent on the time
+    strip.show(); // Update strip with new contents
+    // If piano gets turned off may scan during the delay
+    limited_delay(wait);  // Pause for a moment
+    time_elapsed = millis() - time_start;
+  }
+  scanMidi = false;
+  gShowMidi = false;
+}
 //TODO check this becomes rainbow when blocksize = NUM_PIXELS
 void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize) {
   sprintf(buf, "color_wipe wait=%d, duration=%d, blocksize=%d", wait, duration, blocksize);
