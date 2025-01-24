@@ -116,7 +116,7 @@
 
 #include <Arduino.h>
 
-#define HAS_OLED
+//#define HAS_OLED
 
 ////////////////  BLEMIDI ///////////////////////////////////
 //#include <hardware/BLEMIDI_Transport.h>
@@ -515,6 +515,9 @@ unsigned long t0 = millis();
 bool scanMidi = false;
 bool midiIsConnected = false;
 bool gShowMidi = false;
+int8_t numNotesDown = 0;
+uint8_t midiDispNum = 0;
+
 // must be longer than longest message
 char gBuffer[400];
 
@@ -783,6 +786,71 @@ void setupOLED()
 #endif
 //// end setup OLED
 
+#define NUM_MIDI_DISP 3
+void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
+  uint8_t oct = note / 12; // middle C to B give 5
+  switch (midiDispNum) {
+    case 0:
+      // Here have middle C (midi 60) map to bottom of clock = 30 min.
+      // Can only handle 60 notes so take modulo
+      // FastLED
+      //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
+      //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);// for FastLED gHue is 8 bits
+      //strip.setPixelColor((note + 30) % 60, strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      //strip.setPixelColor((note + 41) % 60, strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      strip.setPixelColor(ClockCorrect((150 - note) % 60), strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      break;
+    case 1:
+      //Map to 12 tones, color by octave
+      switch (oct) {
+        case 1:
+        case 7:
+          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 255, 255, 0);
+          break;
+        case 2:
+        case 8:
+          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 0, 255);
+          break;
+        case 3:
+        case 9:
+          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 255, 0);
+          break;
+        case 4:
+          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 255, 0, 255);
+          break;
+        case 5:
+          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 255, 0, 0);
+          break;
+        case 6:
+        default:
+          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 255, 255);
+          break;
+      };
+      break;
+    case 2:
+      // Map to circle of fifths, color by gHue
+      strip.setPixelColor(ClockCorrect(5 * (7 * (150 - note) % 12)), strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      break;
+  };
+};
+
+void setNoteOffLed(byte note, byte velocity, uint8_t midiDispNum) {
+  switch (midiDispNum) {
+    case 0:
+      strip.setPixelColor(ClockCorrect((150 - note) % 60), 0, 0, 0);
+      break;
+    case 1:
+      //Map to 12 tones
+      strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 0, 0);
+      break;
+    case 2:
+      // Map to circle of fifths
+      strip.setPixelColor(ClockCorrect(5 * (7 * (150 - note) % 12)), 0, 0, 0);
+      break;
+  }
+};
+
+
 //// setupBLEMIDI
 void setupBLEMIDI()
 {
@@ -817,57 +885,76 @@ void setupBLEMIDI()
     //Serial.printf("--- CC %d CH %d, number:%d, value:%d", millis() - t0, channel, number, value);
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     //display.print("ON %d CH %d, number:%d, value:%d\n", millis() - t0,  channel, number, value);
-    if (number == 66 || number == 67) {
-      if (number == 66) {
-        sprintf(gBuffer, "HOLD %s %d", (value <= 64) ? "OFF " : "ON ", millis() - t0);
-      } else {
+
+    switch (number) {
+      case 66:
+        if (value <= 64) {
+          sprintf(gBuffer, "HOLD OFF %d", millis() - t0);
+        } else {
+          sprintf(gBuffer, "HOLD ON %d", millis() - t0);
+          // no keys are down and Sostenuto (middle) pedal is pressed
+          // will shift to next midiDisp
+          if (numNotesDown == 0) {
+            midiDispNum++;
+            midiDispNum %= NUM_MIDI_DISP;
+          }
+        }
+        Serial.println(gBuffer);
+#ifdef HAS_OLED
+        scrollline();
+        display.println(gBuffer);
+        display.display();
+#endif
+        break;
+      case 67:
         sprintf(gBuffer, "SOFT %s %d", (value <= 64) ? "OFF " : "ON ", millis() - t0);
-      }
-      Serial.println(gBuffer);
-#ifdef HAS_OLED
-      scrollline();
-      display.println(gBuffer);
-      display.display();
-#endif
-    } else if (number == 64) {
-      if (value == 0) {
-        DampON = false;
-        Serial.println("SUST OFF");
+        Serial.println(gBuffer);
 #ifdef HAS_OLED
         scrollline();
-        display.print("SUST OFF ");
-        display.println(millis() - t0);
+        display.println(gBuffer);
         display.display();
 #endif
-      } else if (!DampON) {
-        DampON = true;
-        Serial.println("SUST ON");
+        break;
+      case 64:
+        if (value == 0) {
+          DampON = false;
+          Serial.println("SUST OFF");
+#ifdef HAS_OLED
+          scrollline();
+          display.print("SUST OFF ");
+          display.println(millis() - t0);
+          display.display();
+#endif
+        } else if (!DampON) {
+          DampON = true;
+          Serial.println("SUST ON");
+#ifdef HAS_OLED
+          scrollline();
+          display.print("SUST ON ");
+          display.println(millis() - t0);
+          display.display();
+#endif
+        }
+        break;
+      default:
+        sprintf(gBuffer, "C-%d (%d) %d", number, value, millis() - t0);
+        Serial.println(gBuffer);
 #ifdef HAS_OLED
         scrollline();
-        display.print("SUST ON ");
-        display.println(millis() - t0);
+        display.println(gBuffer);
         display.display();
 #endif
-      }
-    } else {
-      sprintf(gBuffer, "C-%d (%d) %d", number, value, millis() - t0);
-      Serial.println(gBuffer);
-#ifdef HAS_OLED
-      scrollline();
-      display.println(gBuffer);
-      display.display();
-#endif
+        break;
     }
   });
 
   MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity)
   {
     //digitalWrite(LED_BUILTIN, LOW);
-    //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
-    //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);// for FastLED gHue is 8 bits
     if (gShowMidi) {
-      strip.setPixelColor((note + 30) % 60, strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      setNoteOnLed(note, velocity, midiDispNum);
     }
+    numNotesDown++;
     //Serial.printf("ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     //sprintf(gBuffer, "ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
@@ -887,8 +974,9 @@ void setupBLEMIDI()
     //TODO need to handle SUST ON notes and HOLD ON
     //leds[(note + 30) % 60] = CRGB::Black;
     if (gShowMidi) {
-      strip.setPixelColor((note + 30) % 60, 0, 0, 0);
+      setNoteOffLed(note, velocity, midiDispNum);
     }
+    numNotesDown--;
     //Serial.printf("OFF %d CH %d, note:%d, vel:%d", millis() - t0,  channel, note, velocity);
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     sprintf(gBuffer, "U-%d (%d) %d", note, velocity, millis() - t0);
@@ -1340,7 +1428,7 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
     // Specific examples
     case 19: //
       gShowMidi = true; // tested by BLE note on and off and will modifiy strip
-      midipiano(parm1, parm2, 0);// duration 0 means till turn off piano
+      midipiano(parm1, parm2, parm3, 0);// duration 0 means till turn off piano
       break;
     case 20: //
       moveworms(5, 3, ihour, 1, 20, 8, 0, duration);
@@ -2729,6 +2817,7 @@ void printDigits(int digits)
 }
 
 //************* Functions to draw the clock ******************************
+//TODO note this only works for a ring of 60 LEDS
 void Draw_Clock(time_t t, byte Phase)
 {
   if (Phase <= 0) {
@@ -2814,11 +2903,11 @@ void SetBrightness() {
 //              and ajusts top of clock
 int ClockCorrect(int Pixel)
 {
+  if (ClockGoBackwards) {
+    Pixel = (2 * strip.numPixels() - Pixel) % strip.numPixels();
+  }
   Pixel = (Pixel + TopOfClock) % strip.numPixels();
-  if (ClockGoBackwards)
-    return ((strip.numPixels() - Pixel + strip.numPixels() / 2) % strip.numPixels()); // my first attempt at clock driving had it going backwards :)
-  else
-    return (Pixel);
+  return (Pixel);
 }
 
 /* ----------------------------------------- LED ANIMATIONS ------------------------------------*/
@@ -3099,7 +3188,7 @@ void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc, 
 }
 
 //void midipiano(HELPER_PARAM Param, int wait, int16_t hueinc,  uint16_t duration) {
-void midipiano(int wait, int16_t hueinc, uint16_t duration) {
+void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   sprintf(buf, "midipiano wait=%d, hueinc=%d, duration=%d", wait, hueinc, duration);
   Serial.println(buf);
   //print_Param(Param);
@@ -3124,15 +3213,19 @@ void midipiano(int wait, int16_t hueinc, uint16_t duration) {
     return;
   }
   /// If get here the piano is attached and MIDI.read() being called
+  ///here gShowMidi in while starts true, so setNoteOnLED and setNoteOffLED
+  /// will be called when piano keys are pressed down and release up thus
+  /// modifying the strip which gets shown in the while loop.
   time_elapsed = 0;
   time_start = millis();
   strip.fill(); // clear
+  gHue = firsthue;
   while (((time_elapsed < duration) || (duration == 0)) && gShowMidi && midiIsConnected) {
-    gHue += hueinc;
     SetBrightness(); // Set the clock brightness dependent on the time
     strip.show(); // Update strip with new contents
     // If piano gets turned off may scan during the delay
     limited_delay(wait);  // Pause for a moment
+    gHue += hueinc;
     time_elapsed = millis() - time_start;
   }
   scanMidi = false;
