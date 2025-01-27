@@ -113,11 +113,15 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
+#ifdef ESP32
+#define HAS_BLEMIDI
+#endif
 
-#include <Arduino.h>
 
 //#define HAS_OLED
 
+#ifdef HAS_BLEMIDI
+#include <Arduino.h>
 ////////////////  BLEMIDI ///////////////////////////////////
 //#include <hardware/BLEMIDI_Transport.h>
 #include <BLEMIDI_Transport.h>
@@ -132,6 +136,7 @@ BLEMIDI_CREATE_DEFAULT_INSTANCE(); //Connect to first server found
 //BLEMIDI_CREATE_INSTANCE("f2:c1:d9:36:e7:6b",MIDI) //Connect to a specific BLE address server
 //NOTE tried below and didn't work as well as default above
 //BLEMIDI_CREATE_INSTANCE("CA49",MIDI)       //Connect to a specific name server
+#endif
 
 #ifdef HAS_OLED
 ///////////////////////////  OLED  //////////////////////////////
@@ -458,7 +463,7 @@ int TopOfClock = 4;
 #elis defined JOHN_CLOCK
 int TopOfClock = 19;
 #elif defined BILL_LKIWI_CLOCK
-int TopOfClock = 48;
+int TopOfClock = 42;
 #else
 int TopOfClock = 15; // to make given pixel the top
 #endif
@@ -508,29 +513,26 @@ void SetBrightness();
 bool SetClockFromNTP();
 bool IsDst();
 void limited_delay(int d);
+#ifdef HAS_BLEMIDI
 void ReadCB(void *parameter);       //Continuos Read function (See FreeRTOS multitasks)
 
-/// Global variables
+/// Global variables for BLEMIDI
 unsigned long t0 = millis();
 bool scanMidi = false;
 bool midiIsConnected = false;
 bool gShowMidi = false;
 int8_t numNotesDown = 0;
 uint8_t midiDispNum = 0;
-
+bool DampON = false;
+uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
+uint16_t gHue = 0; // rotating "base color" used by many of the patterns
+#endif
 // must be longer than longest message
 char gBuffer[400];
 
 #ifdef HAS_OLED
 uint8_t line_to_write = 56;
 uint8_t shift_of_display = 0;
-#endif
-
-bool DampON = false;
-uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
-uint16_t gHue = 0; // rotating "base color" used by many of the patterns
-
-#ifdef HAS_OLED
 void scrollline() {
   line_to_write += 8;
   line_to_write %= 64;
@@ -786,6 +788,7 @@ void setupOLED()
 #endif
 //// end setup OLED
 
+#ifdef HAS_BLEMIDI
 #define NUM_MIDI_DISP 3
 void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
   uint8_t oct = note / 12; // middle C to B give 5
@@ -1008,6 +1011,7 @@ void setupBLEMIDI()
   t0 = millis();
 }
 //// end setup BLEMIDI
+#endif
 
 void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
@@ -1064,7 +1068,9 @@ void setup() {
 #ifdef HAS_OLED
   setupOLED();
 #endif
+#ifdef HAS_BLEMIDI
   setupBLEMIDI();
+#endif
   colorAll(strip.Color(127, 0, 0), 1000);
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
@@ -1219,6 +1225,7 @@ void loop() { // runs on core1
    Call read() method repeatedly to perform a successfull connection with the server
    in case connection is lost.
 */
+#ifdef HAS_BLEMIDI
 void ReadCB(void *parameter)
 {
   //  Serial.print("READ Task is started on core: ");
@@ -1231,7 +1238,7 @@ void ReadCB(void *parameter)
   }
   vTaskDelay(1);
 }
-
+#endif
 
 void limited_delay(int d) {
   delay(min(abs(d), 10000));
@@ -1427,9 +1434,11 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       break;
     // Specific examples
     case 19: //
+#ifdef HAS_BLEMIDI
       gShowMidi = true; // tested by BLE note on and off and will modifiy strip
       midipiano(parm1, parm2, parm3, 0);// duration 0 means till turn off piano
       break;
+#endif
     case 20: //
       moveworms(5, 3, ihour, 1, 20, 8, 0, duration);
       break;
@@ -3187,6 +3196,7 @@ void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc, 
   color_wipe(Param, wait, duration, blocksize);
 }
 
+#ifdef HAS_BLEMIDI
 //void midipiano(HELPER_PARAM Param, int wait, int16_t hueinc,  uint16_t duration) {
 void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   sprintf(buf, "midipiano wait=%d, hueinc=%d, duration=%d", wait, hueinc, duration);
@@ -3231,6 +3241,9 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   scanMidi = false;
   gShowMidi = false;
 }
+#endif
+
+
 //TODO check this becomes rainbow when blocksize = NUM_PIXELS
 void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize) {
   sprintf(buf, "color_wipe wait=%d, duration=%d, blocksize=%d", wait, duration, blocksize);
