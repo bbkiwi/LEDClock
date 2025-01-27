@@ -89,7 +89,7 @@
 #include <NTPClient.h>
 #include <Timezone.h>
 #include <TimeLib.h>
-#include <Adafruit_NeoPixel.h>
+#include <FastLED.h>
 #include <string.h>
 #include "pitches.h"
 #include "sunset.h"
@@ -183,7 +183,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
 #if defined BILL_CLOCK
-#define HAS_INNER_RING
+//#define HAS_INNER_RING
 #endif
 #if defined TEST_CLOCK
 //#define HAS_8X8_LED_MATRIX
@@ -248,7 +248,7 @@ char buf[400];
 
 //************* Declare structures ******************************
 //Create structure for LED RGB information
-struct RGB {
+struct RGBInfo {
   byte r, g, b;
 };
 
@@ -273,23 +273,23 @@ struct TIME_ZONE {
 };
 
 #define NUM_DISP_OPTIONS 5
-RGB SliderColor;
+RGBInfo SliderColor;
 // 5 Options for display index 0 normal day, 4 night,
 //The colour of the "12" to give visual reference to the top
-RGB Twelve[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60}, {0, 0, 0}, };
+RGBInfo Twelve[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60}, {0, 0, 0}, };
 //The colour of the "quarters" 3, 6 & 9 to give visual reference
-RGB Quarters[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60}, {0, 0, 0}, };
+RGBInfo Quarters[NUM_DISP_OPTIONS] = {{0, 0, 60}, {0, 0, 0}, {0, 0, 60}, {0, 0, 60}, {0, 0, 0}, };
 //The colour of the "divisions" 1,2,4,5,7,8,10 & 11 to give visual reference
-RGB Divisions[NUM_DISP_OPTIONS] = {{ 0, 0, 6 }, { 0, 0, 0 }, { 0, 0, 6 }, { 0, 0, 6 }, { 0, 0, 0 } };
+RGBInfo Divisions[NUM_DISP_OPTIONS] = {{ 0, 0, 6 }, { 0, 0, 0 }, { 0, 0, 6 }, { 0, 0, 6 }, { 0, 0, 0 } };
 //All the other pixels with no information
-RGB Background[NUM_DISP_OPTIONS] = {{ 0, 0, 0 }, {255, 0, 0}};
+RGBInfo Background[NUM_DISP_OPTIONS] = {{ 0, 0, 0 }, {255, 0, 0}};
 
 //The Hour hand
-RGB Hour[NUM_DISP_OPTIONS] = {{ 0, 255, 0 }, { 0, 0, 255 }, { 0, 255, 0 }, { 0, 255, 0 }, {100, 0, 0}}; //green
+RGBInfo Hour[NUM_DISP_OPTIONS] = {{ 0, 255, 0 }, { 0, 0, 255 }, { 0, 255, 0 }, { 0, 255, 0 }, {100, 0, 0}}; //green
 //The Minute hand
-RGB Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 }, { 255, 255, 0 }, {0, 0, 0} }; //yellow
+RGBInfo Minute[NUM_DISP_OPTIONS] = {{ 255, 255, 0 }, { 0, 0, 255 }, { 255, 255, 0 }, { 255, 255, 0 }, {0, 0, 0} }; //yellow
 //The Second hand
-RGB SecHand[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
+RGBInfo SecHand[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, { 0, 0, 255 }, { 0, 0, 0 }};
 
 #if defined BEDROOM_CLOCK || defined BILL_LKIWI_CLOCK
 bool ClockGoBackwards = true;
@@ -423,7 +423,7 @@ struct HELPER_PARAM {
 HELPER_PARAM global_hparam;
 
 bool led_color_alarm_flag = false;
-uint32_t led_color_alarm_rgb;
+CRGB led_color_alarm_rgb;
 //tmElements_t alarmTime;
 tmElements_t calcTime = {0};
 
@@ -571,7 +571,8 @@ T nonNegMod(T n, U d ) {
 #ifndef HAS_8X8_LED_MATRIX
 ////////// Using physical LED rings
 #define NUM_LEDS 60
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+CRGB strip_leds[NUM_LEDS];
+//Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 #ifdef HAS_INNER_RING
 Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_PIN, NEO_GRB + NEO_KHZ800);
 #endif
@@ -799,40 +800,43 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
       // FastLED
       //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
       //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);// for FastLED gHue is 8 bits
-      //strip.setPixelColor((note + 30) % 60, strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
-      //strip.setPixelColor((note + 41) % 60, strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
-      strip.setPixelColor(ClockCorrect((150 - note) % 60), strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      strip_leds[ClockCorrect((150 - note) % 60)] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
       break;
     case 1:
       //Map to 12 tones, color by octave
       switch (oct) {
         case 1:
         case 7:
-          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 255, 255, 0);
+          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 255, 0);
           break;
         case 2:
         case 8:
-          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 0, 255);
+          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(0, 0, 255);
+          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 0, 0, 255);
           break;
         case 3:
         case 9:
-          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 255, 0);
+          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(0, 255, 0);
+          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 0, 255, 0);
           break;
         case 4:
-          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 255, 0, 255);
+          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 0, 255);
+          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 255, 0, 255);
           break;
         case 5:
-          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 255, 0, 0);
+          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 255, 0);
+          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 255, 255, 0);
           break;
         case 6:
         default:
-          strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 255, 255);
+          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 255, 0);
+          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 255, 255, 0);
           break;
       };
       break;
     case 2:
       // Map to circle of fifths, color by gHue
-      strip.setPixelColor(ClockCorrect(5 * (7 * (150 - note) % 12)), strip.gamma32(strip.ColorHSV(gHue, 255, 32 + (velocity / 4) * 7)));
+      strip_leds[ClockCorrect(5 * (7 * (150 - note) % 12))] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
       break;
   };
 };
@@ -840,15 +844,15 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
 void setNoteOffLed(byte note, byte velocity, uint8_t midiDispNum) {
   switch (midiDispNum) {
     case 0:
-      strip.setPixelColor(ClockCorrect((150 - note) % 60), 0, 0, 0);
+      strip_leds[ClockCorrect((150 - note) % 60)] = CRGB(0, 0, 0);
       break;
     case 1:
       //Map to 12 tones
-      strip.setPixelColor(ClockCorrect(5 * ((150 - note) % 12)), 0, 0, 0);
+      strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(0, 0, 0);
       break;
     case 2:
       // Map to circle of fifths
-      strip.setPixelColor(ClockCorrect(5 * (7 * (150 - note) % 12)), 0, 0, 0);
+      strip_leds[ClockCorrect(5 * (7 * (150 - note) % 12))] = CRGB(0, 0, 0);
       break;
   }
 };
@@ -1022,6 +1026,7 @@ void setup() {
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
   startOTA();                  // Start the OTA service
   startLittleFS();               // Start the LittleFS and list all contents
+  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(strip_leds, NUM_LEDS);
 
   if (!loadConfig()) {
     Serial.println("Failed to load config will use defaults");
@@ -1059,7 +1064,7 @@ void setup() {
   startWebSocket();            // Start a WebSocket server
   startMDNS();                 // Start the mDNS responder
   startServer();               // Start a HTTP server with a file read handler and an upload handler
-  strip.begin(); // This initializes the NeoPixel library.
+  //strip.begin(); // This initializes the NeoPixel library.
 #ifdef HAS_INNER_RING
   stripinner.begin();
   stripinner.clear();
@@ -1071,7 +1076,9 @@ void setup() {
 #ifdef HAS_BLEMIDI
   setupBLEMIDI();
 #endif
-  colorAll(strip.Color(127, 0, 0), 1000);
+  //colorAll(strip.Color(127, 0, 0), 1000);
+  fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB( 255, 0, 0));
+
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
   randomSeed(now());
@@ -2345,7 +2352,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         SliderColor  = {(byte)(r >> 2), (byte)(g >> 2), (byte)(b >> 2)};
         //webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
-        led_color_alarm_rgb = strip.Color((byte)(r >> 2), (byte)(g >> 2), (byte)(b >> 2));
+        led_color_alarm_rgb = CRGB((byte)(r >> 2), (byte)(g >> 2), (byte)(b >> 2));
         //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'V') {                      // browser sent V to save config file
@@ -2832,7 +2839,7 @@ void Draw_Clock(time_t t, byte Phase)
   if (Phase <= 0) {
     // Set all pixels black
     for (int i = 0; i < NUM_LEDS; i++)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(0, 0, 0));
+      strip_leds[ClockCorrect(i)] = CRGB(0, 0, 0);
   }
 
 
@@ -2841,16 +2848,16 @@ void Draw_Clock(time_t t, byte Phase)
 
   if (Phase >= 1) // Draw all pixels background color
     for (int i = 0; i < NUM_LEDS; i++)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b));
+      strip_leds[ClockCorrect(i)] = CRGB(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b);
 
   if (Phase >= 2) // Draw 5 min divisions
     for (int i = 0; i < NUM_LEDS; i = i + 5)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b)); // for Phase = 2 or more, draw 5 minute divisions
+      strip_leds[ClockCorrect(i)] = CRGB(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b); // for Phase = 2 or more, draw 5 minute divisions
 
   if (Phase >= 3) { // Draw 15 min markers
     for (int i = 0; i < NUM_LEDS; i = i + 15)
-      strip.setPixelColor(ClockCorrect(i), strip.Color(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b));
-    strip.setPixelColor(ClockCorrect(0), strip.Color(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b));
+      strip_leds[ClockCorrect(i)] = CRGB(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b);
+    strip_leds[ClockCorrect(0)] = CRGB(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b);
   }
 
   if (Phase >= 4) { // Draw hands
@@ -2858,50 +2865,50 @@ void Draw_Clock(time_t t, byte Phase)
     int iminute = (60 * minute(t) + isecond + 30) / 60; // round to nearest minute
     int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
     //hour
-    strip.setPixelColor(ClockCorrect(ihour), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+    strip_leds[ClockCorrect(ihour)] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
     for (int i = 0; i <= hour_width[disp_ind]; i++) {
-      strip.setPixelColor(ClockCorrect(ihour - i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
-      strip.setPixelColor(ClockCorrect(ihour + i), strip.Color(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b));
+      strip_leds[ClockCorrect(ihour - i)] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
+      strip_leds[ClockCorrect(ihour + i)] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
     }
     //minute on top of hour
-    uint32_t use_color;
+    CRGB use_color;
     if (minute_width[disp_ind] >= 0) {
       // optional to help identification, minute hand flshes between normal and half intensity
       if ((second() % 2) | (not minute_blink[disp_ind])) {
-        use_color = strip.Color(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
+        use_color = CRGB(Minute[disp_ind].r, Minute[disp_ind].g, Minute[disp_ind].b);
       } else {
-        use_color = strip.Color(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
+        use_color = CRGB(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
       }
-      strip.setPixelColor(ClockCorrect(iminute), use_color);
+      strip_leds[ClockCorrect(iminute)] = use_color;
       for (int i = 1; i <= minute_width[disp_ind]; i++) {
-        strip.setPixelColor(ClockCorrect(iminute - i), use_color); // to help identification, minute hand flshes between normal and half intensity
-        strip.setPixelColor(ClockCorrect(iminute + i), use_color); // to help identification, minute hand flshes between normal and half intensity
+        strip_leds[ClockCorrect(iminute - i)] = use_color; // to help identification, minute hand flshes between normal and half intensity
+        strip_leds[ClockCorrect(iminute + i)] = use_color; // to help identification, minute hand flshes between normal and half intensity
       }
     }
     //second on top of both
     if (second_width[disp_ind] >= 0) {
-      strip.setPixelColor(ClockCorrect(isecond), strip.Color(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b));
+      strip_leds[ClockCorrect(isecond)] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
       for (int i = 0; i <= second_width[disp_ind]; i++) {
-        strip.setPixelColor(ClockCorrect(isecond - i), strip.Color(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b));
-        strip.setPixelColor(ClockCorrect(isecond + i), strip.Color(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b));
+        strip_leds[ClockCorrect(isecond - i)] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
+        strip_leds[ClockCorrect(isecond + i)] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
       }
     }
   }
 
   SetBrightness(); // Set the clock brightness dependant on the time
-  strip.show(); // show all the pixels
+  FastLED.show(); // show all the pixels
 }
 
 
 //************* Function to set the clock brightness ******************************
 void SetBrightness() {
   if (isDay and (ClockInitialized or ClockSetViaWebsocket)) {
-    strip.setBrightness(day_brightness);
+    FastLED.setBrightness(day_brightness);
 #ifdef HAS_INNER_RING
     stripinner.setBrightness(day_brightness);
 #endif
   } else {
-    strip.setBrightness(night_brightness);
+    FastLED.setBrightness(night_brightness);
 #ifdef HAS_INNER_RING
     stripinner.setBrightness(night_brightness);
 #endif
@@ -2913,9 +2920,9 @@ void SetBrightness() {
 int ClockCorrect(int Pixel)
 {
   if (ClockGoBackwards) {
-    Pixel = (2 * strip.numPixels() - Pixel) % strip.numPixels();
+    Pixel = (2 * NUM_LEDS - Pixel) % NUM_LEDS;
   }
-  Pixel = (Pixel + TopOfClock) % strip.numPixels();
+  Pixel = (Pixel + TopOfClock) % NUM_LEDS;
   return (Pixel);
 }
 
@@ -2931,9 +2938,9 @@ void showlights(uint16_t duration, int w1, int w2, int w3)
     //  if duration too small will be ignored.
   {
     // Fill along the length of the strip in various colors...
-    if (w1 >= 0) colorWipe(strip.Color(255,   0,   0), w1); // Red
-    if (w2 >= 0) colorWipe(strip.Color(  0, 255,   0), w2); // Green
-    if (w3 >= 0) colorWipe(strip.Color(  0,   0, 255), w3); // Blue
+    if (w1 >= 0) colorWipe(CRGB(255,   0,   0), w1); // Red
+    if (w2 >= 0) colorWipe(CRGB(  0, 255,   0), w2); // Green
+    if (w3 >= 0) colorWipe(CRGB(  0,   0, 255), w3); // Blue
     time_elapsed = millis() - time_start;
   }
 }
@@ -2959,16 +2966,16 @@ int piecewise_linear(uint16_t x, std::vector<std::pair<uint16_t, uint16_t>> poin
 
 
 // Set All Leds to given color for wait seconds
-void colorAll(uint32_t color, int duration) {
-  strip.fill(color);
+void colorAll(CRGB color, int duration) {
+  fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB(color));
   SetBrightness(); // Set the clock brightness dependant on the time
-  strip.show();                          //  Update strip to match
+  FastLED.show();                          //  Update strip to match
   limited_delay(duration);                           //  Pause for a moment
 }
 
 
 
-std::vector<std::pair<uint16_t, uint16_t>> points_for_embedding(int embedding, uint16_t maxNx = strip.numPixels(), uint16_t maxNy = strip.numPixels() ) {
+std::vector<std::pair<uint16_t, uint16_t>> points_for_embedding(int embedding, uint16_t maxNx = NUM_LEDS, uint16_t maxNy = NUM_LEDS ) {
   std::vector<std::pair<uint16_t, uint16_t>> points;
   switch (embedding) {
     case 1: // full mapping
@@ -3026,9 +3033,9 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   uint8_t pixelR;
   uint8_t pixelG;
   uint8_t pixelB;
-  uint32_t pixelRcol;
-  uint32_t pixelGcol;
-  uint32_t pixelBcol;
+  CRGB pixelRcol;
+  CRGB pixelGcol;
+  CRGB pixelBcol;
   uint16_t pixelVal;
   uint8_t pixelSat = 255;
 
@@ -3051,9 +3058,9 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   // Offset pixel val by an amount to make NBRIGHTLOOP/ nbrightfrac  revolutions of the
   // brightness wheel (range of 256) along the length of the strip
   if (Param.Bright.nfrac != 0) {
-    pixelVal =  strip.sine8(64 + Param.Bright.first / 256 + (jBright * NBRIGHTLOOP * 255 / strip.numPixels() / Param.Bright.nfrac));
+    pixelVal =  sin8(64 + Param.Bright.first / 256 + (jBright * NBRIGHTLOOP * 255 / NUM_LEDS / Param.Bright.nfrac));
   } else {
-    pixelVal = strip.sine8(64 + Param.Bright.first / 256);
+    pixelVal = sin8(64 + Param.Bright.first / 256);
   }
   // need empirical adjustment as for too low value LEDs don't shine at all
   if (isDay) {
@@ -3072,33 +3079,33 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   if (Param.Red.nfrac == 0) {
     pixelR = 0;
   } else {
-    pixelHueR = Param.Hue.first + piecewise_linear((Param.Red.first + jRed * NREDLOOP * UINT16_MAX / strip.numPixels() / Param.Red.nfrac), points);
-    pixelRcol = strip.gamma32(strip.ColorHSV(pixelHueR, pixelSat, pixelVal));
-    pixelR = pixelRcol >> 16;
+    pixelHueR = Param.Hue.first + piecewise_linear((Param.Red.first + jRed * NREDLOOP * UINT16_MAX / NUM_LEDS / Param.Red.nfrac), points);
+    pixelRcol = CHSV(pixelHueR / 256, pixelSat, pixelVal);
+    pixelR = pixelRcol.r;
   }
 
   if (Param.Green.nfrac == 0) {
     pixelG = 0;
   } else {
-    pixelHueG = Param.Hue.first + piecewise_linear((Param.Green.first + jGreen * NGREENLOOP * UINT16_MAX / strip.numPixels() / Param.Green.nfrac), points);
-    pixelGcol = strip.gamma32(strip.ColorHSV(pixelHueG, pixelSat, pixelVal));
-    pixelG = pixelGcol >> 8;
+    pixelHueG = Param.Hue.first + piecewise_linear((Param.Green.first + jGreen * NGREENLOOP * UINT16_MAX / NUM_LEDS / Param.Green.nfrac), points);
+    pixelGcol = CHSV(pixelHueG / 256, pixelSat, pixelVal);
+    pixelG = pixelGcol.g;
   }
 
   if (Param.Blue.nfrac == 0) {
     pixelB = 0;
   } else {
-    pixelHueB = Param.Hue.first + piecewise_linear((Param.Blue.first + jBlue * NBLUELOOP * UINT16_MAX / strip.numPixels() / Param.Blue.nfrac), points);
-    pixelBcol = strip.gamma32(strip.ColorHSV(pixelHueB, pixelSat, pixelVal));
-    pixelB = pixelBcol;
+    pixelHueB = Param.Hue.first + piecewise_linear((Param.Blue.first + jBlue * NBLUELOOP * UINT16_MAX / NUM_LEDS / Param.Blue.nfrac), points);
+    pixelBcol = CHSV(pixelHueB / 256, pixelSat, pixelVal);
+    pixelB = pixelBcol.b;
   }
 
-  strip.setPixelColor(ClockCorrect(i + Param.nodepix), pixelR, pixelG, pixelB);
+  strip_leds[ClockCorrect(i + Param.nodepix)] = CRGB(pixelR, pixelG, pixelB);
 
 #ifdef HAS_INNER_RING
-  stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
+             stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
 #endif
-  yield();
+             yield();
 }
 
 void print_Param(HELPER_PARAM& Param) {
@@ -3117,7 +3124,7 @@ void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  in
   sprintf(buf, "Rainbow old using color_wipe with blocksize numPixels ");
   Serial.println(buf);
   HELPER_PARAM Param = {nodepix, nodepix, coef1, coef2, {firsthue, hueinc, nredfrac, embedding }, {firsthue, hueinc, ngreenfrac, embedding }, {firsthue, hueinc, nbluefrac, embedding }, {firstval, valinc, nbrightfrac, embedding }, {0, 0, 0, 1 } };
-  color_wipe(Param, wait, duration, strip.numPixels());
+  color_wipe(Param, wait, duration, NUM_LEDS);
 }
 
 void rainbow(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nallfrac, int nodepix, uint16_t duration,  int16_t nbrightfrac, int16_t valinc,  uint16_t firstval) {
@@ -3132,7 +3139,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   sprintf(buf, "rainbow( = color_wipe with full blocksize) wait=%d, duration=%d", wait, duration);
   Serial.println(buf);
   print_Param(Param);
-  color_wipe(Param, wait, duration, strip.numPixels());
+  color_wipe(Param, wait, duration, NUM_LEDS);
 }
 /*   ************ OLD CODE, but color_wipe using blocksize of whole strip reduces to this ************************
   //TODO check here Param is passed by value so will not get changed when fields are modified and passed on to pattern_helper
@@ -3142,7 +3149,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   print_Param(Param);
   time_elapsed = 0;
   int nodepix0 = Param.coef0 * 100;
-  nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
+  nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
   int nodepix_diff = (Param.coef1 + Param.coef2);
   uint16_t time_start = millis();
   while (time_elapsed < duration) {
@@ -3153,7 +3160,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     // MUST have yield() in loop - it is in pattern_helper
 
     // Set up all pixels for this frame
-    for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
+    for (int i = 0; i < NUM_LEDS; i++) { // For each pixel in strip...
       pattern_helper(i, Param);
     }
 
@@ -3168,8 +3175,8 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
     // Adjust parameters for next frame
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
-    nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
-    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
+    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
 
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
@@ -3228,11 +3235,11 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   /// modifying the strip which gets shown in the while loop.
   time_elapsed = 0;
   time_start = millis();
-  strip.fill(); // clear
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
   gHue = firsthue;
   while (((time_elapsed < duration) || (duration == 0)) && gShowMidi && midiIsConnected) {
     SetBrightness(); // Set the clock brightness dependent on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
     // If piano gets turned off may scan during the delay
     limited_delay(wait);  // Pause for a moment
     gHue += hueinc;
@@ -3255,8 +3262,8 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
   uint16_t time_start = millis();
   int i = 0; // starting index
   int maxcnt;
-  strip.fill(); // clear
-  strip.show(); // Update strip with new contents
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
+  FastLED.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
   stripinner.fill(); // clear
   stripinner.show();
@@ -3271,11 +3278,11 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
     for (int cnt = 0; cnt < maxcnt; cnt++) {
       //TODO fix this, determins direction of fill
       // new parameter?
-      //TODO if maxcnt = strip.numPixels() does this become rainbow?
+      //TODO if maxcnt = NUM_LEDS does this become rainbow?
       //if (nredfrac >= 0) {
       if (true) {
         i++;
-        if (i  >= strip.numPixels()) {
+        if (i  >= NUM_LEDS) {
           i = 0;
           //firstPixelVal += valinc;
           //firstPixelHue += hueinc;
@@ -3283,7 +3290,7 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
       } else {
         i --;
         if (i  < 0) {
-          i =   - 1 + strip.numPixels();
+          i =   - 1 + NUM_LEDS;
           //firstPixelVal += valinc;
           //firstPixelHue += hueinc;
         }
@@ -3293,14 +3300,14 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
 
 
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
     stripinner.show();
 #endif
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
-    nodepix0 = nonNegMod(nodepix0, 100 * strip.numPixels());
-    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * strip.numPixels());
+    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
+    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
     Param.Bright.first += Param.Bright.inc;
     Param.Red.first += Param.Red.inc;
     Param.Green.first += Param.Green.inc;
@@ -3371,11 +3378,11 @@ class Worm
           if (true) //(this->height[x] >= LEDsegheights[this->path[segpos]])
           {
             if (this->colors[x] == 0) {
-              strip.setPixelColor(ClockCorrect(strippos + nodepix), 0, 0, 0);
-              //strip.setPixelColor(strippos, 0, 0, 0);
+              strip_leds[ClockCorrect(strippos + nodepix)] = CRGB(0, 0, 0);
+              //strip_leds[strippos, 0, 0, 0);
             } else {
-              strip.setPixelColor(ClockCorrect(strippos + nodepix), strip.gamma32(strip.ColorHSV(this->colors[x])));
-              //strip.setPixelColor(strippos, strip.gamma32(strip.ColorHSV(this->colors[x])));
+              strip_leds[ClockCorrect(strippos + nodepix)] = CHSV(this->colors[x] / 256, 255, 255);
+              //strip_leds[strippos, strip.gamma32(strip.ColorHSV(this->colors[x])));
               //LEDsegheights[this->path[segpos]] = this->height[x];
             }
 
@@ -3396,8 +3403,8 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
   // wait=0 and nworms=0 give wdt reset
   time_elapsed = 0;
   uint16_t time_start = millis();
-  std::vector<int>path(strip.numPixels());
-  std::iota(path.begin(), path.end(), 0); // path will become: [0..strip.numPixels()-1]
+  std::vector<int>path(NUM_LEDS);
+  std::iota(path.begin(), path.end(), 0); // path will become: [0..NUM_LEDS-1]
 
   //std::vector < int >path =   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59};
   // Limit sinksize
@@ -3408,7 +3415,7 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
   nworms = max(1, min(abs(nworms), 10)); // prevent error
   std::vector<Worm>Worms;
   for (int i = 0; i < nworms; i++) {
-    int lenworm = random(2, min(strip.numPixels() / 4, 2 + abs(maxlen)));
+    int lenworm = random(2, min(NUM_LEDS / 4, 2 + abs(maxlen)));
     int cyclelen = random(1, min(20, 1 + abs(maxcyclelen)));
     if (dirchoice < 0) {
       dir = -1;
@@ -3427,14 +3434,14 @@ void moveworms(int wait, int nworms, int nodepix, int sinksize, int maxlen, int 
     Worms.push_back(w);
   }
 
-  strip.fill(); // clear
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
   while (time_elapsed < duration) {
     for (int i = 0; i < nworms; i++) {
       Worms[i].move(nodepix);
       yield();
     }
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
     //yield();
     wait = max(1, wait); // prevent error
     limited_delay(wait);  // Pause for a moment
@@ -3452,12 +3459,12 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
   pixelHue = minHue;
   numff = max(1, numff); // will blow up otherwise
   while (time_elapsed < duration) {
-    strip.fill(); // clear
+    fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
 #ifdef HAS_INNER_RING
     stripinner.fill();
 #endif
     for (int i = 0; i < numff; i++) {
-      pixel = random(strip.numPixels());
+      pixel = random(NUM_LEDS);
       if (hueInc == 0) {
         // Choose random color
         pixelHue = random(minHue, maxHue);
@@ -3473,14 +3480,14 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
       if (pixel % 2 == 0) {
         stripinner.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
       } else {
-        strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+        strip_leds[pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
       }
 #else
-      strip.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+      strip_leds[pixel] = CHSV(pixelHue / 256, Sat, Val);
 #endif
     }
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
     stripinner.show(); // Update strip with new contents
 #endif
@@ -3512,11 +3519,12 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
 //  g2 = (uint8_t)(color2 >>  8),
 //  b2 = (uint8_t)(color2 >>  0);
 //
-//  return strip.Color(constrain(r1 + r2, 0, 255), constrain(g1 + g2, 0, 255), constrain(b1 + b2, 0, 255));
+//  return CRGB(constrain(r1 + r2, 0, 255), constrain(g1 + g2, 0, 255), constrain(b1 + b2, 0, 255));
 //}
 
-uint32_t Substract(uint32_t color1, uint32_t color2)
-{
+/*
+  uint32_t Substract(uint32_t color1, uint32_t color2)
+  {
   uint8_t r1, g1, b1;
   uint8_t r2, g2, b2;
   int16_t r, g, b;
@@ -3536,40 +3544,41 @@ uint32_t Substract(uint32_t color1, uint32_t color2)
   if (g < 0) g = 0;
   if (b < 0) b = 0;
 
-  return strip.Color(r, g, b);
-}
-
+  return CRGB(r, g, b);
+  }
+*/
 
 //void AddColor(uint8_t position, uint32_t color)
 //{
 //  uint32_t blended_color = Blend(strip.getPixelColor(position), color);
-//  strip.setPixelColor(position, blended_color);
+//  strip_leds[position, blended_color);
 //}
 
-void SubstractColor(int position, uint32_t color)
-{
-  uint32_t blended_color = Substract(strip.getPixelColor(position), color);
-  strip.setPixelColor(position, blended_color);
-}
+//void SubstractColor(int position, CRGB color)
+//{
+//  CRGB blended_color = strip_leds[position] - color;
+//  strip_leds[position] = blended_color;
+//}
 
 
 void fire(uint16_t duration, uint8_t r, uint8_t g, uint8_t b, uint8_t rd, uint8_t gd, uint8_t bd) {
   // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
   time_elapsed = 0;
-  uint32_t fire_color   = strip.Color ( r,  g,  b);
+  CRGB fire_color   = CRGB ( r,  g,  b);
   uint16_t time_start = millis();
   while (time_elapsed < duration) {
-    //strip.fill(); // clear
-    strip.fill(fire_color);
-    for (int i = 0; i < strip.numPixels(); i++) {
+    fill_solid( &(strip_leds[0]), NUM_LEDS, fire_color);
+    //strip.fill(fire_color);
+    for (int i = 0; i < NUM_LEDS; i++) {
       //AddColor(i, fire_color);
       int rr = random(255);
       uint8_t one  = 1;
-      uint32_t diff_color = strip.Color ( rr / max(one, rd), rr / max(one, gd) , rr / max(one, bd));
-      SubstractColor(i, diff_color);
+      CRGB diff_color = CRGB ( rr / max(one, rd), rr / max(one, gd) , rr / max(one, bd));
+      strip_leds[i] -= diff_color;
+      //SubstractColor(i, diff_color);
     }
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
     yield();
     delay(random(50, 150)); // Pause for a random moment
     time_elapsed = millis() - time_start;
@@ -3582,21 +3591,21 @@ void cellularAutomata(int wait, uint8_t rule, int pixelHue, uint16_t duration) {
   std::vector < int >next(NUM_LEDS);
   uint16_t time_start = millis();
   // initial state
-  strip.fill();
-  strip.setPixelColor(0, strip.gamma32(strip.ColorHSV(pixelHue)));
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0));
+  strip_leds[0] = CHSV(pixelHue / 256, 255, 255);
   while (time_elapsed < duration) {
-    for (int i = 0; i < strip.numPixels(); i++) {
-      uint8_t nbrs = ((strip.getPixelColor(i) != 0) << 2) + ((strip.getPixelColor((i + 1) % strip.numPixels()) != 0) << 1) +  (strip.getPixelColor((i + 2) % strip.numPixels()) != 0);
-      next[(i + 1) % strip.numPixels()] = (rule >> nbrs) & 0x1;
+    for (int i = 0; i < NUM_LEDS; i++) {
+      uint8_t nbrs = ((strip_leds[i] != 0) << 2) + ((strip_leds[(i + 1) % NUM_LEDS] != 0) << 1) +  (strip_leds[(i + 2) % NUM_LEDS] != 0);
+      next[(i + 1) % NUM_LEDS] = (rule >> nbrs) & 0x1;
     }
-    strip.fill(); // clear
-    for (int i = 0; i < strip.numPixels(); i++) {
+    fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
+    for (int i = 0; i < NUM_LEDS; i++) {
       if (next[i]) {
-        strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+        strip_leds[i] =  CHSV(pixelHue / 256, 255, 255);
       }
     }
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
     yield();
     limited_delay(wait); // wait
     time_elapsed = millis() - time_start;
@@ -3611,26 +3620,26 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, int
   std::vector < int >nextB(NUM_LEDS);
   uint16_t time_start = millis();
   // initial state
-  strip.fill();
-  strip.setPixelColor(0, 0xff0000);
-  strip.setPixelColor(20, 0x00ff00);
-  strip.setPixelColor(40, 0x0000ff);
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0));
+  strip_leds[0].r = 255;
+  strip_leds[20].g = 255;
+  strip_leds[40].b = 255;
   while (time_elapsed < duration) {
-    for (int i = 0; i < strip.numPixels(); i++) {
+    for (int i = 0; i < NUM_LEDS; i++) {
       // have 3 CAs for r,g,b then use
-      uint8_t nbrsR = ((((uint8_t)(strip.getPixelColor(i) >> 16)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % strip.numPixels()) >> 16)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % strip.numPixels()) >> 16)) != 0);
-      uint8_t nbrsG = ((((uint8_t)(strip.getPixelColor(i) >> 8)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % strip.numPixels()) >> 8)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % strip.numPixels()) >> 8)) != 0);
-      uint8_t nbrsB = ((((uint8_t)(strip.getPixelColor(i) >> 0)) != 0) << 2) + ((((uint8_t)(strip.getPixelColor((i + 1) % strip.numPixels()) >> 0)) != 0) << 1) +  (((uint8_t)(strip.getPixelColor((i + 2) % strip.numPixels()) >> 0)) != 0);
-      nextR[(i + 1) % strip.numPixels()] = (ruleR >> nbrsR) & 0x1;
-      nextG[(i + 1) % strip.numPixels()] = (ruleG >> nbrsG) & 0x1;
-      nextB[(i + 1) % strip.numPixels()] = (ruleB >> nbrsB) & 0x1;
+      uint8_t nbrsR = ((((uint8_t)(strip_leds[i].r)) != 0) << 2) + ((((uint8_t)(strip_leds[(i + 1) % NUM_LEDS].r)) != 0) << 1) +  (((uint8_t)(strip_leds[(i + 2) % NUM_LEDS].r)) != 0);
+      uint8_t nbrsG = ((((uint8_t)(strip_leds[i].g)) != 0) << 2) + ((((uint8_t)(strip_leds[(i + 1) % NUM_LEDS].g)) != 0) << 1) +  (((uint8_t)(strip_leds[(i + 2) % NUM_LEDS].g)) != 0);
+      uint8_t nbrsB = ((((uint8_t)(strip_leds[i].b)) != 0) << 2) + ((((uint8_t)(strip_leds[(i + 1) % NUM_LEDS].b)) != 0) << 1) +  (((uint8_t)(strip_leds[(i + 2) % NUM_LEDS].b)) != 0);
+      nextR[(i + 1) % NUM_LEDS] = (ruleR >> nbrsR) & 0x1;
+      nextG[(i + 1) % NUM_LEDS] = (ruleG >> nbrsG) & 0x1;
+      nextB[(i + 1) % NUM_LEDS] = (ruleB >> nbrsB) & 0x1;
     }
-    strip.fill(); // clear
-    for (int i = 0; i < strip.numPixels(); i++) {
-      strip.setPixelColor(i, nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
+    fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
+    for (int i = 0; i < NUM_LEDS; i++) {
+      strip_leds[i] = CRGB( nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
     }
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
+    FastLED.show(); // Update strip with new contents
     yield();
     limited_delay(wait); // wait
     time_elapsed = millis() - time_start;
@@ -3644,18 +3653,18 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, int
 // Fill strip pixels one after another with a color. Strip is NOT cleared
 // first; anything there will be covered pixel by pixel. Pass in color
 // (as a single 'packed' 32-bit value, which you can get by calling
-// strip.Color(red, green, blue) as shown in the loop() function above),
+// CRGB(red, green, blue) as shown in the loop() function above),
 // and a delay time (in milliseconds) between pixels.
-void colorWipe(uint32_t color, int wait) {
+void colorWipe(CRGB color, int wait) {
   int isecond = second(now());
   int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
-  for (int i = 0; i < strip.numPixels(); i++) { // For each pixel in strip...
-    strip.setPixelColor(ClockCorrect(i + ihour + 30), color);         //  Set pixel's color (in RAM)
-    strip.setPixelColor(ClockCorrect(-i + ihour + 30), color);         //  Set pixel's color (in RAM)
-    //strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+  for (int i = 0; i < NUM_LEDS; i++) { // For each pixel in strip...
+    strip_leds[ClockCorrect(i + ihour + 30)] =  color;         //  Set pixel's color (in RAM)
+    strip_leds[ClockCorrect(-i + ihour + 30)] = color;         //  Set pixel's color (in RAM)
+    //strip_leds[i, color);         //  Set pixel's color (in RAM)
     SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show();                          //  Update strip to match
+    FastLED.show();                          //  Update strip to match
     yield();
     limited_delay(wait);                           //  Pause for a moment
   }
@@ -3668,22 +3677,23 @@ void theaterChaseRainbow(uint16_t duration, int wait, uint16_t firstHue, int hue
   int firstPixelHue = firstHue;
   for (int a = 0; a < duration / wait / 3; a++) {
     for (int b = 0; b < 3; b++) { //  'b' counts from 0 to 2...
-      strip.clear();         //   Set all pixels in RAM to 0 (off)
+      fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB(0, 0, 0)); //   Set all pixels in RAM to 0 (off)
+      //strip.clear();         //   Set all pixels in RAM to 0 (off)
       // 'c' counts up from 'b' to end of strip in increments of 3...
-      for (int c = b; c < strip.numPixels(); c += 3) {
+      for (int c = b; c < NUM_LEDS; c += 3) {
         // hue of pixel 'c' is offset by an amount to make one full
         // revolution of the color wheel (range 65536) along the length
-        // of the strip (strip.numPixels() steps):
+        // of the strip (NUM_LEDS steps):
         if (den == 0) {
           hue   = firstPixelHue;
         } else {
-          hue   = firstPixelHue + ClockCorrect(c) * 65536L * 120 / den / strip.numPixels();
+          hue   = firstPixelHue + ClockCorrect(c) * 65536L * 120 / den / NUM_LEDS;
         }
-        uint32_t color = strip.gamma32(strip.ColorHSV(hue)); // hue -> RGB
-        strip.setPixelColor(ClockCorrect(c), color); // Set pixel 'c' to value 'color'
+        CRGB color = CHSV(hue / 256, 255, 255); // hue -> RGB
+        strip_leds[ClockCorrect(c)] = color; // Set pixel 'c' to value 'color'
       }
       SetBrightness(); // Set the clock brightness dependant on the time
-      strip.show();                // Update strip with new contents
+      FastLED.show();                // Update strip with new contents
       yield();
       limited_delay(wait);                 // Pause for a moment
       firstPixelHue += hueInc;
