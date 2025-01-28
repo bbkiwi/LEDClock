@@ -5,6 +5,8 @@
   //https://github.com/PaulStoffregen/Time
 
 
+  28 Jan 2025 Can't get FastLED to work on ESP8266 with a webserver. So will only use this for ESP32
+
   With Partition Scheme - Default
    Sketch without OLED uses 1499505 bytes (114%) of program storage space. Maximum is 1310720 bytes.
    text section exceeds available space in board
@@ -89,6 +91,7 @@
 #include <NTPClient.h>
 #include <Timezone.h>
 #include <TimeLib.h>
+//#define FASTLED_INTERRUPT_RETRY_COUNT 0
 #include <FastLED.h>
 #include <string.h>
 #include "pitches.h"
@@ -318,6 +321,7 @@ TIME WeekendMorning = {9, 15}; //Morning time to go bright
 // keep below 127 to limit power use
 uint8_t day_brightness = MAX_BRIGHTNESS;
 uint8_t night_brightness = 16;
+uint8_t inuse_brightness;
 
 // if setting day and night by the sun can adjust
 // The following indexed by weekday(now()) eg 1 Sun, 2 Mon, ... 7 Sat
@@ -776,7 +780,7 @@ void setupOLED()
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
   display.display();
-  delay(2000); // Pause for 2 seconds
+  FastLED.delay(2000); // Pause for 2 seconds
   // Clear the buffer
   display.clearDisplay();
   display.setTextSize(1);             // Normal 1:1 pixel scale
@@ -1019,7 +1023,7 @@ void setupBLEMIDI()
 
 void setup() {
   Serial.begin(115200);        // Start the Serial communication to send messages to the computer
-  delay(1000);
+  FastLED.delay(1000);
   Serial.println("\r\n");
   sun.setPosition(latitude, longitude, hourOff_DST);
 
@@ -1027,7 +1031,7 @@ void setup() {
   startOTA();                  // Start the OTA service
   startLittleFS();               // Start the LittleFS and list all contents
   FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(strip_leds, NUM_LEDS);
-
+  //FastLED.setDither(0);
   if (!loadConfig()) {
     Serial.println("Failed to load config will use defaults");
     // use default parameters
@@ -1076,9 +1080,8 @@ void setup() {
 #ifdef HAS_BLEMIDI
   setupBLEMIDI();
 #endif
-  //colorAll(strip.Color(127, 0, 0), 1000);
-  fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB( 255, 0, 0));
-
+  colorAll(CRGB( 255, 0, 0), 1000);
+  //fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB( 255, 0, 0));
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
   randomSeed(now());
@@ -1222,7 +1225,7 @@ void loop() { // runs on core1
       isDay = not nextModeIsDay;
     }
   }
-  delay(10); // needed to keep wifi going
+  FastLED.delay(10); // needed to keep wifi going
 }
 
 /**
@@ -1248,7 +1251,7 @@ void ReadCB(void *parameter)
 #endif
 
 void limited_delay(int d) {
-  delay(min(abs(d), 10000));
+  FastLED.delay(min(abs(d), 10000));
 }
 
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7, int parm8) {
@@ -1940,7 +1943,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
     Serial.print(" with IP = ");
     Serial.println(IP);
   }
-  delay(100);
+  FastLED.delay(100);
 }
 
 void startOTA() { // Start the OTA service
@@ -2033,16 +2036,16 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
 
   server.on("/restart", []() {
     server.send(200, "text/plain", "Restarting ...");
-    delay(1000);
+    FastLED.delay(1000);
     ESP.restart();
   });
 
   server.on("/forgetwifi", []() {
     server.send(200, "text/plain", "Forgetting Wifi and restarting ...");
-    delay(1000);
+    FastLED.delay(1000);
     //reset settings - wipe credentials
     wifiManager.resetSettings();
-    delay(1000);
+    FastLED.delay(1000);
     ESP.restart();
   });
 
@@ -2058,14 +2061,14 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
     String numstr = server.arg("num");
     light_alarm_num = (strlen(numstr.c_str()) > 0) ? numstr.toInt() : 1;
     server.send(200, "text/plain", "Light alarm Starting ...");
-    delay(1000);
+    FastLED.delay(1000);
     //light_alarm_num = random(1, 43);
     time_elapsed = 0;
   });
 
   server.on("/soundalarm", []() {
     server.send(200, "text/plain", "Sound alarm Starting ...");
-    delay(1000);
+    FastLED.delay(1000);
     sound_alarm_flag = true;
     time_elapsed = 0;
   });
@@ -2073,7 +2076,7 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
   server.on("/whattime", []() {
     sprintf(buf, "%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
     server.send(200, "text/plain", buf);
-    delay(1000);
+    FastLED.delay(1000);
   });
 
   server.on("/setbright", setBright);
@@ -2903,15 +2906,21 @@ void Draw_Clock(time_t t, byte Phase)
 //************* Function to set the clock brightness ******************************
 void SetBrightness() {
   if (isDay and (ClockInitialized or ClockSetViaWebsocket)) {
-    FastLED.setBrightness(day_brightness);
+    if (day_brightness != inuse_brightness) {
+      FastLED.setBrightness(day_brightness);
+      inuse_brightness = day_brightness;
 #ifdef HAS_INNER_RING
-    stripinner.setBrightness(day_brightness);
+      stripinner.setBrightness(day_brightness);
 #endif
+    }
   } else {
-    FastLED.setBrightness(night_brightness);
+    if (night_brightness != inuse_brightness) {
+      FastLED.setBrightness(night_brightness);
+      inuse_brightness = night_brightness;
 #ifdef HAS_INNER_RING
-    stripinner.setBrightness(night_brightness);
+      stripinner.setBrightness(night_brightness);
 #endif
+    }
   }
 }
 
@@ -2967,6 +2976,7 @@ int piecewise_linear(uint16_t x, std::vector<std::pair<uint16_t, uint16_t>> poin
 
 // Set All Leds to given color for wait seconds
 void colorAll(CRGB color, int duration) {
+  Serial.println("colorAll");
   fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB(color));
   SetBrightness(); // Set the clock brightness dependant on the time
   FastLED.show();                          //  Update strip to match
@@ -3103,9 +3113,9 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
   strip_leds[ClockCorrect(i + Param.nodepix)] = CRGB(pixelR, pixelG, pixelB);
 
 #ifdef HAS_INNER_RING
-             stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
+  stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
 #endif
-             yield();
+  yield();
 }
 
 void print_Param(HELPER_PARAM& Param) {
@@ -3580,7 +3590,7 @@ void fire(uint16_t duration, uint8_t r, uint8_t g, uint8_t b, uint8_t rd, uint8_
     SetBrightness(); // Set the clock brightness dependant on the time
     FastLED.show(); // Update strip with new contents
     yield();
-    delay(random(50, 150)); // Pause for a random moment
+    FastLED.delay(random(50, 150)); // Pause for a random moment
     time_elapsed = millis() - time_start;
   }
 }
