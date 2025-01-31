@@ -1,12 +1,29 @@
 /*********
+  30 Jan 2025 can use FastLED on Esp8266 and webserver if use OLD versions
+   and modify library code WebSockets 2.6.1 in files WebSocketsServer.cpp
+   and comment out a line in  Arduino.h
+   Use 4M(FS 2M, OTA)
+   MUST use board esp8266\2.7.4
+   FastLED 3.4.0
+   Also had to change WebSockets 2.6.1
+   Had to change line 677 from 'accept' to 'available '
+      in D:\Bill\My Documents\Arduino\libraries\WebSockets\src/WebSocketsServer.cpp
+      as discussed https://github.com/esp8266/Arduino/issues/8580
+
+   Commented out #define round ...
+      in C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.7.4\cores\esp8266/Arduino.h
+   https://github.com/esp8266/Arduino/issues/5787
+
+   For ESP32 LOLIN D32 and Node32s use Partition Scheme -  minimal SPIFFS large app with OTA
+   MUST Use FastLED 3.9.13
+   The modified WebSockets 2.6.1 as above seems ok, but unmodified was ok too.
    Using for Bedroom, Iris, and GBT clocks Feb 2024
    Only Bedroom has mic and speaker
   Using tttapa examples with clock code by Jon Fuge *mod by bbkiwi
   //https://github.com/PaulStoffregen/Time
 
 
-  28 Jan 2025 Can't get FastLED to work on ESP8266 with a webserver. So will only use this for ESP32
-
+  28 Jan 2025 Couldn't get FastLED to work on ESP8266 with a webserver but with older libraries can see above
   With Partition Scheme - Default
    Sketch without OLED uses 1499505 bytes (114%) of program storage space. Maximum is 1310720 bytes.
    text section exceeds available space in board
@@ -25,7 +42,7 @@
 
   6 Jan 2025 used for Gift Clocks  LOLIN (Weimos) D1 R2 & mini Flash 4M (FS:2M OTA ~1019KB)
 
-  Used Arduino 1.8.13
+  Used Arduino IDE 1.8.13
   NTPClient 3.2.1 in folder: D:\Bill\My Documents\Arduino\libraries\NTPClient
   Timezone 1.2.4 in folder: D:\Bill\My Documents\Arduino\libraries\Timezone
   Time 1.6.1 in folder: D:\Bill\My Documents\Arduino\libraries\Time
@@ -118,10 +135,11 @@
 
 #ifdef ESP32
 #define HAS_BLEMIDI
+#define HAS_OLED
 #endif
 
 
-//#define HAS_OLED
+
 
 #ifdef HAS_BLEMIDI
 #include <Arduino.h>
@@ -153,6 +171,9 @@ BLEMIDI_CREATE_DEFAULT_INSTANCE(); //Connect to first server found
 // and NODEMCU 32S
 //#define SDA 5
 //#define SCL 4
+// for Weimos D1 mini ?
+//#define SDA D6
+//#define SCL D5
 // better for NODEMCU 32S 30 pin
 #define SDA 21
 #define SCL 22
@@ -403,6 +424,28 @@ int light_alarm_parm8 = 0;
 
 
 struct PATTERN {
+  uint16_t first;
+  int16_t inc;
+  int16_t nfrac;
+  uint8_t embedding;
+  int16_t n0;
+  int16_t n1;
+  int16_t n2;
+};
+/*
+  struct HELPER_PARAM {
+  int nodepix = 0;
+  int coef0 = 0;
+  int coef1 = 0;
+  int coef2 = 0;
+  PATTERN Red;
+  PATTERN Green;
+  PATTERN Blue;
+  PATTERN Bright;
+  PATTERN Hue;
+  };
+
+  struct PATTERN {
   uint16_t first = 0;
   int16_t inc = 0;
   int16_t nfrac = 0;
@@ -410,13 +453,13 @@ struct PATTERN {
   int16_t n0 = 0;
   int16_t n1 = 0;
   int16_t n2 = 0;
-};
-
+  };
+*/
 struct HELPER_PARAM {
-  int nodepix = 0;
-  int coef0 = 0;
-  int coef1 = 0;
-  int coef2 = 0;
+  int nodepix;
+  int coef0;
+  int coef1;
+  int coef2;
   PATTERN Red;
   PATTERN Green;
   PATTERN Blue;
@@ -715,9 +758,11 @@ const int ESP_BUILTIN_LED = 2;
 
 /////////////////////// LittleFS routines ///////////////////
 #define FORMAT_LITTLEFS_IF_FAILED true
-
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels, String spaces) {
-  Serial.printf("%sListing directory: %s\r\n", spaces,  dirname);
+// doing indent by spaces was problem for ESP8266 as depended wether C+11 or C+14
+// How to print spaces for both
+// see https://stackoverflow.com/questions/25609437/print-number-of-spaces-using-printf-in-c
+void listDir(fs::FS &fs, const char * dirname, uint8_t levels, uint8_t nspaces) {
+  Serial.printf("%*cListing directory: %s\r\n", nspaces, ' ', dirname);
 #if ESP8266
   //TODO only giving root dir, fix
   Dir dir = fs.openDir(dirname);
@@ -741,14 +786,14 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels, String spaces) {
   File file = root.openNextFile();
   while (file) {
     if (file.isDirectory()) {
-      Serial.print(spaces);
+      Serial.printf("%*c", nspaces, ' ');
       Serial.print("  DIR : ");
       Serial.println(file.name());
       if (levels) {
-        listDir(fs, file.path(), levels - 1, spaces + "  ");
+        listDir(fs, file.path(), levels - 1, nspaces + 1);
       }
     } else {
-      Serial.print(spaces);
+      Serial.printf("%*c", nspaces, ' ');
       Serial.print("  FILE: ");
       Serial.print(file.name());
       Serial.print("\tSIZE: ");
@@ -765,6 +810,9 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels, String spaces) {
 //// setup OLED
 
 #ifdef HAS_OLED
+//TODO on esp8266 weimos D1 mini seem so conflict, but didn't have OLED to try
+//   but might need to modify for esp32 if fail to allocate, might still want
+//   to respond to midi on leds and serial and not give up
 void setupOLED()
 {
   /// OLED setup
@@ -775,7 +823,9 @@ void setupOLED()
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for (;;); // Don't proceed, loop forever
+    //for (;;); // Don't proceed, loop forever
+    //or set some flag to not try OLED in rest of code
+    return;
   }
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
@@ -905,6 +955,9 @@ void setupBLEMIDI()
           sprintf(gBuffer, "HOLD ON %d", millis() - t0);
           // no keys are down and Sostenuto (middle) pedal is pressed
           // will shift to next midiDisp
+          //TODO could have option if play notes after hold down (eg scale)
+          // then HOLD oof these notes will be colored green eg correct in scale
+          //   and other notes red
           if (numNotesDown == 0) {
             midiDispNum++;
             midiDispNum %= NUM_MIDI_DISP;
@@ -1060,8 +1113,10 @@ void setup() {
   for (int ind = 1; ind < 8; ind++) {
     int mode_night_ind = 2 * ind - 1;
     int mode_day_ind = mode_night_ind - 1;
-    sprintf(buf, "Mode %s  Day: useSun[%d] dev=%d, %d:%02d, Night: useSun[%d] dev=%d, %d:%02d, ",
-            daysOfWeek[ind], mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
+    Serial.print("Mode ");
+    Serial.print(daysOfWeek[ind]);
+    sprintf(buf, "  Day: useSun[%d] dev=%d, %d:%02d, Night: useSun[%d] dev=%d, %d:%02d, ",
+            mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
             mode_change[mode_night_ind].useSun, mode_change[mode_night_ind].sunDeviation ,  mode_change[mode_night_ind].specificTime.Hour, mode_change[mode_night_ind].specificTime.Minute);
     Serial.println(buf);
   }
@@ -1982,7 +2037,7 @@ void startLittleFS() { // Start the LittleFS and list all contents
     return;
   }
 #endif
-  listDir(LittleFS, "/", 1, ""); // list all directories to make sure they were deleted
+  listDir(LittleFS, "/", 1, 1); // list all directories to make sure they were deleted
 }
 
 void startWebSocket() { // Start a WebSocket server
@@ -2446,7 +2501,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           int mode_night_ind = 2 * ind - 1;
           int mode_day_ind = mode_night_ind - 1;
           sprintf(buf, "Mode %s  Day: useSun[%d] dev=%d, %d:%02d, Night: useSun[%d] dev=%d, %d:%02d, ",
-                  daysOfWeek[ind], mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
+                  daysOfWeek[ind].c_str(), mode_change[mode_day_ind].useSun, mode_change[mode_day_ind].sunDeviation ,  mode_change[mode_day_ind].specificTime.Hour, mode_change[mode_day_ind].specificTime.Minute ,
                   mode_change[mode_night_ind].useSun, mode_change[mode_night_ind].sunDeviation ,  mode_change[mode_night_ind].specificTime.Hour, mode_change[mode_night_ind].specificTime.Minute);
           Serial.println(buf);
         }
@@ -3151,61 +3206,7 @@ void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
   print_Param(Param);
   color_wipe(Param, wait, duration, NUM_LEDS);
 }
-/*   ************ OLD CODE, but color_wipe using blocksize of whole strip reduces to this ************************
-  //TODO check here Param is passed by value so will not get changed when fields are modified and passed on to pattern_helper
-  void rainbow(HELPER_PARAM Param, int wait,  uint16_t duration) {
-  sprintf(buf, "rainbow wait=%d, duration=%d", wait, duration);
-  Serial.println(buf);
-  print_Param(Param);
-  time_elapsed = 0;
-  int nodepix0 = Param.coef0 * 100;
-  nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
-  int nodepix_diff = (Param.coef1 + Param.coef2);
-  uint16_t time_start = millis();
-  while (time_elapsed < duration) {
-    // For each frame, the colorwheel and brightness wheel shift
-    // This gives apparent motion. If values are same both move
-    // at same rate.
-    // sets all leds (pixels) for one frame of the animation
-    // MUST have yield() in loop - it is in pattern_helper
 
-    // Set up all pixels for this frame
-    for (int i = 0; i < NUM_LEDS; i++) { // For each pixel in strip...
-      pattern_helper(i, Param);
-    }
-
-    //TODO could put this inside loop with wait/60 as option
-    SetBrightness(); // Set the clock brightness dependant on the time
-    strip.show(); // Update strip with new contents
-  #ifdef HAS_INNER_RING
-    stripinner.show();
-  #endif
-    //  limited_delay(wait / 60);
-    //}
-    // Adjust parameters for next frame
-    Param.nodepix = nodepix0 / 100;
-    nodepix0 += nodepix_diff;
-    nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
-    nodepix_diff += nonNegMod(2 * Param.coef2, 100 * NUM_LEDS);
-
-    Param.Red.first += Param.Red.inc;
-    Param.Green.first += Param.Green.inc;
-    Param.Blue.first += Param.Blue.inc;
-    Param.Bright.first += Param.Bright.inc;
-
-    Param.Bright.inc += Param.Bright.n0;
-    Param.Red.inc += Param.Red.n0;
-    Param.Green.inc += Param.Green.n0;
-    Param.Blue.inc += Param.Blue.n0;
-
-    Param.Hue.first += Param.Hue.inc;
-    Param.Hue.n0 += Param.Hue.n1;
-
-    limited_delay(wait);  // Pause for a moment
-    time_elapsed = millis() - time_start;
-  }
-  }
-*/
 void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc,  int16_t nredfrac, int blocksize, int nodepix, uint16_t duration, int16_t ngreenfrac, int16_t nbluefrac, int16_t valinc, uint16_t firstval, int16_t coef1, int16_t coef2) {
   sprintf(buf, "Color wipe old ");
   Serial.println(buf);
@@ -3261,7 +3262,7 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
 #endif
 
 
-//TODO check this becomes rainbow when blocksize = NUM_PIXELS
+//This becomes rainbow when blocksize = NUM_PIXELS
 void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize) {
   sprintf(buf, "color_wipe wait=%d, duration=%d, blocksize=%d", wait, duration, blocksize);
   Serial.println(buf);
@@ -3605,7 +3606,7 @@ void cellularAutomata(int wait, uint8_t rule, int pixelHue, uint16_t duration) {
   strip_leds[0] = CHSV(pixelHue / 256, 255, 255);
   while (time_elapsed < duration) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      uint8_t nbrs = ((strip_leds[i] != 0) << 2) + ((strip_leds[(i + 1) % NUM_LEDS] != 0) << 1) +  (strip_leds[(i + 2) % NUM_LEDS] != 0);
+      uint8_t nbrs = ((strip_leds[i] != (CRGB)0) << 2) + ((strip_leds[(i + 1) % NUM_LEDS] != (CRGB)0) << 1) +  (strip_leds[(i + 2) % NUM_LEDS] != (CRGB)0);
       next[(i + 1) % NUM_LEDS] = (rule >> nbrs) & 0x1;
     }
     fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
