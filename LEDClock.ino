@@ -135,7 +135,7 @@
 
 #ifdef ESP32
 #define HAS_BLEMIDI
-#define HAS_OLED
+//#define HAS_OLED
 #endif
 
 
@@ -190,13 +190,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-#define TEST_CLOCK
+//#define TEST_CLOCK
 //#define GBT_CLOCK
 //#define BRYN_CLOCK
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-//#define BILL_CLOCK
+#define BILL_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -207,7 +207,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
 #if defined BILL_CLOCK
-#define HAS_INNER_RING
+//#define HAS_INNER_RING
 #endif
 #if defined TEST_CLOCK
 #define HAS_8X8_LED_MATRIX
@@ -570,6 +570,7 @@ bool midiIsConnected = false;
 bool gShowMidi = false;
 int8_t numNotesDown = 0;
 bool MidiControlMode = false;
+bool PlayedScaleNote = false;
 uint8_t midiDispNum = 0;
 bool DampON = false;
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
@@ -784,46 +785,41 @@ void setupOLED()
 #ifdef HAS_BLEMIDI
 #define NUM_MIDI_DISP 3
 void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
-  uint8_t oct = note / 12; // middle C to B give 5
+  uint8_t const oct_hues[] = { 64, 192, 96, 224, 0, 128, 32, 160, 64};
+  uint8_t oct = note / 12 - 1; // middle C to B give 4
+  CRGB color;
+  switch (midiDispNum) {
+    case 0: //color by gHue
+      color = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
+      break;
+    case 1: // color by octave
+      color = CHSV(oct_hues[oct], 255, 32 + (velocity / 4) * 7);
+      break;
+    case 2: // color by velocity
+      color = CHSV(32 + (velocity / 4) * 7, 255, 32 + (velocity / 4) * 7);
+      break;
+
+  }
+  if (ScaleNotes.size() > 0) { // color by scale green if in, red if not
+    color = CHSV(0, 255, 32 + (velocity / 4) * 7);
+    for (uint8_t snote : ScaleNotes) {
+      if (((snote - note) % 12) == 0) {
+        color = CHSV(96, 255, 32 + (velocity / 4) * 7);
+        break;
+      }
+    }
+  }
   switch (midiDispNum) {
     case 0:
       // Here have middle C (midi 60) map to bottom of clock = 30 min.
       // Can only handle 60 notes so take modulo
-      // FastLED
-      //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
-      //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);// for FastLED gHue is 8 bits
-      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
+      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = color;
       break;
-    case 1:
-      //Map to 12 tones, color by octave
-      switch (oct) {
-        case 1:
-        case 7:
-          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 255, 0);
-          break;
-        case 2:
-        case 8:
-          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 0, 255);
-          break;
-        case 3:
-        case 9:
-          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 255, 0);
-          break;
-        case 4:
-          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 0, 255);
-          break;
-        case 5:
-          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 255, 0);
-          break;
-        case 6:
-        default:
-          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 255, 0);
-          break;
-      };
+    case 1: //Map to 12 tones, color by octave
+      strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = color;
       break;
-    case 2:
-      // Map to circle of fifths, color by gHue
-      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
+    case 2:  // Map to circle of fifths, color by velocity
+      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = color;
       break;
   };
 };
@@ -886,7 +882,7 @@ void setupBLEMIDI()
           sprintf(gBuffer, "HOLD OFF %d", millis() - t0);
           if (MidiControlMode) {
             MidiControlMode = false;
-            if (ScaleNotes.empty()) {
+            if (not PlayedScaleNote) {
               midiDispNum++;
               midiDispNum %= NUM_MIDI_DISP;
             }
@@ -900,6 +896,7 @@ void setupBLEMIDI()
           //   and other notes red
           if (numNotesDown == 0) {
             MidiControlMode = true;
+            PlayedScaleNote = false;
           }
         }
         Serial.println(gBuffer);
@@ -958,6 +955,7 @@ void setupBLEMIDI()
       setNoteOnLed(note, velocity, midiDispNum);
       if (MidiControlMode) {
         ScaleNotes.push_back(note);
+        PlayedScaleNote = true;
       }
       if (note == 108) { // top of piano
         ScaleNotes.clear();
