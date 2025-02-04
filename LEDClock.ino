@@ -190,13 +190,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-//#define TEST_CLOCK
+#define TEST_CLOCK
 //#define GBT_CLOCK
 //#define BRYN_CLOCK
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-#define BILL_CLOCK
+//#define BILL_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -207,15 +207,15 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
 #if defined BILL_CLOCK
-//#define HAS_INNER_RING
+#define HAS_INNER_RING
 #endif
 #if defined TEST_CLOCK
-//#define HAS_8X8_LED_MATRIX
-//#define HAS_INNER_RING
-#define HASMIC
-#define SENSOR_CUTOFF 100
-#define SENSOR_LOW_TIME 500
-#define SENSOR_HIGH_TIME 1000
+#define HAS_8X8_LED_MATRIX
+#define HAS_INNER_RING
+//#define HASMIC
+//#define SENSOR_CUTOFF 100
+//#define SENSOR_LOW_TIME 500
+//#define SENSOR_HIGH_TIME 1000
 #endif
 
 #define ONE_WEEK 604800 // seconds
@@ -502,7 +502,7 @@ ALARM alarmInfo[NUM_ALARMS];
 uint16_t time_elapsed = 0;
 
 #ifdef TEST_CLOCK
-int TopOfClock = 44; // for HAS_8X8_LED_MATRIX
+int TopOfClock = 30; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
 #elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK
@@ -569,11 +569,15 @@ bool scanMidi = false;
 bool midiIsConnected = false;
 bool gShowMidi = false;
 int8_t numNotesDown = 0;
+bool MidiControlMode = false;
 uint8_t midiDispNum = 0;
 bool DampON = false;
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
-uint16_t gHue = 0; // rotating "base color" used by many of the patterns
+std::vector <uint8_t>ScaleNotes;
+
 #endif
+uint16_t gHue = 0; // rotating "base color" used by many of the patterns
+
 // must be longer than longest message
 char gBuffer[400];
 
@@ -618,131 +622,65 @@ T nonNegMod(T n, U d ) {
 #ifndef HAS_8X8_LED_MATRIX
 ////////// Using physical LED rings
 #define NUM_LEDS 60
-CRGB strip_leds[NUM_LEDS];
-//Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-#ifdef HAS_INNER_RING
-Adafruit_NeoPixel stripinner = Adafruit_NeoPixel(NUM_INNER_LEDS, NEOPIXEL_INNER_PIN, NEO_GRB + NEO_KHZ800);
-#endif
+CRGB strip_leds[NUM_LEDS + 1]; //extra safety location
 
+// Safety pixel physically does not exist on strip
+// So nothing will happen if send command to it.
+#define SAFETY_PIXEL_IND NUM_LEDS
+// strip_leds embedding and bound safety check
+uint8_t SLE(uint8_t i) {
+  if (i > SAFETY_PIXEL_IND)
+  { return SAFETY_PIXEL_IND;
+  } else {
+    return i;
+  }
+}
+#ifdef HAS_INNER_RING
+CRGB stripinner_leds[NUM_INNER_LEDS + 1];
+#define SAFETY_INNER_IND NUM_INNER_LEDS
+//stripinnder_leds embedding and safety check
+uint8_t ILE(uint8_t i) {
+  if (i > SAFETY_INNER_IND)
+  { return SAFETY_INNER_IND;
+  } else {
+    return i;
+  }
+}
+#endif
 #else
-/////////// Using 8x8 LED MATRIX and making virtual rings
+/////////// Using 8x8 LED MATRIX and making virtual ring embeddings into matrix
 #define NUM_LEDS 64
-Adafruit_NeoPixel strip_physical = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-
-// Creates a virtual strip that is an embedding into a physical strip
-//   can treat is the same as Adafruit_NeoPixel strip
-class VirtualLEDStrip {
-  private:
-    Adafruit_NeoPixel& physical_containing_strip;
-    std::vector < uint8_t >path;
-    bool wrap;
-  public:
-    VirtualLEDStrip(Adafruit_NeoPixel& physical_containing_strip, std::vector < uint8_t >path, bool wrap = true)
-      : physical_containing_strip(physical_containing_strip), path(path), wrap(wrap) {
-    }
-    uint8_t lenPixels = path.size();
-
-    void begin() {
-      physical_containing_strip.begin();
-    }
-    void show() {
-      physical_containing_strip.show();
-    }
-    void setPixelColor(int n, uint32_t color) {
-      if (wrap | (n >= 0 & n < lenPixels)) {
-        physical_containing_strip.setPixelColor(path[nonNegMod(n, lenPixels)], color);
-      }
-    }
-
-    void setPixelColor(int n, uint8_t r, uint8_t g, uint8_t b) {
-      if (wrap | (n >= 0 & n < lenPixels)) {
-        physical_containing_strip.setPixelColor(path[nonNegMod(n, lenPixels)], r, g, b);
-      }
-    }
-
-    void fill(uint32_t color, int16_t stPix, uint16_t lenP) {
-      if (lenP > 0) {
-        for (int16_t n = stPix; n < stPix + lenP; n++) {
-          this->setPixelColor(n, color);
-        }
-      }
-    }
-
-    void clear() {
-      this->fill(0, 0, lenPixels);
-    }
-
-    void fill() {
-      this->fill(0, 0, lenPixels);
-    }
-
-    void fill(uint32_t color) {
-      this->fill(color, 0, lenPixels);
-    }
-
-    uint32_t getPixelColor(int n) const {
-      if (wrap | (n >= 0 & n < lenPixels)) {
-        return physical_containing_strip.getPixelColor(path[nonNegMod(n, lenPixels)]);
-      } else {
-        return 0;
-      }
-    }
-    //NOTE this affects whole physical_containing_strip
-    void setBrightness(uint8_t brightness) {
-      physical_containing_strip.setBrightness(brightness);
-    }
-
-    uint16_t numPixels() const {
-      return lenPixels;
-    }
-
-    uint32_t Color (uint8_t r, uint8_t g, uint8_t b) {
-      return physical_containing_strip.Color(r, g, b);
-    }
-
-    //TODO might be better way, these 3 following where static as they are same for all physical strips
-    uint32_t   gamma32 (uint32_t x) {
-      return physical_containing_strip.gamma32(x);
-    }
-
-    uint8_t   sine8 (uint8_t x) {
-      return physical_containing_strip.sine8(x);
-    }
-
-    uint32_t   ColorHSV (uint16_t hue, uint8_t sat = 255, uint8_t val = 255) {
-      return physical_containing_strip.ColorHSV (hue, sat, val);
-    }
-
-};
-
-
-//std::vector<uint8_t>path(NUM_LEDS);
-//TODO Why next line gives error here, but not similar in worm?
-//std::iota(path.begin(), path.end(), 0); // path will become: [0..NUM_LEDS-1]
-
-// start bottom right, scan left to right, bottom to top
-//std::vector < uint8_t >path =   {0,   1,  2,  3,  4,  5,  6,  7,       8, 9, 10, 11, 12, 13, 14, 15,    16, 17, 18, 19, 20, 21, 22, 23,    24, 25, 26, 27, 28, 29, 30, 31,     32, 33, 34, 35, 36, 37, 38, 39,     40, 41, 42, 43, 44, 45, 46, 47,    48, 49, 50, 51, 52, 53, 54, 55,      56, 57, 58, 59, 60, 61, 62, 63};
-// start bottom right, zig zag, scan left to right, then up one and right to left, etc
-//std::vector < uint8_t >path =   {0,   1,  2,  3,  4,  5,  6,  7,      15, 14, 13, 12, 11, 10, 9, 8,     16, 17, 18, 19, 20, 21, 22, 23,    31, 30, 29, 28, 27, 26, 25, 24,     32, 33, 34, 35, 36, 37, 38, 39,     47, 46, 45, 44, 43, 42, 41, 40,     48, 49, 50, 51, 52, 53, 54, 55,      63, 62, 61, 60, 59, 58, 57, 56};
-// start bottom right go clockwise around outside
-//std::vector < uint8_t >path =   {0, 1, 2, 3, 4, 5, 6, 7, 15, 23, 31, 39, 47, 55, 63, 62, 61, 60, 59, 58, 57, 56, 48, 40, 32, 24, 16, 8};
-// start bottom right spiral clockwise and inside
-//std::vector < uint8_t >path =     {0, 1, 2, 3, 4, 5, 6, 7, 15, 23, 31, 39, 47, 55, 63, 62, 61, 60, 59, 58, 57, 56, 48, 40, 32, 24, 16, 8,   9, 10, 11, 12, 13, 14,   22, 30, 38, 46,    54, 53, 52, 51, 50, 49,    41, 33, 25, 17,     18, 19, 20, 21,    29, 37,     45, 44, 43, 42,   34, 26,  27, 28, 36, 35};
-// 20 octagon
-//std::vector < uint8_t >path = {2,3,4,5,14,23,31,39,47, 54,61,60,59,58,49,40,32,24,16,9};
+CRGB strip_leds[NUM_LEDS + 1];
+#define SAFETY_PIXEL_IND NUM_LEDS
+// create maps from ledmatrix8x8 into strip and stripinner
 // 3x20 octagon
-std::vector < uint8_t >path60 = {2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 14, 14, 14, 23, 23, 23, 31, 31, 31, 39, 39, 39, 47, 47, 47, 54, 54, 54, 61, 61, 61, 60, 60, 60, 59, 59, 59, 58, 58, 58, 49, 49, 49, 40, 40, 40, 32, 32, 32, 24, 24, 24, 16, 16, 16, 9, 9, 9};
-
-VirtualLEDStrip strip(strip_physical, path60);
-
+uint8_t SLE(uint8_t i) {
+  const uint8_t Table60Ring[] = {2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 14, 14, 14, 23, 23, 23, 31, 31,
+                                 31, 39, 39, 39, 47, 47, 47, 54, 54, 54, 61, 61, 61, 60, 60, 60, 59, 59, 59, 58,
+                                 58, 58, 49, 49, 49, 40, 40, 40, 32, 32, 32, 24, 24, 24, 16, 16, 16, 9, 9, 9, 2
+                                };
+  if (i > 59)
+  { return SAFETY_PIXEL_IND;
+  } else {
+    return Table60Ring[i];
+  }
+}
 #ifdef HAS_INNER_RING
+// just another embedding on strip_leds
+// but give it a new name
+CRGB* const stripinner_leds(strip_leds);
 //3x8
-std::vector < uint8_t >path24 = {19, 19, 19, 20, 20, 20, 29, 29, 29, 37, 37, 37, 44, 44, 44, 43, 43, 43, 34, 34, 34, 26, 26, 26};
-VirtualLEDStrip stripinner(strip_physical, path24);
+uint8_t ILE(uint8_t i) {
+  const uint8_t Table24Ring[] = {19, 19, 19, 20, 20, 20, 29, 29, 29, 37, 37, 37, 44, 44, 44, 43, 43, 43, 34, 34, 34, 26, 26, 26};
+  if (i > 23)
+  { return SAFETY_PIXEL_IND;
+  } else {
+    return Table24Ring[i];
+  }
+}
 #endif
-
 #endif
-///////////////// END OF MAKING VIRTUAL LED RINGS INSIDE 8x8 LED MATRIX
+///////////////// END OF MAPS OF 60 Ring and 24 ring INSIDE 8x8 LED MATRIX
 
 //int LEDsegheights[NUM_LEDS]; // not implemented for worm
 
@@ -854,43 +792,38 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
       // FastLED
       //leds[note % 12].setHSV((note / 12 - 5) * 32, 255, velocity * 2);
       //leds[(note + 30) % 60].setHSV(gHue, 255, 32 + (velocity / 4) * 7);// for FastLED gHue is 8 bits
-      strip_leds[ClockCorrect((150 - note) % 60)] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
+      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
       break;
     case 1:
       //Map to 12 tones, color by octave
       switch (oct) {
         case 1:
         case 7:
-          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 255, 0);
+          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 255, 0);
           break;
         case 2:
         case 8:
-          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(0, 0, 255);
-          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 0, 0, 255);
+          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 0, 255);
           break;
         case 3:
         case 9:
-          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(0, 255, 0);
-          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 0, 255, 0);
+          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 255, 0);
           break;
         case 4:
-          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 0, 255);
-          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 255, 0, 255);
+          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 0, 255);
           break;
         case 5:
-          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 255, 0);
-          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 255, 255, 0);
+          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 255, 0);
           break;
         case 6:
         default:
-          strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(255, 255, 0);
-          //strip_leds[ClockCorrect(5 * ((150 - note) % 12)), 255, 255, 0);
+          strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(255, 255, 0);
           break;
       };
       break;
     case 2:
       // Map to circle of fifths, color by gHue
-      strip_leds[ClockCorrect(5 * (7 * (150 - note) % 12))] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
+      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
       break;
   };
 };
@@ -898,15 +831,15 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
 void setNoteOffLed(byte note, byte velocity, uint8_t midiDispNum) {
   switch (midiDispNum) {
     case 0:
-      strip_leds[ClockCorrect((150 - note) % 60)] = CRGB(0, 0, 0);
+      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CRGB(0, 0, 0);
       break;
     case 1:
       //Map to 12 tones
-      strip_leds[ClockCorrect(5 * ((150 - note) % 12))] = CRGB(0, 0, 0);
+      strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 0, 0);
       break;
     case 2:
       // Map to circle of fifths
-      strip_leds[ClockCorrect(5 * (7 * (150 - note) % 12))] = CRGB(0, 0, 0);
+      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = CRGB(0, 0, 0);
       break;
   }
 };
@@ -951,6 +884,13 @@ void setupBLEMIDI()
       case 66:
         if (value <= 64) {
           sprintf(gBuffer, "HOLD OFF %d", millis() - t0);
+          if (MidiControlMode) {
+            MidiControlMode = false;
+            if (ScaleNotes.empty()) {
+              midiDispNum++;
+              midiDispNum %= NUM_MIDI_DISP;
+            }
+          }
         } else {
           sprintf(gBuffer, "HOLD ON %d", millis() - t0);
           // no keys are down and Sostenuto (middle) pedal is pressed
@@ -959,8 +899,7 @@ void setupBLEMIDI()
           // then HOLD oof these notes will be colored green eg correct in scale
           //   and other notes red
           if (numNotesDown == 0) {
-            midiDispNum++;
-            midiDispNum %= NUM_MIDI_DISP;
+            MidiControlMode = true;
           }
         }
         Serial.println(gBuffer);
@@ -1017,6 +956,12 @@ void setupBLEMIDI()
     //digitalWrite(LED_BUILTIN, LOW);
     if (gShowMidi) {
       setNoteOnLed(note, velocity, midiDispNum);
+      if (MidiControlMode) {
+        ScaleNotes.push_back(note);
+      }
+      if (note == 108) { // top of piano
+        ScaleNotes.clear();
+      }
     }
     numNotesDown++;
     //Serial.printf("ON %d CH %d, note:%d, vel:%d", millis() - t0, channel, note, velocity);
@@ -1083,8 +1028,7 @@ void setup() {
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
   startOTA();                  // Start the OTA service
   startLittleFS();               // Start the LittleFS and list all contents
-  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(strip_leds, NUM_LEDS);
-  //FastLED.setDither(0);
+
   if (!loadConfig()) {
     Serial.println("Failed to load config will use defaults");
     // use default parameters
@@ -1123,20 +1067,25 @@ void setup() {
   startWebSocket();            // Start a WebSocket server
   startMDNS();                 // Start the mDNS responder
   startServer();               // Start a HTTP server with a file read handler and an upload handler
-  //strip.begin(); // This initializes the NeoPixel library.
-#ifdef HAS_INNER_RING
-  stripinner.begin();
-  stripinner.clear();
-  stripinner.show();
-#endif
+
 #ifdef HAS_OLED
   setupOLED();
 #endif
 #ifdef HAS_BLEMIDI
   setupBLEMIDI();
 #endif
+  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(strip_leds, NUM_LEDS);
+#ifdef HAS_INNER_RING
+#ifndef HAS_8x8_LED_MATRIX
+  // the inner ring is on a different strip
+  FastLED.addLeds<NEOPIXEL, NEOPIXEL_INNER_PIN>(stripinner_leds, NUM_INNER_LEDS);
+#endif
+#endif
+  //FastLED.setDither(0);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
+  //TODO Why get 'class CFastLED' has no member named 'set_max_power_indicator_LED'
+  //FastLED.set_max_power_indicator_LED(BUILTIN_LED);
   colorAll(CRGB( 255, 0, 0), 1000);
-  //fill_solid( &(strip_leds[0]), NUM_LEDS /*number of leds*/, CRGB( 255, 0, 0));
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
   randomSeed(now());
@@ -1311,6 +1260,10 @@ void limited_delay(int d) {
 
 void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int parm2, int parm3, int parm4, int parm5, int parm6, int parm7, int parm8) {
 
+#ifdef HAS_INNER_RING
+  fill_solid( &(stripinner_leds[0]), NUM_INNER_LEDS, CRGB(0, 0, 0));
+#endif
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0));
 
   int isecond = second(now());
   int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
@@ -1561,7 +1514,8 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       showlights(duration, random(100), random(100), random(100));
       break;
     case 37:
-      showlights(duration, random(10), random(10), random(10));
+      show_sinelon(parm1, duration);
+      //showlights(duration, random(10), random(10), random(10));
       break;
 
     case 38:
@@ -1583,9 +1537,10 @@ void show_alarm_pattern(byte light_alarm_num, uint16_t duration, int parm1, int 
       break;
 
   }
+
+  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0));
 #ifdef HAS_INNER_RING
-  stripinner.fill();
-  stripinner.show();
+  fill_solid( &(stripinner_leds[0]), NUM_INNER_LEDS, CRGB(0, 0, 0));
 #endif
 }
 
@@ -2896,8 +2851,8 @@ void Draw_Clock(time_t t, byte Phase)
 {
   if (Phase <= 0) {
     // Set all pixels black
-    for (int i = 0; i < NUM_LEDS; i++)
-      strip_leds[ClockCorrect(i)] = CRGB(0, 0, 0);
+    for (int i = 0; i < 60; i++)
+      strip_leds[SLE(ClockCorrect(i))] = CRGB(0, 0, 0);
   }
 
 
@@ -2905,17 +2860,17 @@ void Draw_Clock(time_t t, byte Phase)
   disp_ind = isDay ?  day_disp_ind : 4;
 
   if (Phase >= 1) // Draw all pixels background color
-    for (int i = 0; i < NUM_LEDS; i++)
-      strip_leds[ClockCorrect(i)] = CRGB(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b);
+    for (int i = 0; i < 60; i++)
+      strip_leds[SLE(ClockCorrect(i))] = CRGB(Background[disp_ind].r, Background[disp_ind].g, Background[disp_ind].b);
 
   if (Phase >= 2) // Draw 5 min divisions
-    for (int i = 0; i < NUM_LEDS; i = i + 5)
-      strip_leds[ClockCorrect(i)] = CRGB(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b); // for Phase = 2 or more, draw 5 minute divisions
+    for (int i = 0; i < 60; i = i + 5)
+      strip_leds[SLE(ClockCorrect(i))] = CRGB(Divisions[disp_ind].r, Divisions[disp_ind].g, Divisions[disp_ind].b); // for Phase = 2 or more, draw 5 minute divisions
 
   if (Phase >= 3) { // Draw 15 min markers
-    for (int i = 0; i < NUM_LEDS; i = i + 15)
-      strip_leds[ClockCorrect(i)] = CRGB(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b);
-    strip_leds[ClockCorrect(0)] = CRGB(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b);
+    for (int i = 0; i < 60; i = i + 15)
+      strip_leds[SLE(ClockCorrect(i))] = CRGB(Quarters[disp_ind].r, Quarters[disp_ind].g, Quarters[disp_ind].b);
+    strip_leds[SLE(ClockCorrect(0))] = CRGB(Twelve[disp_ind].r, Twelve[disp_ind].g, Twelve[disp_ind].b);
   }
 
   if (Phase >= 4) { // Draw hands
@@ -2923,10 +2878,10 @@ void Draw_Clock(time_t t, byte Phase)
     int iminute = (60 * minute(t) + isecond + 30) / 60; // round to nearest minute
     int ihour = ((hour(t) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
     //hour
-    strip_leds[ClockCorrect(ihour)] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
+    strip_leds[SLE(ClockCorrect(ihour))] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
     for (int i = 0; i <= hour_width[disp_ind]; i++) {
-      strip_leds[ClockCorrect(ihour - i)] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
-      strip_leds[ClockCorrect(ihour + i)] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
+      strip_leds[SLE(ClockCorrect(ihour - i))] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
+      strip_leds[SLE(ClockCorrect(ihour + i))] = CRGB(Hour[disp_ind].r, Hour[disp_ind].g, Hour[disp_ind].b);
     }
     //minute on top of hour
     CRGB use_color;
@@ -2937,18 +2892,18 @@ void Draw_Clock(time_t t, byte Phase)
       } else {
         use_color = CRGB(Minute[disp_ind].r / 2, Minute[disp_ind].g / 2, Minute[disp_ind].b / 2 );
       }
-      strip_leds[ClockCorrect(iminute)] = use_color;
+      strip_leds[SLE(ClockCorrect(iminute))] = use_color;
       for (int i = 1; i <= minute_width[disp_ind]; i++) {
-        strip_leds[ClockCorrect(iminute - i)] = use_color; // to help identification, minute hand flshes between normal and half intensity
-        strip_leds[ClockCorrect(iminute + i)] = use_color; // to help identification, minute hand flshes between normal and half intensity
+        strip_leds[SLE(ClockCorrect(iminute - i))] = use_color; // to help identification, minute hand flshes between normal and half intensity
+        strip_leds[SLE(ClockCorrect(iminute + i))] = use_color; // to help identification, minute hand flshes between normal and half intensity
       }
     }
     //second on top of both
     if (second_width[disp_ind] >= 0) {
-      strip_leds[ClockCorrect(isecond)] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
+      strip_leds[SLE(ClockCorrect(isecond))] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
       for (int i = 0; i <= second_width[disp_ind]; i++) {
-        strip_leds[ClockCorrect(isecond - i)] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
-        strip_leds[ClockCorrect(isecond + i)] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
+        strip_leds[SLE(ClockCorrect(isecond - i))] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
+        strip_leds[SLE(ClockCorrect(isecond + i))] = CRGB(SecHand[disp_ind].r, SecHand[disp_ind].g, SecHand[disp_ind].b);
       }
     }
   }
@@ -2965,7 +2920,7 @@ void SetBrightness() {
       FastLED.setBrightness(day_brightness);
       inuse_brightness = day_brightness;
 #ifdef HAS_INNER_RING
-      stripinner.setBrightness(day_brightness);
+      //stripinner.setBrightness(day_brightness);
 #endif
     }
   } else {
@@ -2973,7 +2928,7 @@ void SetBrightness() {
       FastLED.setBrightness(night_brightness);
       inuse_brightness = night_brightness;
 #ifdef HAS_INNER_RING
-      stripinner.setBrightness(night_brightness);
+      //stripinner.setBrightness(night_brightness);
 #endif
     }
   }
@@ -2984,9 +2939,9 @@ void SetBrightness() {
 int ClockCorrect(int Pixel)
 {
   if (ClockGoBackwards) {
-    Pixel = (2 * NUM_LEDS - Pixel) % NUM_LEDS;
+    Pixel = (2 * 60 - Pixel) % 60;
   }
-  Pixel = (Pixel + TopOfClock) % NUM_LEDS;
+  Pixel = (Pixel + TopOfClock) % 60;
   return (Pixel);
 }
 
@@ -3036,6 +2991,7 @@ void colorAll(CRGB color, int duration) {
   SetBrightness(); // Set the clock brightness dependant on the time
   FastLED.show();                          //  Update strip to match
   limited_delay(duration);                           //  Pause for a moment
+  fill_solid(strip_leds, NUM_LEDS, CRGB(0, 0, 0)); // clear
 }
 
 
@@ -3165,10 +3121,10 @@ void pattern_helper(int i, const HELPER_PARAM& Param) {
     pixelB = pixelBcol.b;
   }
 
-  strip_leds[ClockCorrect(i + Param.nodepix)] = CRGB(pixelR, pixelG, pixelB);
+  strip_leds[SLE(ClockCorrect(i + Param.nodepix))] = CRGB(pixelR, pixelG, pixelB);
 
 #ifdef HAS_INNER_RING
-  stripinner.setPixelColor(ClockCorrect(1 + i + Param.nodepix) * 2 / 5, pixelR, pixelG, pixelB);
+  stripinner_leds[ILE(ClockCorrect(i + Param.nodepix))] = CRGB(pixelR, pixelG, pixelB);
 #endif
   yield();
 }
@@ -3250,6 +3206,7 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   gHue = firsthue;
   while (((time_elapsed < duration) || (duration == 0)) && gShowMidi && midiIsConnected) {
     SetBrightness(); // Set the clock brightness dependent on the time
+    fadeToBlackBy(strip_leds, NUM_LEDS, 1);
     FastLED.show(); // Update strip with new contents
     // If piano gets turned off may scan during the delay
     limited_delay(wait);  // Pause for a moment
@@ -3274,11 +3231,10 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
   int i = 0; // starting index
   int maxcnt;
   fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
-  FastLED.show(); // Update strip with new contents
 #ifdef HAS_INNER_RING
-  stripinner.fill(); // clear
-  stripinner.show();
+  fill_solid( &(stripinner_leds[0]), NUM_INNER_LEDS, CRGB(0, 0, 0));
 #endif
+  FastLED.show(); // Update strip with new contents
   while (time_elapsed < duration) {
     if (blocksize > 0) {
       maxcnt = blocksize;
@@ -3312,9 +3268,6 @@ void color_wipe(HELPER_PARAM Param, int wait,  uint16_t duration, int blocksize)
 
     SetBrightness(); // Set the clock brightness dependant on the time
     FastLED.show(); // Update strip with new contents
-#ifdef HAS_INNER_RING
-    stripinner.show();
-#endif
     Param.nodepix = nodepix0 / 100;
     nodepix0 += nodepix_diff;
     nodepix0 = nonNegMod(nodepix0, 100 * NUM_LEDS);
@@ -3389,11 +3342,9 @@ class Worm
           if (true) //(this->height[x] >= LEDsegheights[this->path[segpos]])
           {
             if (this->colors[x] == 0) {
-              strip_leds[ClockCorrect(strippos + nodepix)] = CRGB(0, 0, 0);
-              //strip_leds[strippos, 0, 0, 0);
+              strip_leds[SLE(ClockCorrect(strippos + nodepix))] = CRGB(0, 0, 0);
             } else {
-              strip_leds[ClockCorrect(strippos + nodepix)] = CHSV(this->colors[x] / 256, 255, 255);
-              //strip_leds[strippos, strip.gamma32(strip.ColorHSV(this->colors[x])));
+              strip_leds[SLE(ClockCorrect(strippos + nodepix))] = CHSV(this->colors[x] / 256, 255, 255);
               //LEDsegheights[this->path[segpos]] = this->height[x];
             }
 
@@ -3472,7 +3423,7 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
   while (time_elapsed < duration) {
     fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
 #ifdef HAS_INNER_RING
-    stripinner.fill();
+    fill_solid( &(stripinner_leds[0]), NUM_INNER_LEDS, CRGB(0, 0, 0));
 #endif
     for (int i = 0; i < numff; i++) {
       pixel = random(NUM_LEDS);
@@ -3489,19 +3440,16 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
       Val = random(minVal, maxVal);
 #ifdef HAS_INNER_RING
       if (pixel % 2 == 0) {
-        stripinner.setPixelColor(pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+        stripinner_leds[ILE(pixel % NUM_INNER_LEDS)] = CHSV(pixelHue / 256, Sat, Val);
       } else {
-        strip_leds[pixel, strip.gamma32(strip.ColorHSV(pixelHue, Sat, Val)));
+        strip_leds[SLE(pixel)] = CHSV(pixelHue / 256, Sat, Val);
       }
 #else
-      strip_leds[pixel] = CHSV(pixelHue / 256, Sat, Val);
+      strip_leds[SLE(pixel)] = CHSV(pixelHue / 256, Sat, Val);
 #endif
     }
     SetBrightness(); // Set the clock brightness dependant on the time
     FastLED.show(); // Update strip with new contents
-#ifdef HAS_INNER_RING
-    stripinner.show(); // Update strip with new contents
-#endif
     yield();
     limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
@@ -3562,15 +3510,45 @@ void firefly(int wait, int numff, int minHue, int maxHue, uint16_t hueInc, uint8
 //void AddColor(uint8_t position, uint32_t color)
 //{
 //  uint32_t blended_color = Blend(strip.getPixelColor(position), color);
-//  strip_leds[position, blended_color);
+//  strip_leds[SLE(position)] = blended_color;
 //}
 
 //void SubstractColor(int position, CRGB color)
 //{
-//  CRGB blended_color = strip_leds[position] - color;
-//  strip_leds[position] = blended_color;
+//  CRGB blended_color = strip_leds[SLE(position)] - color;
+//  strip_leds[SLE(position)] = blended_color;
 //}
 
+//TODO does not work if embedding as in 8x8MATRIX
+//  need to have an embedded form of fill_solid
+void sinelon(CRGB color)
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( strip_leds, NUM_LEDS, 20);
+  int pos = beatsin16(15, 0, NUM_LEDS);
+  static int prevpos = 0;
+  if ( pos < prevpos ) {
+    fill_solid( strip_leds + pos, (prevpos - pos) + 1, color);
+  } else {
+    fill_solid( strip_leds + prevpos, (pos - prevpos) + 1, color);
+  }
+  prevpos = pos;
+}
+
+void show_sinelon(int wait, uint16_t duration) {
+  time_elapsed = 0;
+  //TODO why if gHue left global do color change to red after 1 cycle?
+  uint16_t gHue = 32000;
+  uint16_t time_start = millis();
+  while (time_elapsed < duration) {
+    sinelon(CHSV(gHue / 256, 255, 255));
+    SetBrightness(); // Set the clock brightness dependant on the time
+    FastLED.show(); // Update strip with new contents
+    yield();
+    FastLED.delay(wait); // Pause for a random moment
+    time_elapsed = millis() - time_start;
+  }
+}
 
 void fire(uint16_t duration, uint8_t r, uint8_t g, uint8_t b, uint8_t rd, uint8_t gd, uint8_t bd) {
   // defaults r=255, g=127, b=0, rd =1, gd=1, bd=2 for fire look
@@ -3585,7 +3563,7 @@ void fire(uint16_t duration, uint8_t r, uint8_t g, uint8_t b, uint8_t rd, uint8_
       int rr = random(255);
       uint8_t one  = 1;
       CRGB diff_color = CRGB ( rr / max(one, rd), rr / max(one, gd) , rr / max(one, bd));
-      strip_leds[i] -= diff_color;
+      strip_leds[SLE(i)] -= diff_color;
       //SubstractColor(i, diff_color);
     }
     SetBrightness(); // Set the clock brightness dependant on the time
@@ -3603,16 +3581,16 @@ void cellularAutomata(int wait, uint8_t rule, int pixelHue, uint16_t duration) {
   uint16_t time_start = millis();
   // initial state
   fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0));
-  strip_leds[0] = CHSV(pixelHue / 256, 255, 255);
+  strip_leds[SLE(0)] = CHSV(pixelHue / 256, 255, 255);
   while (time_elapsed < duration) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      uint8_t nbrs = ((strip_leds[i] != (CRGB)0) << 2) + ((strip_leds[(i + 1) % NUM_LEDS] != (CRGB)0) << 1) +  (strip_leds[(i + 2) % NUM_LEDS] != (CRGB)0);
+      uint8_t nbrs = ((strip_leds[SLE(i)] != (CRGB)0) << 2) + ((strip_leds[SLE((i + 1) % NUM_LEDS)] != (CRGB)0) << 1) +  (strip_leds[SLE((i + 2) % NUM_LEDS)] != (CRGB)0);
       next[(i + 1) % NUM_LEDS] = (rule >> nbrs) & 0x1;
     }
     fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
     for (int i = 0; i < NUM_LEDS; i++) {
       if (next[i]) {
-        strip_leds[i] =  CHSV(pixelHue / 256, 255, 255);
+        strip_leds[SLE(i)] =  CHSV(pixelHue / 256, 255, 255);
       }
     }
     SetBrightness(); // Set the clock brightness dependant on the time
@@ -3632,22 +3610,22 @@ void cellularAutomata(int wait, uint8_t ruleR, uint8_t ruleG, uint8_t ruleB, int
   uint16_t time_start = millis();
   // initial state
   fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0));
-  strip_leds[0].r = 255;
-  strip_leds[20].g = 255;
-  strip_leds[40].b = 255;
+  strip_leds[SLE(0)].r = 255;
+  strip_leds[SLE(20)].g = 255;
+  strip_leds[SLE(40)].b = 255;
   while (time_elapsed < duration) {
     for (int i = 0; i < NUM_LEDS; i++) {
       // have 3 CAs for r,g,b then use
-      uint8_t nbrsR = ((((uint8_t)(strip_leds[i].r)) != 0) << 2) + ((((uint8_t)(strip_leds[(i + 1) % NUM_LEDS].r)) != 0) << 1) +  (((uint8_t)(strip_leds[(i + 2) % NUM_LEDS].r)) != 0);
-      uint8_t nbrsG = ((((uint8_t)(strip_leds[i].g)) != 0) << 2) + ((((uint8_t)(strip_leds[(i + 1) % NUM_LEDS].g)) != 0) << 1) +  (((uint8_t)(strip_leds[(i + 2) % NUM_LEDS].g)) != 0);
-      uint8_t nbrsB = ((((uint8_t)(strip_leds[i].b)) != 0) << 2) + ((((uint8_t)(strip_leds[(i + 1) % NUM_LEDS].b)) != 0) << 1) +  (((uint8_t)(strip_leds[(i + 2) % NUM_LEDS].b)) != 0);
+      uint8_t nbrsR = ((((uint8_t)(strip_leds[SLE(i)].r)) != 0) << 2) + ((((uint8_t)(strip_leds[SLE((i + 1) % NUM_LEDS)].r)) != 0) << 1) +  (((uint8_t)(strip_leds[SLE((i + 2) % NUM_LEDS)].r)) != 0);
+      uint8_t nbrsG = ((((uint8_t)(strip_leds[SLE(i)].g)) != 0) << 2) + ((((uint8_t)(strip_leds[SLE((i + 1) % NUM_LEDS)].g)) != 0) << 1) +  (((uint8_t)(strip_leds[SLE((i + 2) % NUM_LEDS)].g)) != 0);
+      uint8_t nbrsB = ((((uint8_t)(strip_leds[SLE(i)].b)) != 0) << 2) + ((((uint8_t)(strip_leds[SLE((i + 1) % NUM_LEDS)].b)) != 0) << 1) +  (((uint8_t)(strip_leds[SLE((i + 2) % NUM_LEDS)].b)) != 0);
       nextR[(i + 1) % NUM_LEDS] = (ruleR >> nbrsR) & 0x1;
       nextG[(i + 1) % NUM_LEDS] = (ruleG >> nbrsG) & 0x1;
       nextB[(i + 1) % NUM_LEDS] = (ruleB >> nbrsB) & 0x1;
     }
     fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
     for (int i = 0; i < NUM_LEDS; i++) {
-      strip_leds[i] = CRGB( nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
+      strip_leds[SLE(i)] = CRGB( nextR[i] ? 100 : 0, nextG[i] ? 100 : 0, nextB[i] ? 100 : 0);
     }
     SetBrightness(); // Set the clock brightness dependant on the time
     FastLED.show(); // Update strip with new contents
@@ -3671,9 +3649,8 @@ void colorWipe(CRGB color, int wait) {
   int iminute = (60 * minute(now()) + isecond + 30) / 60; // round to nearest minute
   int ihour = ((hour(now()) % 12) * 5) + (iminute + 6) / 12; // round to nearest LED
   for (int i = 0; i < NUM_LEDS; i++) { // For each pixel in strip...
-    strip_leds[ClockCorrect(i + ihour + 30)] =  color;         //  Set pixel's color (in RAM)
-    strip_leds[ClockCorrect(-i + ihour + 30)] = color;         //  Set pixel's color (in RAM)
-    //strip_leds[i, color);         //  Set pixel's color (in RAM)
+    strip_leds[SLE(ClockCorrect(i + ihour + 30))] =  color;         //  Set pixel's color (in RAM)
+    strip_leds[SLE(ClockCorrect(-i + ihour + 30))] = color;         //  Set pixel's color (in RAM)
     SetBrightness(); // Set the clock brightness dependant on the time
     FastLED.show();                          //  Update strip to match
     yield();
@@ -3701,7 +3678,7 @@ void theaterChaseRainbow(uint16_t duration, int wait, uint16_t firstHue, int hue
           hue   = firstPixelHue + ClockCorrect(c) * 65536L * 120 / den / NUM_LEDS;
         }
         CRGB color = CHSV(hue / 256, 255, 255); // hue -> RGB
-        strip_leds[ClockCorrect(c)] = color; // Set pixel 'c' to value 'color'
+        strip_leds[SLE(ClockCorrect(c))] = color; // Set pixel 'c' to value 'color'
       }
       SetBrightness(); // Set the clock brightness dependant on the time
       FastLED.show();                // Update strip with new contents
