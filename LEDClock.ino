@@ -135,7 +135,7 @@
 
 #ifdef ESP32
 #define HAS_BLEMIDI
-//#define HAS_OLED
+#define HAS_OLED
 #endif
 
 
@@ -183,20 +183,20 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 ////////////////////// END OLED
 
-#ifndef LED_BUILTIN
-#define LED_BUILTIN 2 //modify for match with yout board
+#ifndef BUILTIN_LED
+#define BUILTIN_LED 2 //modify for match with yout board
 #endif
 
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-//#define TEST_CLOCK
+#define TEST_CLOCK
 //#define GBT_CLOCK
 //#define BRYN_CLOCK
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-#define BILL_CLOCK
+//#define BILL_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -501,8 +501,9 @@ ALARM alarmInfo[NUM_ALARMS];
 
 uint16_t time_elapsed = 0;
 
+//NOTE defaults if absent from config.json
 #ifdef TEST_CLOCK
-int TopOfClock = 30; // for HAS_8X8_LED_MATRIX
+int TopOfClock = 56; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
 #elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK
@@ -692,7 +693,6 @@ time_t nextAlarmTime;
 time_t nextModeTime;
 
 unsigned long prev_sound_time = 0;
-const int ESP_BUILTIN_LED = 2;
 
 
 /////////////////////// LittleFS routines ///////////////////
@@ -853,14 +853,14 @@ void setupBLEMIDI()
   {
     Serial.println("---------CONNECTED---------");
     midiIsConnected = true;
-    digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(BUILTIN_LED, HIGH);
   });
 
   BLEMIDI.setHandleDisconnected([]()
   {
     Serial.println("---------NOT CONNECTED---------");
     midiIsConnected = false;
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(BUILTIN_LED, LOW);
   });
 
   //https://nickfever.com/music/midi-cc-list
@@ -871,7 +871,7 @@ void setupBLEMIDI()
 
   MIDI.setHandleControlChange([](byte channel, byte number, byte value)
   {
-    //digitalWrite(LED_BUILTIN, LOW);
+    //digitalWrite(BUILTIN_LED, LOW);
     //Serial.printf("--- CC %d CH %d, number:%d, value:%d", millis() - t0, channel, number, value);
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     //display.print("ON %d CH %d, number:%d, value:%d\n", millis() - t0,  channel, number, value);
@@ -950,7 +950,7 @@ void setupBLEMIDI()
 
   MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity)
   {
-    //digitalWrite(LED_BUILTIN, LOW);
+    //digitalWrite(BUILTIN_LED, LOW);
     if (gShowMidi) {
       setNoteOnLed(note, velocity, midiDispNum);
       if (MidiControlMode) {
@@ -976,7 +976,7 @@ void setupBLEMIDI()
 
   MIDI.setHandleNoteOff([](byte channel, byte note, byte velocity)
   {
-    //digitalWrite(LED_BUILTIN, HIGH);
+    //digitalWrite(BUILTIN_LED, HIGH);
     //leds[note % 12] = CRGB::Black;
     //TODO need to handle SUST ON notes and HOLD ON
     //leds[(note + 30) % 60] = CRGB::Black;
@@ -1007,9 +1007,9 @@ void setupBLEMIDI()
                           NULL,
                           0); //Core0 or Core1
 
-  /// LED_BUILTIN
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
+  /// BUILTIN_LED
+  pinMode(BUILTIN_LED, OUTPUT);
+  digitalWrite(BUILTIN_LED, LOW);
 
   /// starttime
   t0 = millis();
@@ -1079,15 +1079,16 @@ void setup() {
   FastLED.addLeds<NEOPIXEL, NEOPIXEL_INNER_PIN>(stripinner_leds, NUM_INNER_LEDS);
 #endif
 #endif
-  //FastLED.setDither(0);
+  FastLED.setDither(1);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
-  //TODO Why get 'class CFastLED' has no member named 'set_max_power_indicator_LED'
+  //TODO NOTE'class CFastLED' has no member named 'set_max_power_indicator_LED'
+  // it is just a function defined in the FastLED library in power_mgt.cpp
   //FastLED.set_max_power_indicator_LED(BUILTIN_LED);
+  set_max_power_indicator_LED(BUILTIN_LED);
   colorAll(CRGB( 255, 0, 0), 1000);
   Draw_Clock(0, 3); // Add the quater hour indicators
   ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
   randomSeed(now());
-  //pinMode(ESP_BUILTIN_LED, OUTPUT);
 }
 
 /*___________________LOOP__________________________________________________________*/
@@ -2364,7 +2365,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //webSocket.sendTXT(num, buf);
         led_color_alarm_flag = true;
         led_color_alarm_rgb = CRGB((byte)(r >> 2), (byte)(g >> 2), (byte)(b >> 2));
-        //analogWrite(ESP_BUILTIN_LED, b); INTERFER with LED strip
         //Serial.printf("%d\n", b);
       } else if (payload[0] == 'V') {                      // browser sent V to save config file
         if (!saveConfig()) {
@@ -2423,7 +2423,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         //light_alarm_num = random(1, 40);
       } else if (payload[0] == 'L') {                      // the browser sends an L when the meLody effect is enabled
         sound_alarm_flag = true;
-        //digitalWrite(ESP_BUILTIN_LED, 1);  // turn off the LED
       } else if (payload[0] == 'W') {                      // the browser sends an W for What time?
         sprintf(buf, "WHATTIME%d:%02d:%02d %s %d %s %d", hour(), minute(), second(), daysOfWeek[weekday()].c_str(), day(), monthNames[month()].c_str(), year());
         webSocket.sendTXT(num, buf);
