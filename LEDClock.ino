@@ -135,7 +135,7 @@
 
 #ifdef ESP32
 #define HAS_BLEMIDI
-#define HAS_OLED
+//#define HAS_OLED
 #endif
 
 
@@ -190,13 +190,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
-#define TEST_CLOCK
+//#define TEST_CLOCK
 //#define GBT_CLOCK
 //#define BRYN_CLOCK
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-//#define BILL_CLOCK
+#define BILL_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -572,9 +572,13 @@ bool gShowMidi = false;
 int8_t numNotesDown = 0;
 bool MidiControlMode = false;
 bool PlayedScaleNote = false;
+bool HoldOn = false;
+bool SoftOn = false;
+uint8_t SustVal = 0;
 uint8_t midiDispNum = 0;
 bool DampON = false;
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
+uint8_t KeyVel[88] = {0};
 std::vector <uint8_t>ScaleNotes;
 
 #endif
@@ -783,7 +787,21 @@ void setupOLED()
 //// end setup OLED
 
 #ifdef HAS_BLEMIDI
+#define LOWEST_PIANO_MIDI 21
+#define TOP_PIANO_MIDI 108
 #define NUM_MIDI_DISP 3
+void setSustNotesOffLed() {
+  //shut off LEDS of all 0 vel keys
+  //This only works if notes 1-1 map to leds
+  //for (uint8_t note = LOWEST_PIANO_MIDI; note <= TOP_PIANO_MIDI; note++) {
+  //if (KeyVel[note - LOWEST_PIANO_MIDI] == 0) strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CRGB(0, 0, 0);
+  //}
+  // If mapping not 1-1 this clears the LED only if all notes that map to a given LED  have KeyVel zero
+  for (byte note = LOWEST_PIANO_MIDI; note <= TOP_PIANO_MIDI; note++) {
+    setNoteOffLed(note, 0, midiDispNum);
+  }
+}
+
 void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
   uint8_t const oct_hues[] = { 64, 192, 96, 224, 0, 128, 32, 160, 64};
   uint8_t oct = note / 12 - 1; // middle C to B give 4
@@ -825,19 +843,58 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
 };
 
 void setNoteOffLed(byte note, byte velocity, uint8_t midiDispNum) {
+  if (SustVal > 0) return;
+  //  Only works when embedding is injection, ie 2 notes don't go to same LED
+  //  switch (midiDispNum) {
+  //    case 0:
+  //      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CRGB(0, 0, 0);
+  //      break;
+  //    case 1:
+  //      //Map to 12 tones
+  //      strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 0, 0);
+  //      break;
+  //    case 2:
+  //      // Map to circle of fifths
+  //      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = CRGB(0, 0, 0);
+  //      break;
+  //  }
+  // This check all KeyVel that map to same LED, only set zero if all should be zero
+  bool clearLED = true;
+  uint8_t LEDind = 0;
   switch (midiDispNum) {
     case 0:
-      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CRGB(0, 0, 0);
+      for (uint8_t i = (note - LOWEST_PIANO_MIDI) % 60; i < 88; i += 60) {
+        if (KeyVel[i] != 0) {
+          clearLED = false;
+          break;
+        }
+      }
+      LEDind = SLE(ClockCorrect((150 - note) % 60));
       break;
     case 1:
       //Map to 12 tones
-      strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 0, 0);
+      // check is
+      for (uint8_t i = (note - LOWEST_PIANO_MIDI) % 12; i < 88; i += 12) {
+        if (KeyVel[i] != 0) {
+          clearLED = false;
+          break;
+        }
+      }
+      LEDind = SLE(ClockCorrect(5 * ((150 - note) % 12)));
       break;
     case 2:
       // Map to circle of fifths
-      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = CRGB(0, 0, 0);
+      // check is
+      for (uint8_t i = (note - LOWEST_PIANO_MIDI) % 12; i < 88; i += 12) {
+        if (KeyVel[i] != 0) {
+          clearLED = false;
+          break;
+        }
+      }
+      LEDind = SLE(ClockCorrect(5 * (7 * (150 - note) % 12)));
       break;
   }
+  if (clearLED) strip_leds[LEDind] = CRGB(0, 0, 0);
 };
 
 
@@ -866,7 +923,7 @@ void setupBLEMIDI()
   //https://nickfever.com/music/midi-cc-list
   //ON Kawai CA49
   //MIDI CC 64  Sustain Pedal  gives continuous ≤63 off, ≥64 on
-  //MIDI CC 66  Sostenuto Pedal on 127, off 0
+  //MIDI CC 66  Sostenuto (or Hold depressed keys) Pedal on 127, off 0
   //MIDI CC 67  Soft Pedal  on 127, off 0
 
   MIDI.setHandleControlChange([](byte channel, byte number, byte value)
@@ -879,6 +936,7 @@ void setupBLEMIDI()
     switch (number) {
       case 66:
         if (value <= 64) {
+          HoldOn = false;
           sprintf(gBuffer, "HOLD OFF %d", millis() - t0);
           if (MidiControlMode) {
             MidiControlMode = false;
@@ -888,6 +946,7 @@ void setupBLEMIDI()
             }
           }
         } else {
+          HoldOn = true;
           sprintf(gBuffer, "HOLD ON %d", millis() - t0);
           // no keys are down and Sostenuto (middle) pedal is pressed
           // will shift to next midiDisp
@@ -907,7 +966,8 @@ void setupBLEMIDI()
 #endif
         break;
       case 67:
-        sprintf(gBuffer, "SOFT %s %d", (value <= 64) ? "OFF " : "ON ", millis() - t0);
+        SoftOn = (value > 64);
+        sprintf(gBuffer, "SOFT %s %d", SoftOn ? "ON " : "OFF ", millis() - t0);
         Serial.println(gBuffer);
 #ifdef HAS_OLED
         scrollline();
@@ -916,8 +976,10 @@ void setupBLEMIDI()
 #endif
         break;
       case 64:
+        SustVal = value;
         if (value == 0) {
           DampON = false;
+          setSustNotesOffLed();
           Serial.println("SUST OFF");
 #ifdef HAS_OLED
           scrollline();
@@ -950,14 +1012,19 @@ void setupBLEMIDI()
 
   MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity)
   {
+    // velocity == 0 is alternative encoding of note off
+    // KAWAI doenst do this so leaving out. Also call is not quite right here
+    //if (velocity == 0) MIDI.setHandleNoteOff(channel, note, velocity);
+
     //digitalWrite(BUILTIN_LED, LOW);
+    KeyVel[note - LOWEST_PIANO_MIDI] = velocity;
     if (gShowMidi) {
       setNoteOnLed(note, velocity, midiDispNum);
       if (MidiControlMode) {
         ScaleNotes.push_back(note);
         PlayedScaleNote = true;
       }
-      if (note == 108) { // top of piano
+      if (note == TOP_PIANO_MIDI) { // top of piano
         ScaleNotes.clear();
       }
     }
@@ -976,6 +1043,8 @@ void setupBLEMIDI()
 
   MIDI.setHandleNoteOff([](byte channel, byte note, byte velocity)
   {
+    //midi specs doesnt require velocity to be zero will make it so
+    KeyVel[note - LOWEST_PIANO_MIDI] = 0;
     //digitalWrite(BUILTIN_LED, HIGH);
     //leds[note % 12] = CRGB::Black;
     //TODO need to handle SUST ON notes and HOLD ON
@@ -3181,6 +3250,7 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
 
   // Try for upto 10 sec to connect to piano
   uint16_t time_start = millis();
+  //uint16_t cnt = 0;
   scanMidi = true;
   time_elapsed = 0;
   while (time_elapsed < 10000) {
@@ -3203,11 +3273,16 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   gHue = firsthue;
   while (((time_elapsed < duration) || (duration == 0)) && gShowMidi && midiIsConnected) {
     SetBrightness(); // Set the clock brightness dependent on the time
-    fadeToBlackBy(strip_leds, NUM_LEDS, 1);
+    //cnt = (cnt + 1) % wait;
+    //EVERY_N_MILLISECONDS (wait) { //DIDNT WORK
+    EVERY_N_MILLISECONDS_DYNAMIC (wait) {
+      //if (cnt == 0) {
+      fadeToBlackBy(strip_leds, NUM_LEDS, 1);
+      gHue += hueinc;
+    }
     FastLED.show(); // Update strip with new contents
     // If piano gets turned off may scan during the delay
-    limited_delay(wait);  // Pause for a moment
-    gHue += hueinc;
+    //limited_delay(wait);  // Pause for a moment
     time_elapsed = millis() - time_start;
   }
   scanMidi = false;
