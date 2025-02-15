@@ -114,9 +114,6 @@
 #include "pitches.h"
 #include "sunset.h"
 
-//  MUST have this file which defines homeSSID and homePW
-//#include "localwificonfig.h"
-
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -580,6 +577,7 @@ bool DampON = false;
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 uint8_t KeyVel[88] = {0};
 std::vector <uint8_t>ScaleNotes;
+CRGB key_leds[88];
 
 #endif
 uint16_t gHue = 0; // rotating "base color" used by many of the patterns
@@ -790,15 +788,11 @@ void setupOLED()
 #define LOWEST_PIANO_MIDI 21
 #define TOP_PIANO_MIDI 108
 #define NUM_MIDI_DISP 3
+
 void setSustNotesOffLed() {
-  //shut off LEDS of all 0 vel keys
-  //This only works if notes 1-1 map to leds
-  //for (uint8_t note = LOWEST_PIANO_MIDI; note <= TOP_PIANO_MIDI; note++) {
-  //if (KeyVel[note - LOWEST_PIANO_MIDI] == 0) strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CRGB(0, 0, 0);
-  //}
-  // If mapping not 1-1 this clears the LED only if all notes that map to a given LED  have KeyVel zero
-  for (byte note = LOWEST_PIANO_MIDI; note <= TOP_PIANO_MIDI; note++) {
-    setNoteOffLed(note, 0, midiDispNum);
+  //shut off key_leds of all 0 vel keys
+  for (uint8_t i = 0; i < 88; i++) {
+    if (KeyVel[i] == 0) key_leds[i] = CRGB(0, 0, 0);
   }
 }
 
@@ -827,74 +821,12 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
       }
     }
   }
-  switch (midiDispNum) {
-    case 0:
-      // Here have middle C (midi 60) map to bottom of clock = 30 min.
-      // Can only handle 60 notes so take modulo
-      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = color;
-      break;
-    case 1: //Map to 12 tones, color by octave
-      strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = color;
-      break;
-    case 2:  // Map to circle of fifths, color by velocity
-      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = color;
-      break;
-  };
+  key_leds[note - LOWEST_PIANO_MIDI] = color;
 };
 
 void setNoteOffLed(byte note, byte velocity, uint8_t midiDispNum) {
   if (SustVal > 0) return;
-  //  Only works when embedding is injection, ie 2 notes don't go to same LED
-  //  switch (midiDispNum) {
-  //    case 0:
-  //      strip_leds[SLE(ClockCorrect((150 - note) % 60))] = CRGB(0, 0, 0);
-  //      break;
-  //    case 1:
-  //      //Map to 12 tones
-  //      strip_leds[SLE(ClockCorrect(5 * ((150 - note) % 12)))] = CRGB(0, 0, 0);
-  //      break;
-  //    case 2:
-  //      // Map to circle of fifths
-  //      strip_leds[SLE(ClockCorrect(5 * (7 * (150 - note) % 12)))] = CRGB(0, 0, 0);
-  //      break;
-  //  }
-  // This check all KeyVel that map to same LED, only set zero if all should be zero
-  bool clearLED = true;
-  uint8_t LEDind = 0;
-  switch (midiDispNum) {
-    case 0:
-      for (uint8_t i = (note - LOWEST_PIANO_MIDI) % 60; i < 88; i += 60) {
-        if (KeyVel[i] != 0) {
-          clearLED = false;
-          break;
-        }
-      }
-      LEDind = SLE(ClockCorrect((150 - note) % 60));
-      break;
-    case 1:
-      //Map to 12 tones
-      // check is
-      for (uint8_t i = (note - LOWEST_PIANO_MIDI) % 12; i < 88; i += 12) {
-        if (KeyVel[i] != 0) {
-          clearLED = false;
-          break;
-        }
-      }
-      LEDind = SLE(ClockCorrect(5 * ((150 - note) % 12)));
-      break;
-    case 2:
-      // Map to circle of fifths
-      // check is
-      for (uint8_t i = (note - LOWEST_PIANO_MIDI) % 12; i < 88; i += 12) {
-        if (KeyVel[i] != 0) {
-          clearLED = false;
-          break;
-        }
-      }
-      LEDind = SLE(ClockCorrect(5 * (7 * (150 - note) % 12)));
-      break;
-  }
-  if (clearLED) strip_leds[LEDind] = CRGB(0, 0, 0);
+  key_leds[note - LOWEST_PIANO_MIDI] = CRGB(0, 0, 0);
 };
 
 
@@ -3269,17 +3201,40 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   /// modifying the strip which gets shown in the while loop.
   time_elapsed = 0;
   time_start = millis();
-  fill_solid( &(strip_leds[0]), NUM_LEDS, CRGB(0, 0, 0)); // clear
+  fill_solid(key_leds, 88, CRGB(0, 0, 0)); // clear key_leds
   gHue = firsthue;
   while (((time_elapsed < duration) || (duration == 0)) && gShowMidi && midiIsConnected) {
     SetBrightness(); // Set the clock brightness dependent on the time
     //cnt = (cnt + 1) % wait;
-    //EVERY_N_MILLISECONDS (wait) { //DIDNT WORK
-    EVERY_N_MILLISECONDS_DYNAMIC (wait) {
+    //EVERY_N_MILLISECONDS (wait) { //only works if wait is a constant
+    EVERY_N_MILLISECONDS_DYNAMIC (wait) { // works when wait can vary eg parameter
       //if (cnt == 0) {
-      fadeToBlackBy(strip_leds, NUM_LEDS, 1);
+      fadeToBlackBy(key_leds, 88, 1);
       gHue += hueinc;
     }
+
+    // wrap key_leds onto strip_leds
+    fill_solid(strip_leds, NUM_LEDS, CRGB(0, 0, 0)); // clear strip
+
+    for (uint8_t i = 0; i < 88; i++) {
+      uint8_t LEDind = 0;
+      uint8_t note = i + LOWEST_PIANO_MIDI;
+      switch (midiDispNum) {
+        case 0: // middle C to bottom of clock eg 30 min spot
+          LEDind = SLE(ClockCorrect((150 - note) % 60));
+          break;
+        case 1: // twelve semi tones
+          LEDind = SLE(ClockCorrect(5 * ((150 - note) % 12)));
+          break;
+        case 2: // circle of fifths
+          LEDind = SLE(ClockCorrect(5 * (7 * (150 - note) % 12)));
+          break;
+      }
+      if (key_leds[i] > strip_leds[LEDind]) {
+        strip_leds[LEDind] = key_leds[i];
+      }
+    }
+
     FastLED.show(); // Update strip with new contents
     // If piano gets turned off may scan during the delay
     //limited_delay(wait);  // Pause for a moment
