@@ -1,4 +1,8 @@
 /*********
+  16 March 2025 noticed that for esp8266 as below when tried AutoConnectAP got exception
+     used ChatGTP and found that if the captive portal had an EXIT button, this would happen
+     so now only provide wifi button. If want to exit used 192.168.4.1/exit  OR
+     discconect from the AP and wait for timeout
   30 Jan 2025 can use FastLED on Esp8266 and webserver if use OLD versions
    and modify library code WebSockets 2.6.1 in files WebSocketsServer.cpp
    and comment out a line in  Arduino.h
@@ -204,7 +208,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
 #if defined BILL_CLOCK
-//#define HAS_INNER_RING
+#define HAS_INNER_RING
 #endif
 #if defined TEST_CLOCK
 #define HAS_8X8_LED_MATRIX
@@ -1919,17 +1923,35 @@ bool saveConfig() {
 void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
 
   IPAddress IP;
-  //WiFiManager wifiManager;
+  // Defined Globally
+  // WiFiManager wifiManager;
   Serial.println("Enter startWiFi");
+  wifiManager.setDebugOutput(true);
   //reset settings - wipe credentials for testing
   //wifiManager.resetSettings();
   wifiManager.setConnectTimeout(10);
   wifiManager.setConfigPortalTimeout(120);
   //automatically connect using saved credentials if they exist
-  //If connection fails it starts an access point with the specified name
-  //  and asks to connect, if that fails will keep asking unless EXIT is
-  //  pushed than will set up its own AP. The time will have to be set
-  //  and it won't go to NTP servers
+  //If connection fails after 10 sec it starts a captive portal AP, AutoConnectAP
+  //  and tries to connect for 120 seconds
+  //  if a connection is made some computers go to the captive portal (at 192.168.4.1)
+  //     otherwise go there manually. By selecting WIFI can specify credentials to use and SAVE
+  //  if no connection is made or
+  //  the connection is made and EXIT is pushed on the portal, or 192.168.4.1/exit used
+  //  or the connection is broken for 120 seconds another AP LED_Clock_Access_Point is
+  //  made and the clock gui found at 192.168.4.1
+  //  The time will be set whenever a websocket connection is made however it won't go to NTP servers
+  Serial.print("Free heap before WiFiManager: ");
+  Serial.println(ESP.getFreeHeap());
+#ifdef ESP8266
+  //BUT using esp8266 if have exit option in AutoConnectAP captive portal get exception
+  //std::vector<const char *> menu = {"wifi","info","param","sep","restart","exit"};
+  // can exit via 192.168.4.1/exit
+  // or log out of AutoConnectAP and wait for timeout
+  //std::vector<const char *> menu = {"wifi", "info"}; // port as wifi and info (which does lots that most users dont need)
+  std::vector<const char *> menu = {"wifi"}; // portal just gives wifi
+  wifiManager.setMenu(menu);
+#endif
   if (wifiManager.autoConnect("AutoConnectAP")) {
     Serial.println("connected...yeey :)");
   }
