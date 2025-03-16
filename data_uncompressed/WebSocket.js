@@ -36,7 +36,7 @@ connection.onmessage = function (e) {
       if (document.getElementById('numpattern').value === '') {
         document.getElementById('numpattern').value = 'other';
         document.getElementById('othernumpattern').hidden =  false;
-        document.getElementById('othernumpattern').value = alarminfo[3];
+        document.getElementById('othernumpattern').value = Math.abs(Number(alarminfo[3]));
       } else {
         document.getElementById('othernumpattern').hidden =  true;
       }
