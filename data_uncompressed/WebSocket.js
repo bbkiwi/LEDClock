@@ -67,7 +67,7 @@ connection.onmessage = function (e) {
 
       document.getElementById('alarmduration').value = Number(alarminfo[14]);
       savedate = new Date(Date.parse(alarminfo[15]));
-      document.getElementById('saveddatetime').innerHTML = savedate.toString().slice(0,-36);
+      document.getElementById('saveddatetime').innerHTML = alarminfo[15];
 
       if (alarminfo[2] === '1') {
         if (Number(alarminfo[3]) < 0) {
@@ -188,7 +188,7 @@ function pickerTimeDate(date) {
   var alarmnum = document.getElementById('alarmnum').value;
   savedate = date;
 	console.log(date.getDay(), date.getHours(), date, alarmnum);
-	document.getElementById('saveddatetime').innerHTML = date.toString().slice(0,-36);
+	document.getElementById('saveddatetime').innerHTML = savedate.toLocaleString();
 	//connection.send("A" + alarmnum + " " + date.getMonth() +" " + date);
 }
 

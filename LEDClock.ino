@@ -1954,24 +1954,43 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
 #endif
   if (wifiManager.autoConnect("AutoConnectAP")) {
     Serial.println("connected...yeey :)");
+#ifdef ESP8266
+    // Need this as ESP8266 often leaves AP running
+    // Explicitly disable the access point if STA mode succeeded
+    WiFi.softAPdisconnect(true);       // true = shut down any AP completely
+    WiFi.mode(WIFI_STA);               // STA-only mode
+#endif
   }
   else {
+    Serial.println("AutoConnectAP failed or timed out");
 #ifdef ESP8266
     // This is a BUG FIX where when using WiFiManger trying to use the
     //  same ssid as last run for the softAP fails.
+    //From ChatGPT: You're on ESP8266 Core 2.7.4 (which has known issues around reusing SSIDs after WiFiManager).
+    //Even though you're resetting the mode, softAP doesn't overwrite the previous SSID properly
+    //unless it's different from the last run — which is why your old "TempHackAP" workaround worked.
     WiFi.softAP("TempHackAP");
-    Serial.print("Using ssid TempHackAP the esp8266 used ");
-    Serial.print(WiFi.softAPSSID());
-    IP = WiFi.softAPIP();
-    Serial.print(" with IP = ");
-    Serial.println(IP);
+    delay(100);
+    WiFi.softAPdisconnect(true);
+    delay(100);
+    WiFi.mode(WIFI_OFF);
+    delay(100);
+    WiFi.mode(WIFI_AP);
+    delay(100);
 #endif
-    Serial.println("Setting AP (Access Point)…");
-    // Remove the password parameter, if you want the AP (Access Point) to be open
-    WiFi.softAP(ssid, password);
-    Serial.print("Using ssid that is wanted the esp8266 used ");
-    Serial.print(WiFi.softAPSSID()); // note using Serial.printf does not work for this???
-    IP = WiFi.softAPIP();
+    // Now start fallback AP
+    Serial.print("Trying to create AP with SSID: ");
+    Serial.println(ssid);
+    bool apSuccess = WiFi.softAP(ssid, password);
+    delay(100);  // Let AP stabilize
+    if (apSuccess) {
+      Serial.println("Fallback AP started successfully");
+    } else {
+      Serial.println("Failed to start fallback AP!");
+    }
+    IPAddress IP = WiFi.softAPIP();
+    Serial.print("Using SSID: ");
+    Serial.print(WiFi.softAPSSID());
     Serial.print(" with IP = ");
     Serial.println(IP);
   }
