@@ -509,7 +509,7 @@ int TopOfClock = 56; // for HAS_8X8_LED_MATRIX
 int TopOfClock = 27;
 #elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK
 int TopOfClock = 4;
-#elis defined JOHN_CLOCK
+#elif defined JOHN_CLOCK
 int TopOfClock = 19;
 #elif defined BILL_LKIWI_CLOCK
 int TopOfClock = 42;
