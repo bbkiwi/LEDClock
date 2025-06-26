@@ -64,6 +64,7 @@
   Hash 1.0 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\3.1.1\libraries\Hash
 
   Tested on ESP32, LOLIN D32
+  MUST Use FastLED 3.9.13
   WiFi   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\WiFi
   Network   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\Network
   WebServer   3.0.7 in folder: C:\Users\Bill\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.0.7\libraries\WebServer
@@ -197,7 +198,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-#define BILL_CLOCK
+//#define BILL_CLOCK
+#define PIANO_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -266,6 +268,9 @@ const char *OTAandMdnsName = "BillLKIWIClock";           // A name and a passwor
 #ifdef BILL_CLOCK
 const char *OTAandMdnsName = "BILLLEDClock";           // A name and a password for the OTA and mDns service
 #endif
+#ifdef PIANO_CLOCK
+const char *OTAandMdnsName = "PianoClock";           // A name and a password for the OTA and mDns service
+#endif
 const char *OTAPassword = "ledclock";
 
 // must be longer than longest message
@@ -319,7 +324,7 @@ RGBInfo SecHand[NUM_DISP_OPTIONS] = {{ 0, 0, 255 }, { 0, 0, 0 }, { 0, 0, 255 }, 
 #if defined BEDROOM_CLOCK || defined BILL_LKIWI_CLOCK
 bool ClockGoBackwards = true;
 #endif
-#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined BILL_CLOCK || defined BRYN_CLOCK || defined JOHN_CLOCK || defined JAPAN_KIWI_CLOCK
+#if defined IRIS_CLOCK || defined TEST_CLOCK || defined GBT_CLOCK || defined BILL_CLOCK || defined PIANO_CLOCK || defined BRYN_CLOCK || defined JOHN_CLOCK || defined JAPAN_KIWI_CLOCK
 bool ClockGoBackwards = false;
 #endif
 
@@ -433,29 +438,7 @@ struct PATTERN {
   int16_t n1;
   int16_t n2;
 };
-/*
-  struct HELPER_PARAM {
-  int nodepix = 0;
-  int coef0 = 0;
-  int coef1 = 0;
-  int coef2 = 0;
-  PATTERN Red;
-  PATTERN Green;
-  PATTERN Blue;
-  PATTERN Bright;
-  PATTERN Hue;
-  };
 
-  struct PATTERN {
-  uint16_t first = 0;
-  int16_t inc = 0;
-  int16_t nfrac = 0;
-  uint8_t embedding = 1;
-  int16_t n0 = 0;
-  int16_t n1 = 0;
-  int16_t n2 = 0;
-  };
-*/
 struct HELPER_PARAM {
   int nodepix;
   int coef0;
@@ -507,6 +490,8 @@ uint16_t time_elapsed = 0;
 int TopOfClock = 56; // for HAS_8X8_LED_MATRIX
 #elif defined BILL_CLOCK
 int TopOfClock = 27;
+#elif defined PIANO_CLOCK
+int TopOfClock = 11;
 #elif defined BRYN_CLOCK || defined JAPAN_KIWI_CLOCK
 int TopOfClock = 4;
 #elif defined JOHN_CLOCK
@@ -544,7 +529,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", hourOff_CST * 3600, update_interval
 #if defined BEDROOM_CLOCK
 #define NEOPIXEL_PIN 3      // For Bedroom clock This is the D9 pin RX
 #endif
-#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined BILL_LKIWI_CLOCK || defined JAPAN_KIWI_CLOCK || defined BILL_CLOCK  || defined BRYN_CLOCK || defined JOHN_CLOCK
+#if defined IRIS_CLOCK || defined GBT_CLOCK || defined TEST_CLOCK || defined BILL_LKIWI_CLOCK || defined JAPAN_KIWI_CLOCK || defined BILL_CLOCK || defined PIANO_CLOCK  || defined BRYN_CLOCK || defined JOHN_CLOCK
 #define NEOPIXEL_PIN 4      // This is the D2 pin
 #endif
 #ifdef HAS_INNER_RING
@@ -571,18 +556,19 @@ bool scanMidi = false;
 bool midiIsConnected = false;
 bool gShowMidi = false;
 int8_t numNotesDown = 0;
-bool MidiControlMode = false;
+bool MidiColorControlMode = false;
+bool MidiDispControlMode = false;
 bool PlayedScaleNote = false;
 bool HoldOn = false;
 bool SoftOn = false;
 uint8_t SustVal = 0;
+uint8_t midiColorNum = 0;
 uint8_t midiDispNum = 0;
-bool DampON = false;
-uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
+bool DampersLifted = false;
 uint8_t KeyVel[88] = {0};
 std::vector <uint8_t>ScaleNotes;
 CRGB key_leds[88];
-
+CRGB key_leds_copy[88];
 #endif
 uint16_t gHue = 0; // rotating "base color" used by many of the patterns
 
@@ -791,8 +777,8 @@ void setupOLED()
 #ifdef HAS_BLEMIDI
 #define LOWEST_PIANO_MIDI 21
 #define TOP_PIANO_MIDI 108
-#define NUM_MIDI_DISP 3
-
+#define NUM_MIDI_DISP 6
+#define NUM_MIDI_COLOR 3
 void setSustNotesOffLed() {
   //shut off key_leds of all 0 vel keys
   for (uint8_t i = 0; i < 88; i++) {
@@ -800,11 +786,11 @@ void setSustNotesOffLed() {
   }
 }
 
-void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
+void setNoteOnLed(byte note, byte velocity, uint8_t midiColorNum) {
   uint8_t const oct_hues[] = { 64, 192, 96, 224, 0, 128, 32, 160, 64};
   uint8_t oct = note / 12 - 1; // middle C to B give 4
   CRGB color;
-  switch (midiDispNum) {
+  switch (midiColorNum) {
     case 0: //color by gHue
       color = CHSV(gHue / 256, 255, 32 + (velocity / 4) * 7);
       break;
@@ -828,8 +814,7 @@ void setNoteOnLed(byte note, byte velocity, uint8_t midiDispNum) {
   key_leds[note - LOWEST_PIANO_MIDI] = color;
 };
 
-void setNoteOffLed(byte note, byte velocity, uint8_t midiDispNum) {
-  if (SustVal > 0) return;
+void setNoteOffLed(byte note) {
   key_leds[note - LOWEST_PIANO_MIDI] = CRGB(0, 0, 0);
 };
 
@@ -869,28 +854,34 @@ void setupBLEMIDI()
     //Serial.printf("  cursor at %d, %d\n", display.getCursorX(), display.getCursorY());
     //display.print("ON %d CH %d, number:%d, value:%d\n", millis() - t0,  channel, number, value);
 
+    //TODO need to make control of midi options using pedals more intuitive
+    //Now. Middle pedal controls display color hold down can enter scale (rightmost key cancels)
+    //     otherwise each push and release toggles to next mode
+    //    Left pedal controls display type. Press left, then press middle and hold, then release left to switch display,
+    //                               press/release more to continue cycling thru display, finally release middle
     switch (number) {
-      case 66:
-        if (value <= 64) {
+      case 66: // Middle pedal sostenuto eg hold depressed keys
+        if (value <= 64) { // middle pedal has been released
           HoldOn = false;
           sprintf(gBuffer, "HOLD OFF %d", millis() - t0);
-          if (MidiControlMode) {
-            MidiControlMode = false;
+          if (MidiColorControlMode) {
+            MidiColorControlMode = false;
             if (not PlayedScaleNote) {
-              midiDispNum++;
-              midiDispNum %= NUM_MIDI_DISP;
+              midiColorNum++;
+              midiColorNum %= NUM_MIDI_COLOR;
             }
           }
-        } else {
+        } else { // middle pedal has been pushed down
           HoldOn = true;
           sprintf(gBuffer, "HOLD ON %d", millis() - t0);
-          // no keys are down and Sostenuto (middle) pedal is pressed
-          // will shift to next midiDisp
-          //TODO could have option if play notes after hold down (eg scale)
-          // then HOLD oof these notes will be colored green eg correct in scale
+          // if no keys were down when Sostenuto (middle) pedal is pressed
+          //  AND Soft (left) is NOT pressed
+          // and if play notes after hold down (eg scale)
+          //   then will save these notes to be colored green eg correct in scale
           //   and other notes red
-          if (numNotesDown == 0) {
-            MidiControlMode = true;
+          // otherwise will shift to next midiDisp when pedal is released
+          if (!SoftOn && (numNotesDown == 0)) {
+            MidiColorControlMode = true;
             PlayedScaleNote = false;
           }
         }
@@ -901,9 +892,25 @@ void setupBLEMIDI()
         display.display();
 #endif
         break;
-      case 67:
-        SoftOn = (value > 64);
-        sprintf(gBuffer, "SOFT %s %d", SoftOn ? "ON " : "OFF ", millis() - t0);
+
+      case 67: // Leftmost pedal soft
+        if (value <= 64) { // left pedal has been released
+          SoftOn = false;
+          sprintf(gBuffer, "SOFT OFF %d", millis() - t0);
+          if (MidiDispControlMode) {
+            MidiDispControlMode = false;
+            midiDispNum++;
+            midiDispNum %= NUM_MIDI_DISP;
+          }
+        } else { // left pedal has been pushed down
+          SoftOn = true;
+          sprintf(gBuffer, "SOFT ON %d", millis() - t0);
+          // if no keys were down when Soft (left) AND Hold (middle) pedals are pressed
+          // will shift to next midiDisp when pedal is released
+          if (HoldOn && (numNotesDown == 0)) {
+            MidiDispControlMode = true;
+          }
+        }
         Serial.println(gBuffer);
 #ifdef HAS_OLED
         scrollline();
@@ -911,10 +918,23 @@ void setupBLEMIDI()
         display.display();
 #endif
         break;
-      case 64:
+
+      //      case 67: // Soft pedal leftmost
+      //        // TODO currently no special action
+      //        SoftOn = (value > 64);
+      //        sprintf(gBuffer, "SOFT %s %d", SoftOn ? "ON " : "OFF ", millis() - t0);
+      //        Serial.println(gBuffer);
+      //#ifdef HAS_OLED
+      //        scrollline();
+      //        display.println(gBuffer);
+      //        display.display();
+      //#endif
+      //        break;
+
+      case 64: // Sustain pedal
         SustVal = value;
-        if (value == 0) {
-          DampON = false;
+        if (value == 0) { // pedal is up
+          DampersLifted = false;
           setSustNotesOffLed();
           Serial.println("SUST OFF");
 #ifdef HAS_OLED
@@ -923,8 +943,9 @@ void setupBLEMIDI()
           display.println(millis() - t0);
           display.display();
 #endif
-        } else if (!DampON) {
-          DampON = true;
+        } else if (!DampersLifted) {
+          // Only do this once as pedal when pushed sends midi continously
+          DampersLifted = true;
           Serial.println("SUST ON");
 #ifdef HAS_OLED
           scrollline();
@@ -955,12 +976,12 @@ void setupBLEMIDI()
     //digitalWrite(BUILTIN_LED, LOW);
     KeyVel[note - LOWEST_PIANO_MIDI] = velocity;
     if (gShowMidi) {
-      setNoteOnLed(note, velocity, midiDispNum);
-      if (MidiControlMode) {
+      setNoteOnLed(note, velocity, midiColorNum);
+      if (MidiColorControlMode) {
         ScaleNotes.push_back(note);
         PlayedScaleNote = true;
       }
-      if (note == TOP_PIANO_MIDI) { // top of piano
+      if (note == TOP_PIANO_MIDI) { // top of piano will cancel saved musical scale
         ScaleNotes.clear();
       }
     }
@@ -986,7 +1007,9 @@ void setupBLEMIDI()
     //TODO need to handle SUST ON notes and HOLD ON
     //leds[(note + 30) % 60] = CRGB::Black;
     if (gShowMidi) {
-      setNoteOffLed(note, velocity, midiDispNum);
+      if (SustVal == 0) {
+        setNoteOffLed(note);
+      }
     }
     numNotesDown--;
     //Serial.printf("OFF %d CH %d, note:%d, vel:%d", millis() - t0,  channel, note, velocity);
@@ -3210,6 +3233,59 @@ void color_wipe(int wait, uint8_t embedding, uint16_t firsthue, int16_t hueinc, 
 }
 
 #ifdef HAS_BLEMIDI
+
+#define NUM_KEY_LEDS 88
+// Helper function to calculate brightness using quad-weighted method
+//ChatGPT assist
+uint8_t getBrightness(const CRGB& c) {
+  return qadd8(qadd8(c.r, c.g), c.b);
+  //closer to what eye sees
+  //return qadd8(qadd8(c.r, c.r), qadd8(c.g, c.g / 2)) > c.b ? qadd8(qadd8(c.r, c.r), qadd8(c.g, c.g / 2)) : c.b;
+}
+
+//ChatGPT assist
+void fill_gaps_between_colored_leds(
+  CRGB* leds,                   // The LED array to operate on
+  uint8_t num_leds,             // Total number of LEDs
+  const uint8_t* gap_sizes,     // List of gap sizes to fill (e.g., {2,3,4})
+  const CHSV* gap_colors_hsv,   // Corresponding HSV fill colors (scaled later)
+  uint8_t num_rules             // Number of gap rules (size of gap_sizes and gap_colors_hsv arrays)
+) {
+  for (uint8_t left_key = 0; left_key < num_leds - 1; ++left_key) {
+    if (leds[left_key] != CRGB::Black) {
+      for (uint8_t right_key = left_key + 1; right_key < num_leds; ++right_key) {
+        if (leds[right_key] != CRGB::Black) {
+          uint8_t gap_size = right_key - left_key - 1;
+
+          for (uint8_t i = 0; i < num_rules; ++i) {
+            if (gap_size == gap_sizes[i]) {
+              // Estimate minimum brightness
+              uint8_t b1 = getBrightness(leds[left_key]);
+              uint8_t b2 = getBrightness(leds[right_key]);
+              uint8_t bmin = min(b1, b2);
+
+              // Create scaled fill color
+              CRGB fill_color;
+              fill_color.setHSV(gap_colors_hsv[i].hue, gap_colors_hsv[i].sat, bmin);
+
+              // Fill gap manually (since fill_solid isn't worth the overhead for small fills)
+              for (uint8_t gap_key = left_key + 1; gap_key < right_key; ++gap_key) {
+                leds[gap_key] = fill_color;
+              }
+
+              break; // Stop checking rules once matched
+            }
+          }
+
+          left_key = right_key - 1;
+          break;
+        }
+      }
+    }
+  }
+}
+
+
 //void midipiano(HELPER_PARAM Param, int wait, int16_t hueinc,  uint16_t duration) {
 void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
   sprintf(buf, "midipiano wait=%d, hueinc=%d, duration=%d", wait, hueinc, duration);
@@ -3237,7 +3313,7 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
     return;
   }
   /// If get here the piano is attached and MIDI.read() being called
-  ///here gShowMidi in while starts true, so setNoteOnLED and setNoteOffLED
+  /// here gShowMidi in while starts true, so setNoteOnLed and setNoteOffLed
   /// will be called when piano keys are pressed down and release up thus
   /// modifying the strip which gets shown in the while loop.
   time_elapsed = 0;
@@ -3254,6 +3330,16 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
       gHue += hueinc;
     }
 
+    // make copy of key_leds and possibly modify
+    memmove8(key_leds_copy, key_leds, 88 * sizeof(CRGB));
+
+    if (midiDispNum > 2) {
+      // insert color in gap between minor, major thirds and fourths
+      uint8_t gap_sizes[] = {2, 3, 4};
+      CHSV gap_colors_hsv[] = {CHSV(HUE_BLUE, 255, 255), CHSV(HUE_RED, 255, 255), CHSV(HUE_GREEN, 255, 255)};
+      fill_gaps_between_colored_leds(key_leds_copy, NUM_KEY_LEDS, gap_sizes, gap_colors_hsv, sizeof(gap_sizes));
+    }
+
     // wrap key_leds onto strip_leds
     fill_solid(strip_leds, NUM_LEDS, CRGB(0, 0, 0)); // clear strip
 
@@ -3262,17 +3348,21 @@ void midipiano(int wait, uint16_t firsthue, int16_t hueinc, uint16_t duration) {
       uint8_t note = i + LOWEST_PIANO_MIDI;
       switch (midiDispNum) {
         case 0: // middle C to bottom of clock eg 30 min spot
+        case 3:
           LEDind = SLE(ClockCorrect((150 - note) % 60));
           break;
         case 1: // twelve semi tones
+        case 4:
           LEDind = SLE(ClockCorrect(5 * ((150 - note) % 12)));
           break;
         case 2: // circle of fifths
+        case 5:
           LEDind = SLE(ClockCorrect(5 * (7 * (150 - note) % 12)));
           break;
       }
-      if (key_leds[i] > strip_leds[LEDind]) {
-        strip_leds[LEDind] = key_leds[i];
+
+      if (key_leds_copy[i] > strip_leds[LEDind]) {
+        strip_leds[LEDind] = key_leds_copy[i];
       }
     }
 
