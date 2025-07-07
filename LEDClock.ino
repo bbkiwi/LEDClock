@@ -198,8 +198,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-//#define BILL_CLOCK
-#define PIANO_CLOCK
+#define BILL_CLOCK
+//#define PIANO_CLOCK
 
 #if defined BEDROOM_CLOCK
 #define MUSIC
@@ -2577,7 +2577,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
       } else if (payload[0] == 'C') {  // the browser sends an C to compute sunsets and also when websocket started sent Connect with time and date
         //Connect Sat Dec 14 2024 14:27:16 GMT+1300 (New Zealand Daylight Time)
-        // Check if time and date info present and can use to set clock if running as AP
+        Serial.printf("Compute Sunsets\n");
+        calcSun();
+        // Check if clock not yet initialized and  time and date info present and can use to set clock if running as AP
         if ((length > 34) and (not ClockInitialized)) {
           char Aday[4]; //3 char
           char Amonth[4]; //3 char
@@ -2590,10 +2592,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           sscanf((char *) payload, "Connect %d %s %s %2d %4d %2d:%2d:%2d ", &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute, &Asecond);
           Serial.printf("Time read day %s month %s(%d) date %d year %d time %d:%02d:%02d\n", Aday, Amonth, AmonthNum + 1, Adate, Ayear, Ahour, Aminute, Asecond );
           ClockSetViaWebsocket = true;
+          isDay = not nextModeIsDay;
           setTime(Ahour, Aminute, Asecond, Adate, AmonthNum + 1, Ayear);
         }
-        Serial.printf("Compute Sunsets\n");
-        calcSun();
       }
       break;
     default:
@@ -2857,6 +2858,10 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
 
 }
 
+bool internetAvailable() {
+  WiFiClient client;
+  return client.connect("8.8.8.8", 53);  // Google DNS
+}
 
 bool SetClockFromNTP()
 {
@@ -2865,8 +2870,13 @@ bool SetClockFromNTP()
   //Serial.println("Trying to get info from NTP");
   if (WiFi.status() == WL_CONNECTED)
   {
-    //Serial.println("  Connected to try timeClient update");
-    updated = timeClient.update();
+    // Check if internet available and DNS resolution is working
+    //   needed at startup to prevent slow wifi and failed websocket if LAN is up but WAN is down
+    IPAddress testIP;
+    if (internetAvailable() && WiFi.hostByName("pool.ntp.org", testIP)) {
+      Serial.println("Internet Available and DNS working so call NTP update.");
+      updated = timeClient.update();
+    }
   }
   // only starting using setTime once timeClient.update() has returned True once then it will have set EpochTime
   if (ClockInitialized) {
@@ -2875,6 +2885,7 @@ bool SetClockFromNTP()
   }
   return updated;
 }
+
 
 bool IsDst()
 {
