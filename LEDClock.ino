@@ -544,7 +544,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", hourOff_CST * 3600, update_interval
 void Draw_Clock(time_t t, byte Phase);
 int ClockCorrect(int Pixel);
 void SetBrightness();
-bool SetClockFromNTP();
+void SetClockFromNTP();
 bool IsDst();
 void limited_delay(int d);
 #ifdef HAS_BLEMIDI
@@ -1115,7 +1115,7 @@ void setup() {
   set_max_power_indicator_LED(BUILTIN_LED);
   colorAll(CRGB( 255, 0, 0), 1000);
   Draw_Clock(0, 3); // Add the quater hour indicators
-  ClockInitialized = SetClockFromNTP(); //// sync first time, updates system clock and adjust it for daylight savings
+  SetClockFromNTP(); //// if can connect to NTP, sets ClockInitialized, syncs first time, updates system clock and adjust it for daylight savings
   randomSeed(now());
 }
 
@@ -1150,13 +1150,6 @@ void loop() { // runs on core1
   }
 #endif
 
-  // Check for mode_change and update isDay when change occures
-  if (prevDisplay >= nextModeTime) {
-    isDay = nextModeIsDay;
-    calcSun();
-    sprintf(buf, "\nIn loop modechange at %lld to %lld of %d\n", prevDisplay, nextModeTime, nextModeIsDay );
-    Serial.println(buf);
-  }
 
   // Check for alarms
   // Note if multiple alarms scheduled for same time they will go consecutively
@@ -1241,7 +1234,22 @@ void loop() { // runs on core1
     else
       Serial.print('-');
     Draw_Clock(t, 4); // Draw the whole clock face with hours minutes and seconds
-    ClockInitialized |= SetClockFromNTP(); // sync initially then every update_interval_secs seconds, updates system clock and adjust it for daylight savings
+    SetClockFromNTP(); // try sync at every update_interval_secs seconds, if can connect to NTP, updates system clock and adjust it for daylight savings
+  }
+
+  // Check for mode_change and update isDay when change occures
+  if (prevDisplay >= nextModeTime) {
+    isDay = nextModeIsDay;
+    calcSun();
+    sprintf(buf, "\nIn loop modechange at %lld to %lld of %d\n", prevDisplay, nextModeTime, nextModeIsDay );
+    Serial.println(buf);
+  }
+
+  // First time when correct time is known, set the mode
+  if (needInitIsDay && (ClockInitialized || ClockSetViaWebsocket)) {
+    needInitIsDay = false;
+    calcSun();
+    isDay = not nextModeIsDay;
   }
 
   // Check if new day and recalculate sunSet etc.
@@ -1251,10 +1259,6 @@ void loop() { // runs on core1
   {
     Serial.println("\nfinding new day");
     calcSun(); // computes sun rise and sun set, updates calcTime  night and day mode times
-    if (needInitIsDay) {
-      needInitIsDay = false;
-      isDay = not nextModeIsDay;
-    }
   }
   FastLED.delay(10); // needed to keep wifi going
 }
@@ -2578,7 +2582,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       } else if (payload[0] == 'C') {  // the browser sends an C to compute sunsets and also when websocket started sent Connect with time and date
         //Connect Sat Dec 14 2024 14:27:16 GMT+1300 (New Zealand Daylight Time)
         Serial.printf("Compute Sunsets\n");
-        calcSun();
         // Check if clock not yet initialized and  time and date info present and can use to set clock if running as AP
         if ((length > 34) and (not ClockInitialized)) {
           char Aday[4]; //3 char
@@ -2592,9 +2595,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           sscanf((char *) payload, "Connect %d %s %s %2d %4d %2d:%2d:%2d ", &AmonthNum, Aday, Amonth, &Adate, &Ayear, &Ahour, &Aminute, &Asecond);
           Serial.printf("Time read day %s month %s(%d) date %d year %d time %d:%02d:%02d\n", Aday, Amonth, AmonthNum + 1, Adate, Ayear, Ahour, Aminute, Asecond );
           ClockSetViaWebsocket = true;
-          isDay = not nextModeIsDay;
           setTime(Ahour, Aminute, Asecond, Adate, AmonthNum + 1, Ayear);
         }
+        calcSun();
       }
       break;
     default:
@@ -2858,32 +2861,21 @@ void calcSun() // calculates sunrise, sets etc. sets time for day and night mode
 
 }
 
-bool internetAvailable() {
-  WiFiClient client;
-  return client.connect("8.8.8.8", 53);  // Google DNS
-}
-
-bool SetClockFromNTP()
+void SetClockFromNTP()
 {
   // get the time from the NTP server (takes upto 1 sec) if last update was longer ago than update_interval OR has never been successful yet
+  // First time gets a time update sets ClockInitialized to true
   bool updated = false;
   //Serial.println("Trying to get info from NTP");
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    // Check if internet available and DNS resolution is working
-    //   needed at startup to prevent slow wifi and failed websocket if LAN is up but WAN is down
-    IPAddress testIP;
-    if (internetAvailable() && WiFi.hostByName("pool.ntp.org", testIP)) {
-      Serial.println("Internet Available and DNS working so call NTP update.");
-      updated = timeClient.update();
+  if (WiFi.status() == WL_CONNECTED) {
+    updated = timeClient.update(); // returns true the first time it connects to NTP and at update intervals that connect
+    ClockInitialized |= updated;
+    if (updated) { // this means has a new time from the servers so set time
+      setTime(timeClient.getEpochTime()); // Set the system time from the EpochTime
+      if (IsDst()) adjustTime(3600); // offset the system time by an hour for Daylight Savings
     }
   }
-  // only starting using setTime once timeClient.update() has returned True once then it will have set EpochTime
-  if (ClockInitialized) {
-    setTime(timeClient.getEpochTime()); // Set the system time from the EpochTime
-    if (IsDst()) adjustTime(3600); // offset the system time by an hour for Daylight Savings
-  }
-  return updated;
+  return;
 }
 
 
