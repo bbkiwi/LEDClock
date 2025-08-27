@@ -193,12 +193,12 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //#define BEDROOM_CLOCK
 //#define IRIS_CLOCK
 //#define TEST_CLOCK
-//#define GBT_CLOCK
+#define GBT_CLOCK
 //#define BRYN_CLOCK
 //#define JOHN_CLOCK
 //#define BILL_LKIWI_CLOCK
 //#define JAPAN_KIWI_CLOCK
-#define BILL_CLOCK
+//#define BILL_CLOCK
 //#define PIANO_CLOCK
 
 #if defined BEDROOM_CLOCK
@@ -615,7 +615,7 @@ T nonNegMod(T n, U d ) {
 
 #ifndef HAS_8X8_LED_MATRIX
 ////////// Using physical LED rings
-#define NUM_LEDS 60
+#define NUM_LEDS 144
 CRGB strip_leds[NUM_LEDS + 1]; //extra safety location
 
 // Safety pixel physically does not exist on strip
@@ -3004,9 +3004,9 @@ void SetBrightness() {
 int ClockCorrect(int Pixel)
 {
   if (ClockGoBackwards) {
-    Pixel = (2 * 60 - Pixel) % 60;
+    Pixel = (2 * NUM_LEDS - Pixel) % NUM_LEDS;
   }
-  Pixel = (Pixel + TopOfClock) % 60;
+  Pixel = (Pixel + TopOfClock) % NUM_LEDS;
   return (Pixel);
 }
 
