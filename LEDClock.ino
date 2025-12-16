@@ -260,7 +260,7 @@ const char *OTAandMdnsName = "KIWIClock";           // A name and a password for
 const char *OTAandMdnsName = "TestLEDClock";           // A name and a password for the OTA and mDns service
 #endif
 #ifdef GBT_CLOCK
-const char *OTAandMdnsName = "GBTLEDClock";           // A name and a password for the OTA and mDns service
+const char *OTAandMdnsName = "Bookworm";           // A name and a password for the OTA and mDns service
 #endif
 #ifdef BILL_LKIWI_CLOCK
 const char *OTAandMdnsName = "BillLKIWIClock";           // A name and a password for the OTA and mDns service
