@@ -1,0 +1,81 @@
+LED Clock
+Each clock has been given an internet address of the form <name>.local written on the back. 
+
+The clock shows the time by lighting LEDs for the hour, minute, and second hands. 
+Additionally fixed positions can be illuminated (eg quarter hours etc). 
+The colors and width of the hands can be customised. 
+The clock has a day and night mode which can give a different display and lower brightness. 
+The clock automatically computes the times for sunrise and sunset which can be used to control when mode changes.
+The clock has 5 visual alarms which show customisable light patterns.
+------------------------------------------------------------
+INITIAL SETUP
+There are two ways to connect to the clock.
+1. Using your home internet wifi. 
+2. Using the clocks built in wifi.
+
+The best method is 1 because then the clock will run automatically. I showed you method 2 last Saturday.
+
+Method 1
+If clock cannot connect to your home wifi ( because it hasn't yet been set up, or your wifi is not working),
+  it will first produce a wifi network (access point) called
+      AutoConnectAP
+Connect your phone, ipad or home computer to this. (You will see this under wifi settings.)
+When connected you may automatically get a configuration webpage, otherwise go to the internet browser to
+192.168.4.1 and you should get it.
+Select Configure Wifi
+(NOTE You have only 2 minutes to connect to this access point, otherwise the clock will automatically switch to method 2)
+Once you have done this the clock will connect to your home wifi.
+You can connect to the control interface by going to <name>.local
+(note some phones or computers may not recognize this local address. In that case it will be necessary to find the clocks IP address assigned by your wifi router. )
+
+Method 2
+The clock will create its own Wi-Fi network called
+   LED_Clock_Access_Point
+Connect to this using password 
+  ledclock
+Go to this webpage to get control interface
+   <name>.local  (or if that fails use the direct IP address 192.168.4.1)
+
+----------------------------------------------------------------------------------------
+CONTROL OF CLOCK
+Clock Control Interface at <name>.local   (or direct IP assigned by router)
+
+Clock Control
+    Time? - shows time and date
+    Force Day / Night to put into that mode at any time until next scheduled change to other mode.
+    Calculate Sun Info - shows various sunrise and sunset times and next mode change times.
+
+Pattern Control
+     Pushing the Pattern button shows the selected pattern  on the clock for 10 seconds
+     View and choose patterns from the drop down menu and setting parameters.
+      The patterns starting R- (eg R-Rainbow) generate a random set of parameters. 
+      The easiest way to find an interesting pattern is to try these. 
+      When you find one you like, change to the non random version (eg Random). 
+
+Alarm Control - to view or change the five visual alarms.
+       Select alarm from the drop down menu to show its activation time, repeat (note other given in seconds), duration   
+       (milliseconds) and activation criteria.
+       The selected alarm's pattern and its parameters will be shown on the Pattern Control page.
+       Note only  if the activation criteria is met will the pattern display at the shown time.
+       The chosen alarm's data can be changed by choosing new display time, duration, activation criteria and pattern, then 
+       pushing 'Activate Alarm Settings'. This also can be stored in flash memory to prevent it being lost on restarting.
+
+Mode Control
+       Set times and days of week for mode changes. These can be plus or minutes deviation 
+       from sunrise and civilsunset or specific times.
+       Once new values are all added, push 'Activate Alarm Settings'. This also can be stored in flash memory to prevent it being    
+       lost on restarting.
+
+Display Control
+        The clock has four different day displays 0, 1, 2 and 3 and one night display which can be customised.
+        Select display to view/change from the drop down menu.
+        Choose a color and test to see how it looks on the LEDs.
+        Pressing any of the green buttons will change the specified LEDs to the chosen color.
+        The width for hour, minute and seconds can be changed and whether the minute hand blinks.
+        It is recommended to keep the background LEDs black or very dim. The day and night brightness can be changed.
+        To make these fix these changes and make the chosen display appear on startup, store in flash. 
+
+
+
+
+
